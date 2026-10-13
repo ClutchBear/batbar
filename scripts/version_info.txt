@@ -1,7 +1,7 @@
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(0, 1, 2, 0),
-    prodvers=(0, 1, 2, 0),
+    filevers=(0, 1, 3, 0),
+    prodvers=(0, 1, 3, 0),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -14,12 +14,12 @@ VSVersionInfo(
       StringTable('040904B0', [
         StringStruct('CompanyName', 'ClutchBear'),
         StringStruct('FileDescription', 'batbar —— 常驻托盘的鼠标/耳机/机械键盘电量指示器'),
-        StringStruct('FileVersion', '0.1.2'),
+        StringStruct('FileVersion', '0.1.3'),
         StringStruct('InternalName', 'batbar'),
         StringStruct('LegalCopyright', 'Copyright (c) 2026 ClutchBear. MIT License.'),
         StringStruct('OriginalFilename', 'batbar.exe'),
         StringStruct('ProductName', 'batbar'),
-        StringStruct('ProductVersion', '0.1.2'),
+        StringStruct('ProductVersion', '0.1.3'),
       ]),
     ]),
     VarFileInfo([VarStruct('Translation', [1033, 1200])]),
