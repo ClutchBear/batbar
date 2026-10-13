@@ -18,6 +18,10 @@ venv/
 env/
 ENV/
 
+# ============ 发布产物（本机 build-exe.bat / CI 都会生成）============
+package/
+batbar-*.zip
+
 # ============ Python 构建/缓存 ============
 __pycache__/
 *.py[cod]

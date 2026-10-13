@@ -1,0 +1,251 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# batbar —— 推代码自动出 exe 的流水线（Python + PyInstaller）
+#
+# 结构抄自已实测通过的 Rust 桌宠项目（ClutchBear/workbuddy-whale-musume），
+# 只把「Rust 工具链 + cargo build」换成「setup-python + PyInstaller」，
+# 其余（组装 / 冒烟 / 手写 zip / 核对 / artifact / Release）与语言无关，原样沿用。
+#
+# 触发：
+#   · 推 tag（如 v0.1.0） → 测试 + 打包 + 发布 Release（zip 作附件，公开可下）
+#   · 推 main / 手动触发   → 测试 + 打包 + 存为 Actions artifact（需登录下载，90 天）
+#
+# 维护须知（改这个文件前先读）：
+#
+# 1) 所有 run 块的正文一律保持纯 ASCII（英文），中文说明写在 YAML 注释里。
+#    Windows PowerShell 会把「无 BOM 的 UTF-8 脚本」按本地代码页（GBK）解码，
+#    正文里一旦出现中文，字节被误解后可能打断语法解析（实测报
+#    「字符串缺少终止符」「，"后面缺少表达式」）。shell: pwsh（PS 7）默认按 UTF-8
+#    读，本身没问题，但同一段命令复制到 PS 5.1 里跑就会炸 —— 所以正文不写中文。
+#    ★ 要打进 zip 的中文文件名（使用说明.txt）**不出现在脚本里**：它是整目录
+#      .github/dist-extra/ 复制过去的，脚本只写 *.txt。
+#
+# 2) 往 GITHUB_ENV 写入一律用 [System.IO.File]::AppendAllText + UTF8Encoding($false)，
+#    不要用 >>。PS 5.1 的 >> 默认编码是 UTF-16LE，后续步骤读到的键名会变成空字符。
+#
+# 3) 步骤之间不传中间变量（如 ZIP）。需要的东西从 label / BIN_NAME 推导。
+#
+# 4) zip 条目名必须用正斜杠（见「打包 zip」步骤注释）。
+#
+# 5) 发布目录叫 package\ 而**不是** dist\ —— dist\ 是 PyInstaller 的输出目录，
+#    组装前必须清空的正是它。两个目录重名会把自己刚编出来的 exe 删掉。
+# ─────────────────────────────────────────────────────────────────────────────
+name: 构建 Windows exe
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+# gh release create 需要仓库写权限
+permissions:
+  contents: write
+
+env:
+  # 交付的 exe 名（batbar.spec 里 name="batbar" → dist\batbar.exe）
+  BIN_NAME: batbar.exe
+  # 发布目录：组装许可声明与使用说明的地方，也是打包 zip 的根
+  STAGE: package
+  # 要打进 zip 根目录的附加文件（含中文名文件）放这里，整目录复制
+  DIST_EXTRA: .github/dist-extra
+
+jobs:
+  build:
+    name: 测试并打包
+    runs-on: windows-latest
+    # 冒烟步骤会真跑一次 exe；万一它因为窗口化异常弹了个对话框，这里兜底别拖成 6 小时
+    timeout-minutes: 30
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 缓存 pip
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\pip\Cache
+          key: ${{ runner.os }}-pip-${{ hashFiles('pyproject.toml', 'uv.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: 安装依赖
+        # agent 组 = hidapi / pystray / Pillow（运行期）；dev 组 = pytest
+        # pyinstaller 单独装（不进 pyproject —— 只有打包才需要，运行时用不到）
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[agent,dev]" pyinstaller
+
+      - name: 读版本号
+        # 推 tag 时用 tag 名（v0.1.0），否则用 pyproject.toml 的 version
+        # 写 GITHUB_ENV 用显式 UTF-8 无 BOM，而不是 >>
+        shell: pwsh
+        run: |
+          $utf8 = New-Object System.Text.UTF8Encoding($false)
+          $v = (Select-String -Path pyproject.toml -Pattern '^version\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
+          if ('${{ github.ref_type }}' -eq 'tag') { $label = '${{ github.ref_name }}' } else { $label = "v$v" }
+          [System.IO.File]::AppendAllText($env:GITHUB_ENV, "version=$v`n", $utf8)
+          [System.IO.File]::AppendAllText($env:GITHUB_ENV, "label=$label`n", $utf8)
+          Write-Host "version=$v  label=$label"
+
+      - name: 跑单元测试
+        # 这道闸门很关键：batbar 的测试是「纯逻辑与 I/O 严格分离」的，
+        # 477 项不需要任何 HID 硬件，在 runner 上能全跑。测试挂了就别发版。
+        run: python -m pytest
+
+      - name: 构建 exe
+        shell: pwsh
+        run: |
+          Remove-Item dist -Recurse -Force -ErrorAction SilentlyContinue
+          python -m PyInstaller --noconfirm --clean batbar.spec
+          $exe = Join-Path 'dist' $env:BIN_NAME
+          if (-not (Test-Path $exe)) { throw "build produced no $exe" }
+          Write-Host ("built {0}  {1:N2} MB" -f $exe, ((Get-Item $exe).Length / 1MB))
+
+      - name: 组装发布目录
+        shell: pwsh
+        run: |
+          Remove-Item $env:STAGE -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force $env:STAGE | Out-Null
+
+          Copy-Item -Path (Join-Path 'dist' $env:BIN_NAME) -Destination $env:STAGE -Force
+          Copy-Item -Path 'LICENSE' -Destination $env:STAGE -Force
+          Copy-Item -Path "$env:DIST_EXTRA\*" -Destination $env:STAGE -Recurse -Force
+
+          Write-Host "---- $env:STAGE ----"
+          Get-ChildItem $env:STAGE | ForEach-Object {
+            if ($_.PSIsContainer) { Write-Host ("  {0,-24} <dir>" -f $_.Name) }
+            else { Write-Host ("  {0,-24} {1,10:N0} B" -f $_.Name, $_.Length) }
+          }
+
+      - name: 冒烟检查
+        # 四件事：体积合理 / 版本资源真嵌进去了 / 许可与说明齐全 / 不留运行期产物
+        # 再加上一条真跑：--help 能起来且退出码 0（冻结后依赖是否齐，只有真跑才知道）
+        # 运行期产物（日志含本机路径、last-known 含设备名）绝不能混进发布包
+        shell: pwsh
+        run: |
+          $exe = Join-Path $env:STAGE $env:BIN_NAME
+          if (-not (Test-Path $exe)) { throw "missing $exe" }
+
+          $mb = (Get-Item $exe).Length / 1MB
+          Write-Host ("exe size {0:N2} MB" -f $mb)
+          if ($mb -lt 8 -or $mb -gt 40) { throw ("exe size looks wrong: {0:N2} MB" -f $mb) }
+
+          $fv = (Get-Item $exe).VersionInfo.FileVersion
+          Write-Host "FileVersion=$fv  expected=$env:version"
+          if ($fv -ne $env:version) { throw "version resource mismatch: $fv != $env:version" }
+
+          if (-not (Test-Path (Join-Path $env:STAGE 'LICENSE'))) { throw "LICENSE missing from stage" }
+          if (@(Get-ChildItem $env:STAGE -Filter *.txt).Count -lt 1) { throw "usage txt missing from stage" }
+
+          $leak = Get-ChildItem $env:STAGE -Recurse -File |
+                  Where-Object { $_.Name -like '*.log' -or $_.Name -like 'last-known*' -or
+                                 $_.Name -like '*.db'  -or $_.Name -like '*.pid' }
+          if ($leak) { throw ("runtime file leaked into stage: " + ($leak.FullName -join ', ')) }
+
+          # windowed exe still hands stdout to the parent pipe (verified locally)
+          # RUNNER_TEMP is always set on GitHub runners but NOT locally - fall back
+          $tmp = $env:RUNNER_TEMP
+          if (-not $tmp) { $tmp = [System.IO.Path]::GetTempPath() }
+          $out = Join-Path $tmp 'batbar-help.out'
+
+          # take a baseline first: a developer machine may already run batbar in the tray
+          $before = @(Get-Process -Name batbar -ErrorAction SilentlyContinue).Count
+
+          $p = Start-Process -FilePath $exe -ArgumentList '--help' -Wait -PassThru -NoNewWindow `
+               -RedirectStandardOutput $out -RedirectStandardError "$out.err"
+          Write-Host ("--help exit=" + $p.ExitCode)
+          if ($p.ExitCode -ne 0) { throw ("--help exited " + $p.ExitCode) }
+          if (Select-String -Path $out -Pattern 'usage' -Quiet) { Write-Host "--help printed usage OK" }
+          else { Write-Host "WARN: no usage text captured (console detached) - exit code is the real check" }
+
+          # onefile bootloader tears down asynchronously: poll briefly instead of a single shot
+          $after = $before
+          for ($i = 0; $i -lt 20; $i++) {
+            $after = @(Get-Process -Name batbar -ErrorAction SilentlyContinue).Count
+            if ($after -le $before) { break }
+            Start-Sleep -Milliseconds 250
+          }
+          if ($after -gt $before) { throw "batbar.exe left running after --help" }
+
+      - name: 打包 zip
+        # 手写 zip 条目，不用 Compress-Archive：
+        #   条目名必须用正斜杠（ZIP APPNOTE 规范）。用反斜杠时，部分解压工具会把
+        #   "使用说明.txt" 之类当成平铺名，目录结构整个丢失。
+        #   只写文件条目、不写目录条目，解压工具会按路径自动建目录。
+        shell: pwsh
+        run: |
+          $zipName = "batbar-$env:label-win64.zip"
+          $zipPath = Join-Path (Get-Location).Path $zipName
+          if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
+
+          Add-Type -AssemblyName System.IO.Compression
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $root = (Resolve-Path $env:STAGE).Path.TrimEnd('\')
+
+          $fs  = [System.IO.File]::Create($zipPath)
+          $arc = New-Object System.IO.Compression.ZipArchive($fs, [System.IO.Compression.ZipArchiveMode]::Create)
+          $n = 0
+          foreach ($f in Get-ChildItem $env:STAGE -Recurse -File) {
+            $rel = $f.FullName.Substring($root.Length + 1).Replace('\', '/')
+            $entry = $arc.CreateEntry($rel, [System.IO.Compression.CompressionLevel]::Optimal)
+            $os = $entry.Open()
+            $is = [System.IO.File]::OpenRead($f.FullName)
+            try { $is.CopyTo($os) } finally { $is.Dispose(); $os.Dispose() }
+            $n++
+          }
+          $arc.Dispose(); $fs.Dispose()
+
+          Write-Host ("zip entries={0}  size={1:N2} MB" -f $n, ((Get-Item $zipPath).Length / 1MB))
+
+      - name: 核对 zip
+        # 断言：条目名不含反斜杠、根目录有 exe 与 LICENSE
+        # zip 名由 label 推导（不在步骤间传 ZIP 变量，少一处编码坑）
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = "batbar-$env:label-win64.zip"
+          $z = [System.IO.Compression.ZipFile]::OpenRead((Join-Path (Get-Location).Path $zip))
+
+          Write-Host "entries=$($z.Entries.Count)"
+          $z.Entries | Select-Object FullName, Length | Format-Table -AutoSize
+
+          $back = @($z.Entries | Where-Object { $_.FullName.Contains('\') })
+          if ($back.Count -gt 0) { throw ("zip entry uses backslash: " + $back[0].FullName) }
+
+          $names = @($z.Entries | ForEach-Object { $_.FullName })
+          if ($names -notcontains $env:BIN_NAME) { throw "zip root missing $env:BIN_NAME" }
+          if ($names -notcontains 'LICENSE')     { throw "zip root missing LICENSE" }
+          Write-Host "zip content OK"
+          $z.Dispose()
+
+      - name: 上传 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: batbar-${{ env.label }}-win64
+          path: batbar-${{ env.label }}-win64.zip
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: 发布 Release（仅 tag）
+        # 已有同名 Release 时只覆盖附件，不重建
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = '${{ github.ref_name }}'
+          $zip = "batbar-$env:label-win64.zip"
+          gh release view $tag 2>$null | Out-Null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "release $tag exists, uploading with --clobber"
+            gh release upload $tag $zip --clobber
+          } else {
+            gh release create $tag $zip `
+              --title "batbar $tag" `
+              --notes-file .github/release-notes.md
+          }

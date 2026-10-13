@@ -1,5 +1,9 @@
 """打包产物 dist/batbar.exe 的端到端验收。
 
+用法：
+    python tools/verify_exe.py                       # 默认验 dist\\batbar.exe
+    python tools/verify_exe.py <任意 exe 路径>       # 例如核验从 Release zip 解出来的那份
+
 分两层：
   静态 —— 体积 / sha256 / PE 版本信息 / 资源节里有没有嵌图标
   动态 —— 真起一次 exe，从日志确认它**真的读到了设备电量**，然后收尸
@@ -23,6 +27,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 EXE = ROOT / "dist" / "batbar.exe"
+# 允许把要验收的 exe 路径当第一个参数传进来 —— 这样 CI 或人工核验「从 Release
+# zip 解压出来的那一份」时，用的是同一套验收标准，不必改脚本
+if len(sys.argv) > 1 and not sys.argv[1].startswith("-"):
+    EXE = Path(sys.argv[1]).expanduser().resolve()
 LOG = Path(os.environ["LOCALAPPDATA"]) / "batbar" / "logs" / "agent.log"
 SYS32 = r"C:\Windows\System32"
 

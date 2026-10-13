@@ -1,0 +1,74 @@
+batbar · Windows 版
+===================
+
+常驻系统托盘的多设备电量指示器：鼠标 / 耳机 / 机械键盘。
+单文件 exe，自带 Python 运行时 —— 不需要装 Python、不需要装任何依赖。
+
+
+怎么用
+------
+1. 双击 batbar.exe，它会常驻系统托盘（**没有窗口，这不是没启动**）。
+   找不到图标就往托盘左边的「隐藏的图标」里翻，拖出来固定即可。
+2. 托盘上显示的是当前主设备的电量；鼠标悬停看明细。
+3. 退出：托盘图标上右键 → 退出。
+
+
+三种读法（为什么能读到）
+------------------------
+  鼠标（罗技 G304 等）      HID++ 2.0 的电池特性页（0x1000）
+  机械键盘（迈从等 2.4G）   接收器私有通道 0xFF04 的 Feature Report 0x06
+  蓝牙耳机 / 键盘           蓝牙 GATT 标准电量服务（CIM）
+
+读不到的设备不显示，也不影响其他设备。设备在深度休眠时读数为空是正常的，
+点一下（或按一下键）唤醒即可。
+
+
+配置（可选，改完重启 exe）
+--------------------------
+  环境变量                          作用
+  BATBAR_DEBUG=1                   打开调试日志
+  BATBAR_LOG_DIR=<目录>            改日志目录（默认 %LOCALAPPDATA%\batbar\logs）
+  BATBAR_USAGE_PAGE / BATBAR_DEVNUM   锁定 HID++ 特性页与设备槽位
+
+数据落在 %LOCALAPPDATA%\batbar\：logs\agent.log（滚动日志）、last-known.json（上次
+读到的电量，用于重启后先显示旧值再刷新）、agent.pid。删掉整个目录即彻底重置。
+
+
+常见问题
+--------
+Q: 双击没反应？
+A: 它本来就没有窗口。先看托盘（含「隐藏的图标」），再看日志：
+   %LOCALAPPDATA%\batbar\logs\agent.log
+
+Q: 显示读不到电量？
+A: 鼠标/键盘深度休眠时读不到，唤醒后再看；2.4G 接收器刚插上要等几秒。
+   想看每个 HID 槽位的探测结果，**从 cmd 里**跑（双击看不到输出）：
+       batbar.exe --scan
+
+Q: 提示"已有实例在运行"？
+A: 它本来就是单实例的（两个实例会抢同一条 HID 输入队列）。
+   要强制再开一个做调试：加 --allow-multiple。
+
+Q: 杀毒软件报警？
+A: 这是 PyInstaller 打包的未签名 exe，部分杀软对未签名程序会误报。
+   源码在 https://github.com/ClutchBear/batbar ，可自行打包比对。
+
+Q: 想开机自启？
+A: 把 batbar.exe 的快捷方式丢进 shell:startup 文件夹即可；
+   或用仓库里的 scripts\register_autostart.ps1（注册当前用户计划任务，无需管理员）。
+
+
+系统要求
+--------
+Windows 10 / 11 64 位。无需 .NET、无需 WebView2、无需 Python。
+
+
+许可与归属
+----------
+本项目以 MIT 许可发布，Copyright (c) 2026 ClutchBear。
+源码与构建方式：https://github.com/ClutchBear/batbar
+
+第三方依赖：
+  cython-hidapi  BSD-3-Clause
+  pystray        LGPL-3.0
+  Pillow         MIT-CMU
