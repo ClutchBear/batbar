@@ -833,7 +833,7 @@ COL03 系统控制器 / COL04 键盘 / COL05 鼠标 / COL06 供应商定义，�
 
 **分层原则（仍然保留，是单测可跑的前提）**：纯逻辑与 I/O 严格分离 ——
 `hidpp/session/state/wire/lowbattery/lastknown/winevents/fullscreen` 零第三方依赖，
-`transport.py` 是唯一 `import hid` 的文件。这样 477 项单测**无需任何硬件**就能全绿。
+`transport.py` 是唯一 `import hid` 的文件。这样 483 项单测**无需任何硬件**就能全绿。
 
 ### 4.1 所需依赖
 
@@ -919,7 +919,7 @@ batbar/
 │   ├── probe_query.py          # 主动查询实验探针：写候选命令帧→收回帧（跑前须退托盘）
 │   ├── feature_watch.py        # feature 样本采集器：跨电量多拉几组，解译电压/百分比语义
 │   └── make_icon.py            # 程序化绘制 assets/batbar.ico（逐尺寸渲染 7 档）
-└── tests/                      # 477 项单测 + 1 个黑盒冒烟，全 stdlib，无需硬件
+└── tests/                      # 483 项单测 + 1 个黑盒冒烟，全 stdlib，无需硬件
     ├── smoke_launch.py         #   ★黑盒冒烟：真 spawn agent，读真实日志验启动链（见 §6-F）
     ├── test_hidpp.py           #   帧编码/解析、错误帧、通知判据、电压插值
     ├── test_session.py         #   特性发现、读电池、通知回显、transport 失效传播
@@ -942,7 +942,7 @@ batbar/
     └── test_framing.py         #   TCP 粘包/半包/垃圾行的分片鲁棒性
 ```
 
-★ = 纯标准库层，任意 Python 3.11+ 直接可测（本项目已用 Python 3.13 实测 477 项全绿）。
+★ = 纯标准库层，任意 Python 3.11+ 直接可测（本项目已用 Python 3.13 实测 483 项全绿）。
 
 ---
 
@@ -1003,7 +1003,7 @@ smoke-test.bat                          rem 双击即跑，完整冒烟
 tests\smoke_launch.py --quick           rem 只验「进程能起来 + 构造函数不炸」
 ```
 
-区别：上面 477 项单测**全在测试进程内 mock**，从不真起托盘；冒烟测试真 spawn
+区别：上面 483 项单测**全在测试进程内 mock**，从不真起托盘；冒烟测试真 spawn
 子进程 + 读真实日志。两者互补，**改设备枚举路径（receiver24/wired24/dongle/
 feature24/win32ctypes）后两者都要跑**。详见 §6-F。
 
@@ -1057,12 +1057,12 @@ python tools\keybeat.py --at 0 15 40 75        rem 自定义时刻
 
 ### E. 本轮三功能验证（主动查询 / 有线 / 低电量）
 
-三者判定逻辑均已进 §B 的单测（477 项）；**硬件相关**的确认要你本机跑：
+三者判定逻辑均已进 §B 的单测（483 项）；**硬件相关**的确认要你本机跑：
 
 **① 主动查询探针 —— 已实测证否（2026-10-12），此路关闭**：
 
 三轮扫描（WriteFile / SetOutputReport 两条投递通道 × 7 条候选命令帧）结论：
-- 输出 reportID = **0x13**（`SetOutputReport` 对首字节非 0x13 的帧报 err=1477）；
+- 输出 reportID = **0x13**（`SetOutputReport` 对首字节非 0x13 的帧报 err=1483）；
 - 合法格式的镜像查询帧 `13 0a 01 00 04 05 00…`（电量帧同款帧头）已送达设备，
   **零回帧**；
 - `--post-listen` 收尾段抓到过非电量帧 `11 11 ff fa fd af da da da fa×6`
@@ -1117,7 +1117,7 @@ python tools\keybeat.py --at 0 15 40 75        rem 自定义时刻
 
 第三轮实测（2026-10-12 10:53，`--set-out` IOCTL 通道）：修复后回显干净
 （`OK 20B`）。**关键情报：迈从的输出 reportID 也是 0x13**——首字节 0x13 的
-三条帧全部 `OK 20B`，0x4d/0x55/0x00 的全部 `FAIL err=1477`，判别行为与
+三条帧全部 `OK 20B`，0x4d/0x55/0x00 的全部 `FAIL err=1483`，判别行为与
 LEOBOG **完全同构**（同源公版实锤）。但两条合法通道的查询帧照旧零回帧；
 post-listen 8s 亦零帧（用户目击：扫描中途灯灭又亮=3 分钟休眠定时器，
 唤醒瞬间也没推电量帧——与 LEOBOG 的最后一处分野）。
@@ -1155,10 +1155,10 @@ rem 扫完立刻敲迈从 15 秒。⚠️ 含标准键盘口，监听期间可�
 
 ### F. 黑盒冒烟测试（2026-10-13 新增，`tests/smoke_launch.py`）
 
-**为什么需要它**：上面 477 项单测全部跑在**测试进程内**（import 走 `sys.path`
+**为什么需要它**：上面 483 项单测全部跑在**测试进程内**（import 走 `sys.path`
 注入、hidapi DLL 用桩、Win32 窗口从不起）——所以「import 链断裂 / venv 缺依赖 /
 ctypes 签名写错 / 单实例互斥量抢不到 / boot 卡在某一步」这类**只有真跑才会暴露**
-的问题，477 项一条都测不出来。冒烟测试补上这一层：**真 spawn 一个 python 子进程
+的问题，483 项一条都测不出来。冒烟测试补上这一层：**真 spawn 一个 python 子进程
 跑 agent，读它写出的真实日志**判定启动链是否走完，最接近「用户双击 exe」。
 
 **双击即跑**：
@@ -1606,7 +1606,7 @@ dist\batbar.exe
 | 1 | 检出代码 | `actions/checkout@v4` |
 | 2-4 | 装 Python + 缓存 pip + 装依赖 | `pip install -e ".[agent,dev]" pyinstaller`（**pyinstaller 不进 pyproject**：只有打包用得到） |
 | 5 | 读版本号 | 推 tag 用 tag 名，否则用 `pyproject.toml` 的 `version`；写进 `GITHUB_ENV` |
-| 6 | **跑单元测试** | 477 项。这道闸门是白送的 —— batbar 的测试**不需要任何 HID 硬件**（纯逻辑与 I/O 严格分离，见 §4） |
+| 6 | **跑单元测试** | 483 项。这道闸门是白送的 —— batbar 的测试**不需要任何 HID 硬件**（纯逻辑与 I/O 严格分离，见 §4） |
 | 7 | 构建 exe | `python -m PyInstaller --noconfirm --clean batbar.spec` |
 | 8 | 组装发布目录 | `package/` = `batbar.exe` + `LICENSE` + `使用说明.txt` |
 | 9 | 冒烟检查 | 体积区间 / **`FileVersion` 与 pyproject 一致** / 许可与说明齐全 / 无运行期产物混入 / **真跑一次 `--help` 要求 rc=0** / 不留常驻进程 |
@@ -1662,7 +1662,7 @@ runner 的用户名是 `runneradmin`（>8 字符）⇒ 系统给 `%TEMP%` 生成
 `RUNNER~1`；而用例把 `pid_path()` 的**原始串**去比 `Path(...).resolve()` 的**长名**。
 `pid_path()` 是纯路径拼接、不做规范化，而 `resolve()` 在 Windows 上会调
 `GetFinalPathNameByHandle` 把短名展开 —— 两边**永远不可能相等**。本机用户名
-`xin` 短、没有短名别名，所以本地 477 项一直全绿。
+`xin` 短、没有短名别名，所以本地 483 项一直全绿。
 
 修法是**两边都 `resolve()`**（断言的是「PID 跟着日志目录搬家」这个语义，
 不是字符串形态）。已单独验证 `resolve()` 对**尚不存在的尾段**也会规范化
@@ -1892,7 +1892,7 @@ subscribe 通知（`command==0x0a && type==0x05` → batteryLevel），主动查
 
 | 部分 | 状态 |
 |---|---|
-| HID++ 协议编解码、会话编排、状态机、桥接协议、分片鲁棒性 | ✅ **已实测**：**477 单测**在 Python 3.13 全绿 |
+| HID++ 协议编解码、会话编排、状态机、桥接协议、分片鲁棒性 | ✅ **已实测**：**483 单测**在 Python 3.13 全绿 |
 | **真实启动链（process→托盘 NIM_ADD）** | ✅ **已实测**：`tests/smoke_launch.py` 黑盒冒烟，真起 agent 验启动链（§6-F） |
 | **RAWINPUT 鼠标唤醒** | ✅ **已实测**（2026-10-13）：隐藏窗口 + `RIDEV_INPUTSINK` 真机收 971 条输入 100% 解码正确、去抖成 11 次事件；`MOUSE_FRESH` 门控验证通过（§6-G） |
 | **全屏/游戏感知** | ✅ **已实测**（2026-10-13）：造真全屏窗口 → 6s 进入静音（QUNS=BUSY）、关窗 10s 恢复；`BATBAR_FULLSCREEN` 三种模式均验证（§6-H） |
@@ -1979,7 +1979,7 @@ subscribe 通知（`command==0x0a && type==0x05` → batteryLevel），主动查
    **⇒ 2026-10-12 09:35 闭环：主动查询也已证否，「活动驱动」是唯一通道。**
    `tools/probe_query.py` 三轮扫描：WriteFile 与 `HidD_SetOutputReport` 两条
    投递通道 × 7 条候选命令帧（dbt-K99v2 / mcb 鼠标异或 / mcb-kbd / 自研镜像），
-   输出 reportID 确认 = 0x13（非 0x13 首字节报 err=1477），合法格式的镜像
+   输出 reportID 确认 = 0x13（非 0x13 首字节报 err=1483），合法格式的镜像
    查询帧 `13 0a 01 00 04 05 00…` 已送达，**零回帧**；`--post-listen` 收尾段
    还抓到过非电量帧 `11 11 ff fa fd af da da da fa×6`（len=14，parse_frame
    拒绝，系该 collection 漏进来的标准 HID 键盘/唤醒报文）——输入通道活着、
@@ -2047,7 +2047,7 @@ subscribe 通知（`command==0x0a && type==0x05` → batteryLevel），主动查
       业务模块里**绝不许**再写 `xxx.argtypes = [...]`。
     - **复核手段**：`probes/verify_argtypes_shared.py` 直接读 `windll` 上的
       `argtypes`，断言「含 `POINTER(_私有类型)` 的签名数 = 0」，再交叉真调四个模块
-      入口确认无 `TypeError`。**光靠单测查不出来**——477 项 mock 测试全绿时这个
+      入口确认无 `TypeError`。**光靠单测查不出来**——483 项 mock 测试全绿时这个
       bug 还在（mock 从不真调 Win32）。
 
 13. **★ RAWINPUT 的按键位在 `ulButtons`，不在 `usFlags`**（2026-10-13 鼠标唤醒踩的）：
@@ -2138,3 +2138,29 @@ subscribe 通知（`command==0x0a && type==0x05` → batteryLevel），主动查
     的。⇒ `main()` 里装 `install_crash_log()`（`sys.excepthook` 把 traceback
     写进日志），且必须在 `applog.setup()` **之后**：早装的话日志还没有文件
     handler，写了也是丢。
+
+24. **★★ GUI 进程 spawn 控制台子进程会弹出黑窗**（2026-10-13 用户截图报告：
+    「启动时、随便有动作时，都有 terminal 窗口出现」）：打包后的 exe 是
+    `console=False` 的 **GUI 子系统**程序，**自己没有控制台**。此时 spawn 任何
+    console 子系统程序（`pwsh.exe` / `powershell.exe`），Windows 会**为它新建一个
+    控制台** —— 这就是那个黑窗的来源，跟"程序里有没有 `print`"无关。
+    本机格外显眼：`shutil.which("pwsh")` 拿到的是
+    `%LOCALAPPDATA%\Microsoft\WindowsApps\pwsh.EXE` 这个 **0 字节 App Execution
+    Alias**（转发 Store/MSIX 版 PS7），窗口标题直接显示
+    `管理员:C:\Program Files\WindowsApps\Microsoft.PowerShell_7.6.6.0_x64__8wekyb3d8bbwe\pwsh.exe`
+    —— 与用户截图标题一字不差。
+    黑盒对照（`probes/probe_console_flash.py`，用 pythonw 无控制台进程跑，并旁证"子进程
+    是否真起来"，排除"没调所以没窗口"的假象）：
+
+    | 模式 | shell 进程起来了 | 新窗口 |
+    |---|---|---|
+    | 不带 flag | ✅ | `ConsoleWindowClass`（标题即上面那条路径） |
+    | `CREATE_NO_WINDOW` + `STARTUPINFO(SW_HIDE)` | ✅ | **0** |
+    | 不带 flag 再跑一遍 | ✅ | 再次复现 |
+
+    ⇒ 三个调用点（`bt_battery.py` ×2、`receiver24.py` ×1）统一改走
+    **`winproc.run_hidden()`**；约定比"记得带 flag"更硬：**禁止直接调
+    `subprocess.run/Popen`**，由 `tests/test_no_console_flash.py` 扫 `src/` 守门
+    （`winproc.py` 是唯一例外）。
+    ⚠️ 与坑 20 同源：**源码 `python agent.py` 跑时进程自带控制台、子进程直接继承，
+    永远复现不出来** —— 只有 exe / pythonw 上才暴露，所以必须靠测试与文档守住。

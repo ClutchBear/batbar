@@ -49,6 +49,7 @@ import threading
 import time
 
 from . import lastknown
+from . import winproc
 
 log = logging.getLogger("batbar.bt")
 
@@ -216,9 +217,9 @@ def connected_macs(macs: list[str], *, force: bool = False) -> dict[str, bool]:
     macs_lit = ",".join("'%s'" % m.upper() for m in macs)
     script = _PS_CONN.replace("__MACS__", "@(%s)" % macs_lit)
     try:
-        r = subprocess.run([shell, "-NoProfile", "-Command", script],
-                           capture_output=True, text=True, timeout=25,
-                           encoding="utf-8", errors="replace")
+        r = winproc.run_hidden([shell, "-NoProfile", "-Command", script],
+                               capture_output=True, text=True, timeout=25,
+                               encoding="utf-8", errors="replace")
     except (OSError, subprocess.TimeoutExpired) as exc:
         log.debug("bt conn query failed: %s", exc)
         return {}
@@ -380,9 +381,9 @@ class BluetoothBattery:
             return
         script = _PS_QUERY.replace("__TRIES__", "1" if quick else "3")
         try:
-            r = subprocess.run([self._shell, "-NoProfile", "-Command", script],
-                               capture_output=True, text=True, timeout=25,
-                               encoding="utf-8", errors="replace")
+            r = winproc.run_hidden([self._shell, "-NoProfile", "-Command", script],
+                                   capture_output=True, text=True, timeout=25,
+                                   encoding="utf-8", errors="replace")
         except (OSError, subprocess.TimeoutExpired) as exc:
             log.debug("bt query failed: %s", exc)
             return

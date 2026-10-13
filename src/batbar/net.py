@@ -16,6 +16,8 @@ from __future__ import annotations
 import os
 import subprocess
 
+from . import winproc
+
 DEFAULT_PORT = 51788  # agent 监听端口（controller 默认连这个）
 
 
@@ -28,7 +30,8 @@ def windows_host_ip() -> str | None:
     if not is_wsl():
         return None
     try:
-        out = subprocess.run(["ip", "route", "show", "default"], capture_output=True, text=True, timeout=3)
+        out = winproc.run_hidden(["ip", "route", "show", "default"],
+                                 capture_output=True, text=True, timeout=3)
         for tok in out.stdout.split():
             if tok[0].isdigit() and "." in tok:
                 return tok

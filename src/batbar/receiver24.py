@@ -34,6 +34,7 @@ from ctypes import POINTER, byref, wintypes
 
 from .dongle import TARGETS as KNOWN_RECEIVERS
 from . import win32ctypes as w32
+from . import winproc
 
 log = logging.getLogger("batbar.r24")
 
@@ -81,7 +82,6 @@ def _scan_wired() -> set[str]:
     try:
         import re
         import shutil
-        import subprocess
         shell = shutil.which("pwsh") or shutil.which("powershell")
         if shell:
             q = (
@@ -93,9 +93,9 @@ def _scan_wired() -> set[str]:
                 "-ErrorAction SilentlyContinue;"
                 "  \"$($_.DeviceID)|$($b.Data)\" }"
             )
-            r = subprocess.run([shell, "-NoProfile", "-Command", q],
-                               capture_output=True, text=True, timeout=15,
-                               encoding="utf-8", errors="replace")
+            r = winproc.run_hidden([shell, "-NoProfile", "-Command", q],
+                                   capture_output=True, text=True, timeout=15,
+                                   encoding="utf-8", errors="replace")
             for line in (r.stdout or "").splitlines():
                 dev_id, _, bus = line.strip().partition("|")
                 m = re.search(r"VID_([0-9A-F]{4})", dev_id.upper())
