@@ -14,7 +14,8 @@
 > 🏷️ **名字来历**：原名 `logi-tray`，只体现「罗技」且易被当成官方工具；2026-10-13
 > 改名为 **batbar**（**bat**tery + task**bar**），因为它管的其实是**三类**设备（鼠标 /
 > 耳机 / 机械键盘，其中键盘是迈从、LEOBOG 等非罗技品牌）。改名波及包名、环境变量、
-> 互斥量、计划任务与 `%LOCALAPPDATA%` 数据目录 —— 迁移与重置清单见 **§6-J**。
+> 互斥量、计划任务与**数据目录**（2026-10-13 起打包版是绿色模式：数据就在
+> `batbar.exe` 旁边）—— 落点推导与迁移清单见 **§6-J**。
 
 > 📍 **改代码前先看 [`ARCHITECTURE.md`](ARCHITECTURE.md)** —— 那里有模块职责表、
 > 功能路由直达表（想改 X 该动哪个文件）和改代码铁律。本 README 讲选型理由、
@@ -220,7 +221,7 @@ MAC 不在表里（查询失败/新设备）= 未知 → 保留（fail-open，�
 
 **② `lastknown.py` —— 最后已知电量持久化**
 
-`%LOCALAPPDATA%\batbar\last-known.json`，原子写（先 `.tmp` 再 replace）。
+`<数据目录>\last-known.json`（打包后 = exe 同目录，见 §6-J），原子写（先 `.tmp` 再 replace）。
 凡是读到真值就落地，供「NULL 轮」和「2.4G 模式」复用，跨进程、跨重启都在。
 
 **③ `receiver24.py` —— 2.4G 接收器的兜底条目**
@@ -584,7 +585,7 @@ MAC 不在表里（查询失败/新设备）= 未知 → 保留（fail-open，�
   `powershell Get-CimInstance Win32_Process`（带 CommandLine 的全进程 WMI
   枚举），实测 **3~8 秒**，脚本自己都写着 "Wait ~3s"。改法：
   ① `singleinstance.write_pid()` 让 agent 把 PID 写到
-  `%LOCALAPPDATA%\batbar\agent.pid`，脚本直接 `tasklist /FI "PID eq N"`
+  `<数据目录>\agent.pid`（打包后 = exe 同目录），脚本直接 `tasklist /FI "PID eq N"`
   确认是 python 后 `taskkill /F /PID`（几十毫秒）；PID 文件**缺失或指向非
   python 进程**（陈旧文件 / PID 被复用）一律回退到 `Get-Process` 扫描
   （比 CIM 快一个量级）——**漏杀旧实例会让新实例被单实例互斥量挡下**，
@@ -833,7 +834,7 @@ COL03 系统控制器 / COL04 键盘 / COL05 鼠标 / COL06 供应商定义，�
 
 **分层原则（仍然保留，是单测可跑的前提）**：纯逻辑与 I/O 严格分离 ——
 `hidpp/session/state/wire/lowbattery/lastknown/winevents/fullscreen` 零第三方依赖，
-`transport.py` 是唯一 `import hid` 的文件。这样 483 项单测**无需任何硬件**就能全绿。
+`transport.py` 是唯一 `import hid` 的文件。这样 503 项单测**无需任何硬件**就能全绿。
 
 ### 4.1 所需依赖
 
@@ -899,8 +900,9 @@ batbar/
 │   ├── fullscreen.py           # ★纯逻辑：全屏/游戏感知（QUNS 分类 + 迟滞门，无 ctypes，可离线测）
 │   ├── win32ctypes.py          # ★Win32 HID/SetupAPI 的 ctypes 共享声明（唯一真相源，见 §8 坑 12）
 │   ├── singleinstance.py       # Windows-only：命名互斥量，挡住第二个实例（防抢 HID 帧）
-│   ├── applog.py               # 日志落盘 %LOCALAPPDATA%\batbar\logs（滚动，含降噪）
-│   └── migrate.py              # ★纯逻辑：旧数据目录一次性迁移 logi-tray→batbar（改名善后，见 §6-J）
+│   ├── applog.py               # 日志落盘（落点由 paths.py 决定，滚动，含降噪）
+│   ├── paths.py                # ★纯逻辑：落盘位置唯一真相源（绿色模式 / 不可写回退，见 §6-J）
+│   └── migrate.py              # ★纯逻辑：历史数据（logi-tray→batbar→绿色模式）复制搬迁（见 §6-J）
 ├── probes/                     # 一次性取证探针（本 README 里所有「实测」的证据来源）
 │   ├── README.md               #   索引：每个脚本回答了什么问题、怎么跑
 │   ├── probe_bt_*.py           #   蓝牙链路取证（离线判据四源对照、睡眠 vs 关机…）
@@ -919,7 +921,7 @@ batbar/
 │   ├── probe_query.py          # 主动查询实验探针：写候选命令帧→收回帧（跑前须退托盘）
 │   ├── feature_watch.py        # feature 样本采集器：跨电量多拉几组，解译电压/百分比语义
 │   └── make_icon.py            # 程序化绘制 assets/batbar.ico（逐尺寸渲染 7 档）
-└── tests/                      # 483 项单测 + 1 个黑盒冒烟，全 stdlib，无需硬件
+└── tests/                      # 503 项单测 + 1 个黑盒冒烟，全 stdlib，无需硬件
     ├── smoke_launch.py         #   ★黑盒冒烟：真 spawn agent，读真实日志验启动链（见 §6-F）
     ├── test_hidpp.py           #   帧编码/解析、错误帧、通知判据、电压插值
     ├── test_session.py         #   特性发现、读电池、通知回显、transport 失效传播
@@ -938,11 +940,12 @@ batbar/
     ├── test_feature24.py       #   feature 拉取：样本缓冲/活帧转记/语义未定案保守返 None
     ├── test_wired24.py         #   有线通道：应答解析（实测帧样本）/充电标志/状态缓存
     ├── test_applog.py          #   落盘/幂等/滚动/目录不可写不致命
-    ├── test_migrate.py         #   旧数据目录迁移：整棵搬/幂等/不合并/失败不抛/顺序断言
+    ├── test_paths.py           #   落点优先级/不可写回退/签名缓存/三模块同源/源码扫描守门
+    ├── test_migrate.py         #   历史数据复制搬迁：不删源/不覆盖/不搬 PID/最新优先/幂等/顺序断言
     └── test_framing.py         #   TCP 粘包/半包/垃圾行的分片鲁棒性
 ```
 
-★ = 纯标准库层，任意 Python 3.11+ 直接可测（本项目已用 Python 3.13 实测 483 项全绿）。
+★ = 纯标准库层，任意 Python 3.11+ 直接可测（本项目已用 Python 3.13 实测 503 项全绿）。
 
 ---
 
@@ -1003,7 +1006,7 @@ smoke-test.bat                          rem 双击即跑，完整冒烟
 tests\smoke_launch.py --quick           rem 只验「进程能起来 + 构造函数不炸」
 ```
 
-区别：上面 483 项单测**全在测试进程内 mock**，从不真起托盘；冒烟测试真 spawn
+区别：上面 503 项单测**全在测试进程内 mock**，从不真起托盘；冒烟测试真 spawn
 子进程 + 读真实日志。两者互补，**改设备枚举路径（receiver24/wired24/dongle/
 feature24/win32ctypes）后两者都要跑**。详见 §6-F。
 
@@ -1047,8 +1050,8 @@ python tools\keybeat.py --at 0 15 40 75        rem 自定义时刻
   **不是同步完成的**（实测约 0.5 秒）。不重试的话「退出托盘 → 立刻重启」
   会被误拦，对用户就是莫名其妙起不来。真有实例常驻时重试多少次都 busy。
 
-**日志**：`applog.py` 把日志写到 `%LOCALAPPDATA%\batbar\logs\agent.log`
-（滚动 1 MB × 2，UTF-8），因为常驻托盘通常从 `agent-hidden.vbs` 静默启动，
+**日志**：`applog.py` 把日志写到 `<数据目录>\logs\agent.log`
+（滚动 1 MB × 2，UTF-8；打包后数据目录 = exe 同目录，见 §6-J），因为常驻托盘通常从 `agent-hidden.vbs` 静默启动，
 根本没控制台。托盘菜单有「打开日志」直接打开它。
 
 - 级别：默认 INFO；`-v` 或 `BATBAR_DEBUG=1` 开 DEBUG；`BATBAR_LOG_DIR` 可换目录。
@@ -1057,12 +1060,12 @@ python tools\keybeat.py --at 0 15 40 75        rem 自定义时刻
 
 ### E. 本轮三功能验证（主动查询 / 有线 / 低电量）
 
-三者判定逻辑均已进 §B 的单测（483 项）；**硬件相关**的确认要你本机跑：
+三者判定逻辑均已进 §B 的单测（503 项）；**硬件相关**的确认要你本机跑：
 
 **① 主动查询探针 —— 已实测证否（2026-10-12），此路关闭**：
 
 三轮扫描（WriteFile / SetOutputReport 两条投递通道 × 7 条候选命令帧）结论：
-- 输出 reportID = **0x13**（`SetOutputReport` 对首字节非 0x13 的帧报 err=1483）；
+- 输出 reportID = **0x13**（`SetOutputReport` 对首字节非 0x13 的帧报 err=1503）；
 - 合法格式的镜像查询帧 `13 0a 01 00 04 05 00…`（电量帧同款帧头）已送达设备，
   **零回帧**；
 - `--post-listen` 收尾段抓到过非电量帧 `11 11 ff fa fd af da da da fa×6`
@@ -1117,7 +1120,7 @@ python tools\keybeat.py --at 0 15 40 75        rem 自定义时刻
 
 第三轮实测（2026-10-12 10:53，`--set-out` IOCTL 通道）：修复后回显干净
 （`OK 20B`）。**关键情报：迈从的输出 reportID 也是 0x13**——首字节 0x13 的
-三条帧全部 `OK 20B`，0x4d/0x55/0x00 的全部 `FAIL err=1483`，判别行为与
+三条帧全部 `OK 20B`，0x4d/0x55/0x00 的全部 `FAIL err=1503`，判别行为与
 LEOBOG **完全同构**（同源公版实锤）。但两条合法通道的查询帧照旧零回帧；
 post-listen 8s 亦零帧（用户目击：扫描中途灯灭又亮=3 分钟休眠定时器，
 唤醒瞬间也没推电量帧——与 LEOBOG 的最后一处分野）。
@@ -1155,10 +1158,10 @@ rem 扫完立刻敲迈从 15 秒。⚠️ 含标准键盘口，监听期间可�
 
 ### F. 黑盒冒烟测试（2026-10-13 新增，`tests/smoke_launch.py`）
 
-**为什么需要它**：上面 483 项单测全部跑在**测试进程内**（import 走 `sys.path`
+**为什么需要它**：上面 503 项单测全部跑在**测试进程内**（import 走 `sys.path`
 注入、hidapi DLL 用桩、Win32 窗口从不起）——所以「import 链断裂 / venv 缺依赖 /
 ctypes 签名写错 / 单实例互斥量抢不到 / boot 卡在某一步」这类**只有真跑才会暴露**
-的问题，483 项一条都测不出来。冒烟测试补上这一层：**真 spawn 一个 python 子进程
+的问题，503 项一条都测不出来。冒烟测试补上这一层：**真 spawn 一个 python 子进程
 跑 agent，读它写出的真实日志**判定启动链是否走完，最接近「用户双击 exe」。
 
 **双击即跑**：
@@ -1378,10 +1381,11 @@ System32 里 —— 而且**本机开发测试永远正常**（开发者从项�
 
 | 模块 | 路径来源 | 受 cwd 影响？ |
 |---|---|---|
-| `applog.py` | `%LOCALAPPDATA%` → `expanduser("~")` 兜底 | ❌ |
-| `lastknown.py` | 环境变量 / `appdata` | ❌ |
-| `singleinstance.py` | 环境变量 → `%LOCALAPPDATA%` | ❌ |
-| `agent.py`（写 map） | 复用 `applog` 的目录推导 | ❌ |
+| `paths.py` | 落盘位置的**唯一真相源**（环境变量 / exe 目录 / `%LOCALAPPDATA%`） | ❌ |
+| `applog.py` | `paths.logs_dir()`（`BATBAR_LOG_DIR` 可单独覆盖） | ❌ |
+| `lastknown.py` | `paths.lastknown_path()`（`BATBAR_LASTKNOWN` 可重定向） | ❌ |
+| `singleinstance.py` | `paths.pid_path()` | ❌ |
+| `migrate.py` | 自己拼历史目录（它要**找**旧位置，见 J.3） | ❌ |
 
 **实现**（`agent.anchor_cwd()`，在 `main()` 里**先于 argparse** 调用）：
 
@@ -1454,58 +1458,95 @@ MATCH : True
 > 后半截 `-agent` 落单、最终结果不可预期。改完必须清 `__pycache__`
 > （`.pyc` 里冻结着旧模块名，`import` 会继续走缓存）。
 
-#### J.3 数据目录自动迁移（`migrate.py`）
+#### J.3 落盘位置与自动搬迁（`paths.py` + `migrate.py`）
 
-落盘数据在 `%LOCALAPPDATA%\<app>\`，改名后路径跟着变：
+落盘位置换过两代，**如今是绿色模式**：打包后数据就在 `batbar.exe` 旁边。
 
 ```
-%LOCALAPPDATA%\logi-tray\        %LOCALAPPDATA%\batbar\
-├── logs\agent.log*     ──────►  ├── logs\agent.log*     历史排障日志
-├── last-known.json              ├── last-known.json    最后已知电量表
-└── agent.pid                    └── agent.pid           重启脚本秒杀用
+① 最初           ② 改名后                     ③ 现在（绿色模式）
+%LOCALAPPDATA%\   %LOCALAPPDATA%\              <exe 所在目录>\
+logi-tray\        batbar\                      ├── batbar.exe
+├── logs\         ├── logs\        ──────►     ├── logs\agent.log*
+├── last-known.json  ├── last-known.json       ├── last-known.json
+└── agent.pid     └── agent.pid                └── agent.pid
 ```
 
-三样东西都**跨重启有价值**（尤其 `last-known.json`：蓝牙设备电量会回落成
-NULL，靠它兜底，不迁移则改名后第一次启动菜单会短暂闪烁）。
+**落点推导只此一处**（`paths.py`，2026-10-13 收拢）：以前 `applog` /
+`lastknown` / `singleinstance` / `migrate` 四家各自拼一遍 `%LOCALAPPDATA%\batbar`，
+改一处忘一处迟早出事。优先级：
 
-**实现**（`batbar/migrate.py`，`agent.main()` 里在 `anchor_cwd()` 之后、
-`applog.setup()` **之前**调用 —— 要搬的东西之一就是日志目录本身）：
+| 顺序 | 条件 | 落点 |
+|---|---|---|
+| 1 | 设了 `BATBAR_DATA_DIR` | 该目录（测试 / 特殊部署用） |
+| 2 | **打包后**（`sys.frozen`） | **`batbar.exe` 所在目录** |
+| 3 | **该目录不可写** | 回退 `%LOCALAPPDATA%\batbar`（回退原因写进日志） |
+| 4 | 源码运行 | `%LOCALAPPDATA%\batbar`（别往仓库里拉屎） |
+| 5 | 连 `%LOCALAPPDATA%` 都没有 | `~/batbar` |
+
+> ⚠️ 第 3 条不是可选项：绿色模式的一大风险就是用户把 exe 解到 `Program Files`
+> 或只读盘 —— 那时**不能因为写不了就不落盘**（没日志的托盘程序等于瞎跑）。
+> 探测是**真建目录 + 写一个探针文件再删**，不用 `os.access(W_OK)`
+> （它在 Windows 上对 ACL / UAC 虚拟化的判断不可靠）。
+> 每次启动日志里都有一行 `数据目录 = …`，直接回答"数据到底在哪"。
+
+缓存按**输入签名**（`BATBAR_DATA_DIR` / `LOCALAPPDATA` / `APPDATA` / frozen /
+exe 路径）做，不是裸存一个值 —— 环境变量变了却返回旧路径是最阴的一类 bug，
+单测里真踩过（一个用例清空 `LOCALAPPDATA` 调了一次，把"用户目录"落点缓存住，
+污染了后面另一个用例的断言）。
+
+**搬迁**（`batbar/migrate.py`，在 `anchor_cwd()` 之后、`applog.setup()` **之前**
+调用 —— 要搬的东西之一就是日志文件本身）把历史位置的数据**复制**进当前数据目录：
 
 ```python
-def migrate(old=None, new=None) -> tuple[bool, str]:
-    ...
-    # ① 旧目录不存在 → 全新用户 / 已经搬过，最正常的一条路径
-    if not src.is_dir():     return False, f"旧目录不存在（{src}），无需迁移"
-    # ② 新目录已存在 → 用户已跑过新版，绝不合并覆盖
-    if dst.exists():         return False, f"新目录已存在（{dst}），保留现状不合并"
-    shutil.move(str(src), str(dst))          # 整棵搬，不是逐文件复制
-    return True, f"已迁移 {src} → {dst}"
+for src in reversed(legacy_dirs()):      # batbar（上一代）先于 logi-tray（最老）
+    ...                                   # 目标已有同名文件就跳过 ⇒ 新一代数据赢
 ```
 
-四条设计取舍：
+六条设计取舍：
 
-1. **只搬不合并** —— `shutil.move` 搬**整棵**目录，搬完旧目录消失 ⇒ 天然幂等，
-   第二次跑发现旧目录不在直接 no-op。
-2. **新目录已存在就不动** —— 合并两代 `last-known.json` 需按时间戳仲裁，
-   收益极低而写坏风险不低。此时只留一行日志提示，人肉处理。
-3. **不做重定向判断** —— 旧版用的是 `LOGI_LOG_DIR`/`LOGI_LASTKNOWN`，与新版
-   `BATBAR_*` 无关；当年重定向过的话旧目录本就不存在，会被第 ① 条自然跳过。
-4. **失败一律静默** —— 权限 / 占用 / 跨卷异常只写进返回值，**绝不抛**。
+1. **只复制、不移动、不删源** —— 绿色模式是"换个位置再跑一份"，旧目录留着可回退，
+   代价几十 KB。
+2. **目标已有同名文件就跳过，绝不覆盖** —— 目标里的一定更新（否则就是刚搬进来的），
+   覆盖只会把新日志冲成旧日志。
+3. **越新的来源越先处理** —— 目标是"先占先得"，所以必须 `reversed()`：
+   ⚠️ 顺序写反就是 bug（老的先搬会占住目标、把新的挤掉），单测里锁死了这条。
+4. **不搬 `agent.pid`** —— 它是瞬时状态，启动时本来就会重写；把上一代的旧 PID
+   抄过来，万一那个 PID 已被别的进程复用，重启脚本 `taskkill /F /PID <n>`
+   就会误杀无辜进程。
+5. **不做重定向判断** —— 旧版用 `LOGI_LOG_DIR`/`LOGI_LASTKNOWN`，与 `BATBAR_*`
+   无关；当年重定向过的话旧目录本就不存在，自然跳过。
+6. **失败一律静默** —— 权限 / 占用 / 跨卷异常只写进返回值，**绝不抛**。
    最坏情况等价于「没搬」。
 
-**单测**（`test_migrate.py`，13 项）：整棵搬迁 + 字节级一致 + 二次运行幂等 +
-旧目录缺失 no-op + 两边都在不合并 + `move` 抛异常不冒泡 + 同路径跳过 +
-默认目录推导 + 拿不到 `%LOCALAPPDATA%` no-op + 常量名 + 源码级断言
-「迁移在 `applog.setup()` 之前、`anchor_cwd()` 之后」。
+**单测**（`test_paths.py` 16 项 + `test_migrate.py` 17 项）：优先级四档 + 不可写
+回退 + 可写性探测（含探针文件删干净）+ 签名缓存 + 三个模块同源 + 源码扫描
+（**除 `paths.py`/`migrate.py` 外，任何模块自己读 `%LOCALAPPDATA%` 就算回归**）+
+复制不删源 + 不覆盖 + 不搬 PID + 最新来源优先 + 幂等 + 异常不冒泡 +
+源码级断言「搬迁在 `applog.setup()` 之前、`anchor_cwd()` 之后」。
+
+**真机验收**（单测测不出"打包后到底落哪"—— 那是 `sys.frozen` 分支）：
+
+```bat
+:: ① 绿色模式：拷到干净目录跑，验数据真的出现在 exe 旁边
+.venv\Scripts\python.exe tools\verify_green_mode.py dist\batbar.exe
+:: ② 回退：用 icacls 造一个只读目录，验数据退到 %LOCALAPPDATA% 且不丢日志
+.venv\Scripts\python.exe tools\verify_green_fallback.py dist\batbar.exe
+```
+
+两个脚本都会自己收尸（杀进程、撤 ACL、删临时目录）。`verify_exe.py` 也顺带
+打印「数据目录 => … [绿色模式 ✓]」。⚠️ 搬迁会把**历史日志复制**进新位置，所以
+验收脚本判"本次新产生的行"时必须按**时间戳**过滤 —— 否则会拿上一代日志里的
+`数据目录 = …` / `ERROR` 当本次证据（`verify_exe.py` 真踩过这个坑）。
 
 #### J.4 改名后的环境重置清单（换机 / 排查用）
 
 ```bat
 :: 1) 重建可编辑安装（venv 里 .pth / dist-info / console script 都带旧路径）
 uv pip install -e . --no-deps
-:: 2) 让旧数据目录搬过去（若 %LOCALAPPDATA%\batbar 已存在则不会搬，见 J.3-②）
-::    先看一眼有没有旧数据：
+:: 2) 数据搬迁是**自动**的（复制、不删源、已有同名文件不覆盖，见 J.3）。
+::    手动确认一下历史目录里有啥（搬完也仍然留在这里）：
 dir "%LOCALAPPDATA%\logi-tray"
+dir "%LOCALAPPDATA%\batbar"
 :: 3) 计划任务重新注册（旧任务名 logi-tray-agent 不会自动改名）
 powershell -ExecutionPolicy Bypass -File scripts\register_autostart.ps1
 :: 4) 旧的 console script 残留（手动清，可选）
@@ -1580,7 +1621,7 @@ dist\batbar.exe
 
 > ⚠️ **双击运行时没有控制台**，`--scan` 的输出无处可去（`make_console_safe`
 > 保证不崩，但你看不到内容）。要排查硬件请**从 cmd 里跑**，或直接看
-> `%LOCALAPPDATA%\batbar\logs\agent.log`。
+> `dist\logs\agent.log`（绿色模式：数据在 exe 同目录，见 §6-J）。
 >
 > ⚠️ `build-exe.bat` 与 `batbar.spec` 里引用了 `.venv`，是给**本机开发**用的。
 > 分发给别人只需要 `dist\batbar.exe` 单个文件。
@@ -1606,7 +1647,7 @@ dist\batbar.exe
 | 1 | 检出代码 | `actions/checkout@v4` |
 | 2-4 | 装 Python + 缓存 pip + 装依赖 | `pip install -e ".[agent,dev]" pyinstaller`（**pyinstaller 不进 pyproject**：只有打包用得到） |
 | 5 | 读版本号 | 推 tag 用 tag 名，否则用 `pyproject.toml` 的 `version`；写进 `GITHUB_ENV` |
-| 6 | **跑单元测试** | 483 项。这道闸门是白送的 —— batbar 的测试**不需要任何 HID 硬件**（纯逻辑与 I/O 严格分离，见 §4） |
+| 6 | **跑单元测试** | 503 项。这道闸门是白送的 —— batbar 的测试**不需要任何 HID 硬件**（纯逻辑与 I/O 严格分离，见 §4） |
 | 7 | 构建 exe | `python -m PyInstaller --noconfirm --clean batbar.spec` |
 | 8 | 组装发布目录 | `package/` = `batbar.exe` + `LICENSE` + `使用说明.txt` |
 | 9 | 冒烟检查 | 体积区间 / **`FileVersion` 与 pyproject 一致** / 许可与说明齐全 / 无运行期产物混入 / **真跑一次 `--help` 要求 rc=0** / 不留常驻进程 |
@@ -1670,7 +1711,7 @@ runner 的用户名是 `runneradmin`（>8 字符）⇒ 系统给 `%TEMP%` 生成
 `RUNNER~1`；而用例把 `pid_path()` 的**原始串**去比 `Path(...).resolve()` 的**长名**。
 `pid_path()` 是纯路径拼接、不做规范化，而 `resolve()` 在 Windows 上会调
 `GetFinalPathNameByHandle` 把短名展开 —— 两边**永远不可能相等**。本机用户名
-`xin` 短、没有短名别名，所以本地 483 项一直全绿。
+`xin` 短、没有短名别名，所以本地 503 项一直全绿。
 
 修法是**两边都 `resolve()`**（断言的是「PID 跟着日志目录搬家」这个语义，
 不是字符串形态）。已单独验证 `resolve()` 对**尚不存在的尾段**也会规范化
@@ -1900,7 +1941,7 @@ subscribe 通知（`command==0x0a && type==0x05` → batteryLevel），主动查
 
 | 部分 | 状态 |
 |---|---|
-| HID++ 协议编解码、会话编排、状态机、桥接协议、分片鲁棒性 | ✅ **已实测**：**483 单测**在 Python 3.13 全绿 |
+| HID++ 协议编解码、会话编排、状态机、桥接协议、分片鲁棒性 | ✅ **已实测**：**503 单测**在 Python 3.13 全绿 |
 | **真实启动链（process→托盘 NIM_ADD）** | ✅ **已实测**：`tests/smoke_launch.py` 黑盒冒烟，真起 agent 验启动链（§6-F） |
 | **RAWINPUT 鼠标唤醒** | ✅ **已实测**（2026-10-13）：隐藏窗口 + `RIDEV_INPUTSINK` 真机收 971 条输入 100% 解码正确、去抖成 11 次事件；`MOUSE_FRESH` 门控验证通过（§6-G） |
 | **全屏/游戏感知** | ✅ **已实测**（2026-10-13）：造真全屏窗口 → 6s 进入静音（QUNS=BUSY）、关窗 10s 恢复；`BATBAR_FULLSCREEN` 三种模式均验证（§6-H） |
@@ -1987,7 +2028,7 @@ subscribe 通知（`command==0x0a && type==0x05` → batteryLevel），主动查
    **⇒ 2026-10-12 09:35 闭环：主动查询也已证否，「活动驱动」是唯一通道。**
    `tools/probe_query.py` 三轮扫描：WriteFile 与 `HidD_SetOutputReport` 两条
    投递通道 × 7 条候选命令帧（dbt-K99v2 / mcb 鼠标异或 / mcb-kbd / 自研镜像），
-   输出 reportID 确认 = 0x13（非 0x13 首字节报 err=1483），合法格式的镜像
+   输出 reportID 确认 = 0x13（非 0x13 首字节报 err=1503），合法格式的镜像
    查询帧 `13 0a 01 00 04 05 00…` 已送达，**零回帧**；`--post-listen` 收尾段
    还抓到过非电量帧 `11 11 ff fa fd af da da da fa×6`（len=14，parse_frame
    拒绝，系该 collection 漏进来的标准 HID 键盘/唤醒报文）——输入通道活着、
@@ -2055,7 +2096,7 @@ subscribe 通知（`command==0x0a && type==0x05` → batteryLevel），主动查
       业务模块里**绝不许**再写 `xxx.argtypes = [...]`。
     - **复核手段**：`probes/verify_argtypes_shared.py` 直接读 `windll` 上的
       `argtypes`，断言「含 `POINTER(_私有类型)` 的签名数 = 0」，再交叉真调四个模块
-      入口确认无 `TypeError`。**光靠单测查不出来**——483 项 mock 测试全绿时这个
+      入口确认无 `TypeError`。**光靠单测查不出来**——503 项 mock 测试全绿时这个
       bug 还在（mock 从不真调 Win32）。
 
 13. **★ RAWINPUT 的按键位在 `ulButtons`，不在 `usFlags`**（2026-10-13 鼠标唤醒踩的）：

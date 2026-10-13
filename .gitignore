@@ -61,3 +61,12 @@ Thumbs.db
 ehthumbs.db
 desktop.ini
 .DS_Store
+
+# ============ 绿色模式运行期产物 ============
+# 打包后数据落在 exe 同目录（"绿色软件"形态，见 README §6-J）。dist/ 本身已忽略，
+# 这几条是防手滑：万一有人把 exe 拷到仓库根目录跑、或把 BATBAR_DATA_DIR 指到仓库，
+# 也不至于把日志/电量表提交进去（电量表里有设备名，属于个人数据）。
+/logs/
+/last-known.json
+/agent.pid
+/batbar.exe

@@ -27,18 +27,27 @@ batbar · Windows 版
 --------------------------
   环境变量                          作用
   BATBAR_DEBUG=1                   打开调试日志
-  BATBAR_LOG_DIR=<目录>            改日志目录（默认 %LOCALAPPDATA%\batbar\logs）
+  BATBAR_DATA_DIR=<目录>           改数据目录（默认 = exe 所在目录）
+  BATBAR_LOG_DIR=<目录>            只改日志目录（默认 <数据目录>\logs）
   BATBAR_USAGE_PAGE / BATBAR_DEVNUM   锁定 HID++ 特性页与设备槽位
 
-数据落在 %LOCALAPPDATA%\batbar\：logs\agent.log（滚动日志）、last-known.json（上次
-读到的电量，用于重启后先显示旧值再刷新）、agent.pid。删掉整个目录即彻底重置。
+数据就在 batbar.exe 旁边（绿色软件形态，2026-10-13 起）：
+  logs\agent.log      滚动日志，出问题先看它
+  last-known.json     上次读到的电量（重启后先显示旧值再刷新）
+  agent.pid           运行中的进程号
+整个文件夹拷到别的机器就能带着配置一起走；删掉这三个东西即彻底重置。
+
+⚠️ 若把 exe 放在**只读位置**（如 C:\Program Files\ 下），它写不了数据，会自动
+   回退到 %LOCALAPPDATA%\batbar\ 并把这个决定写进日志。想强制指定就设
+   BATBAR_DATA_DIR。日志里有一行「数据目录 = …」直接告诉你当前落在哪。
 
 
 常见问题
 --------
 Q: 双击没反应？
 A: 它本来就没有窗口。先看托盘（含「隐藏的图标」），再看日志：
-   %LOCALAPPDATA%\batbar\logs\agent.log
+   batbar.exe 旁边的 logs\agent.log（放在只读目录时在 %LOCALAPPDATA%\batbar\logs\）
+   不确定落在哪：看日志本身，里面有一行「数据目录 = …」。
 
 Q: 显示读不到电量？
 A: 鼠标/键盘深度休眠时读不到，唤醒后再看；2.4G 接收器刚插上要等几秒。

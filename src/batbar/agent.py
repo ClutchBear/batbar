@@ -58,11 +58,11 @@ def anchor_cwd(target: str | None = None) -> str:
     """把进程工作目录锚定到一个**确定已知**的位置。
 
     为什么需要：agent 常由注册表 `Run` 键 / 计划任务 / `restart-diag.bat` 拉起，
-    这些入口给的 cwd 往往是 `C:\\Windows\\System32` 或调用方所在目录。当前代码
-    所有落盘路径都从 `%LOCALAPPDATA%` 推导，**今天不受影响**；但只要将来有人
-    写了 `open("config.json")` 这类相对路径，本机开发测试永远正常（cwd = 项目
-    根），却只在用户开机自启时炸 —— 属于最难排查的一类故障。这一句就是廉价的
-    保险。
+    这些入口给的 cwd 往往是 `C:\\Windows\\System32` 或调用方所在目录。落盘路径
+    如今统一由 `paths.py` 推导（打包后是 exe 同目录），**今天不受影响**；
+    但只要将来有人写了 `open("config.json")` 这类相对路径，本机开发测试永远正常
+    （cwd = 项目根），却只在用户开机自启时炸 —— 属于最难排查的一类故障。这一句
+    就是廉价的保险。
 
     锚点选 `sys.base_prefix`（Python 安装根，如 `C:\\Python312`）而不是
     `os.getcwd()`：前者永远存在且绝不是 System32；`sys.base_prefix` 而非
@@ -105,7 +105,8 @@ def attach_parent_console(attach: object = None) -> bool:
     标准流接到调用者的控制台，让诊断模式在打包后依然可用。
 
     双击运行（没有父控制台）时 `AttachConsole` 失败 → 返回 False，一切照旧
-    （日志照常落盘，`%LOCALAPPDATA%\\batbar\\logs\\agent.log`）。
+    （日志照常落盘：打包后 = `batbar.exe` 同目录的 `logs\\agent.log`，
+    见 `paths.py`）。
 
     必须早于 `applog.setup()`：安装器是靠「`sys.stdout` 是不是 None」来决定
     装不装控制台 handler 的，晚了就永远没有控制台输出。
@@ -2609,10 +2610,11 @@ def main():
     #   放在 argparse 之前 —— 任何文件访问都可能受 cwd 影响，越早锚定越好。
     #   日志此刻还没装好，所以这里**不能**打日志，靠返回值和 _boot 打点体现。
     _cwd = anchor_cwd()
-    # ★ 旧数据目录迁移（2026-10-13 改名）：logi-tray → batbar 后，日志/最后电量
-    #   /pid 都换到了 %LOCALAPPDATA%\batbar\。必须在 applog.setup() **之前** 搬，
-    #   因为要搬的东西之一就是日志目录本身。失败只会静默降级（等价于没搬）。
-    #   此刻日志还没装好，结果先存着，等 setup 后补打一行。
+    # ★ 历史数据搬迁（2026-10-13）：落盘位置走过两代（logi-tray → batbar →
+    #   现在的绿色模式「跟 exe 同目录」）。这里把老位置的文件**复制**进当前
+    #   数据目录（只复制不移动、目标已有就不覆盖、源目录保留）。必须在
+    #   applog.setup() **之前** —— 要搬的东西之一就是日志文件本身。
+    #   失败只静默降级（等价于没搬），结果先存着，等 setup 后补打一行。
     from . import migrate
     _migrated, _migrate_why = migrate.migrate()
     ap = argparse.ArgumentParser(prog="batbar-agent")
@@ -2627,10 +2629,13 @@ def main():
     ap.add_argument("--allow-multiple", action="store_true",
                     help="调试用：跳过单实例检查（两个实例会抢同一条 HID 输入队列）")
     args = ap.parse_args()
-    from . import applog, singleinstance
+    from . import applog, singleinstance, paths
     path = applog.setup("agent", verbose=args.verbose)
     if path is not None:
         log.info("日志文件：%s", path)
+    # ★ 绿色模式：数据（logs / last-known.json / agent.pid）默认落在 exe 同目录。
+    #   这一行是排障的第一入口 —— 用户问"数据在哪"时，日志里直接有答案。
+    log.info("%s", paths.note())
     _boot("日志就绪")
     # ★ 未捕获异常落盘：windowed exe 里 traceback 无处可去（用户只看到"跑一半
     #   没了"）。必须晚于 applog.setup() —— 早装的话日志还没有文件 handler。

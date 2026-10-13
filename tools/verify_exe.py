@@ -14,6 +14,11 @@
 
 额外顺带验一件事：动态那一轮把 cwd 故意设成 `C:\\Windows\\System32`
 （开机自启的真实场景），用来确认 frozen 分支的 cwd 锚定真的生效。
+
+⚠️ 日志落点有**两个候选**：绿色模式下是 `<exe 目录>\logs\agent.log`；若 exe
+目录不可写，程序自己回退到 `%LOCALAPPDATA%\batbar\logs\agent.log`。跑之前不知道
+它会选哪个，所以两个都记基线、跑完看哪个变大了（2026-10-13 改绿色模式时踩过：
+只盯老路径会把验收验成"日志没新增"的假失败）。
 """
 from __future__ import annotations
 
@@ -31,7 +36,6 @@ EXE = ROOT / "dist" / "batbar.exe"
 # zip 解压出来的那一份」时，用的是同一套验收标准，不必改脚本
 if len(sys.argv) > 1 and not sys.argv[1].startswith("-"):
     EXE = Path(sys.argv[1]).expanduser().resolve()
-LOG = Path(os.environ["LOCALAPPDATA"]) / "batbar" / "logs" / "agent.log"
 SYS32 = r"C:\Windows\System32"
 
 
@@ -69,24 +73,64 @@ def static_checks() -> int:
     return 0
 
 
-def _log_tail(n: int = 0) -> str:
+def _candidates() -> list[Path]:
+    """日志可能落在的两个地方。
+
+    2026-10-13 起打包版是**绿色模式**：数据落在 exe 同目录。但 exe 目录不可写
+    时会自己回退到用户目录 —— 所以两个都盯，跑完看哪个变了。
+    """
+    exe_side = EXE.parent / "logs" / "agent.log"
+    fb = Path(os.environ.get("LOCALAPPDATA") or ".") / "batbar" / "logs" / "agent.log"
+    return [exe_side, fb]
+
+
+def _sizes() -> dict:
+    out = {}
+    for p in _candidates():
+        try:
+            out[p] = p.stat().st_size if p.exists() else 0
+        except OSError:
+            out[p] = 0
+    return out
+
+
+def _grew(before: dict) -> Path | None:
+    """挑出跑完之后**变大/新生**的那个日志文件 —— 按候选顺序取**第一个**。
+
+    ⚠️ 不能挑"体积最大的那个"：`%LOCALAPPDATA%` 里的老日志有几十 KB，exe 旁边
+    那份刚建出来只有几 KB，按体积会选错人（本脚本真踩过：把回退测试留在老日志里的
+    「数据目录 = …」当成了本次的落点，白白误判成"没走绿色模式"）。
+    顺序 = `_candidates()` 的顺序，绿色模式优先。
+    """
+    for p in _candidates():
+        try:
+            sz = p.stat().st_size if p.exists() else 0
+        except OSError:
+            sz = 0
+        if sz > before.get(p, 0):
+            return p
+    return None
+
+
+def _log_tail(path: Path, n: int) -> str:
     """读日志中**第 n 个字节之后**的内容。
 
     ⚠️ 必须按**字节**切片。日志正文是中文（UTF-8 每字 3 字节），若写成
     `read_text()[n:]` 就会按字符切：偏移量被放大成 3 倍，开头几行整段被吞掉，
     表现为「日志里没找到 cwd 锚定行」这种**假阴性**（本脚本自己踩过一次）。
     """
-    if not LOG.exists():
+    if not path.exists():
         return ""
-    return LOG.read_bytes()[n:].decode("utf-8", errors="replace")
+    return path.read_bytes()[n:].decode("utf-8", errors="replace")
 
 
 def dynamic_check() -> int:
     print()
     print("== 动态（真起 exe，cwd 故意设在 System32）==")
-    before = LOG.stat().st_size if LOG.exists() else 0
+    before = _sizes()
 
     # onefile 是先起 bootloader 再派生子进程，所以要用 /T 杀整棵树
+    t0 = time.time()
     proc = subprocess.Popen(
         [str(EXE), "--standalone", "-v"],
         cwd=SYS32,
@@ -111,7 +155,14 @@ def dynamic_check() -> int:
     except subprocess.TimeoutExpired:
         pass
 
-    new = _log_tail(before)
+    logp = _grew(before)
+    if logp is None:
+        print("  [X] 两个候选日志位置都没有新增 —— exe 起来后什么都没做")
+        for p in _candidates():
+            print(f"      (查过 {p})")
+        return 1
+    print(f"  日志落点: {logp}")
+    new = _log_tail(logp, before.get(logp, 0))
     if not new.strip():
         print("  [X] 日志没有新增 —— exe 起来后什么都没做")
         return 1
@@ -121,8 +172,39 @@ def dynamic_check() -> int:
     for ln in lines[-12:]:
         print(f"    {ln}")
 
+    # ⚠️ 绿色模式会把历史日志**复制**进新位置（搬迁），所以"新增内容"里混着上一代
+    #    的行 —— 那些行也含「数据目录 = …」「ERROR」之类字样，全文匹配会取到错的
+    #    证据（本脚本真踩过：打印出的是回退测试留在老日志里的旧数据目录）。
+    #    判据 = 行首时间戳不早于本次启动前 5 秒，只认本次运行产生的行。
+    fresh, stale = [], 0
+    pat = r"^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)"
+    for ln in lines:
+        m = re.match(pat, ln)
+        if not m:
+            fresh.append(ln)
+            continue
+        try:
+            ts = time.mktime(time.strptime(m.group(1), "%Y-%m-%d %H:%M:%S"))
+        except ValueError:
+            fresh.append(ln)
+            continue
+        if ts >= t0 - 5:
+            fresh.append(ln)
+        else:
+            stale += 1
+    if stale:
+        print(f"  （{stale} 行是搬迁带进来的历史日志，以下判定只看本次新增的 {len(fresh)} 行）")
+    fresh_txt = "\n".join(fresh)
+
+    # 绿色模式自证：日志里应有一行「数据目录 = ...」
+    m = re.search(r"数据目录 = (.+?)(（|$)", fresh_txt)
+    if m:
+        green = "绿色模式" in fresh_txt
+        print(f"  数据目录 => {m.group(1).strip()}   "
+              f"[{'绿色模式 ✓' if green else '注意：不是 exe 同目录，见该行括号里的原因'}]")
+
     # cwd 锚定：frozen 下应锚到 exe 所在目录，绝不该停在 System32
-    m = re.search(r"cwd 已锚定：(.+)", new)
+    m = re.search(r"cwd 已锚定：(.+)", fresh_txt)
     if m:
         got = m.group(1).strip()
         ok = got.lower() != SYS32.lower()
@@ -130,10 +212,10 @@ def dynamic_check() -> int:
     else:
         print("  (日志里没找到 cwd 锚定行)")
 
-    hit = re.search(r"(\d+)%", new)
+    hit = re.search(r"(\d+)%", fresh_txt)
     print(f"  读到电量读数: {'是 ' + hit.group(0) if hit else '否'}")
 
-    bad = re.findall(r"Traceback|Error|ERROR|Exception|ImportError", new)
+    bad = re.findall(r"Traceback|Error|ERROR|Exception|ImportError", fresh_txt)
     print(f"  错误关键字: {sorted(set(bad)) if bad else '无'}")
     return 0
 

@@ -647,9 +647,9 @@ class CwdAnchor(unittest.TestCase):
     """启动锚定工作目录（2026-10-13）。
 
     注册表 `Run` 键 / 计划任务 / `restart-diag.bat` 拉起进程时 cwd 可能是
-    `C:\\Windows\\System32`。当前所有落盘路径都从 `%LOCALAPPDATA%` 推导，
-    今天不受影响；这一层是给「将来有人写相对路径」买的保险 —— 那种 bug
-    在本机开发时永远复现不出来。
+    `C:\\Windows\\System32`。落盘路径现在统一由 `paths.py` 推导（打包后是
+    exe 同目录），今天不受影响；这一层是给「将来有人写相对路径」买的保险 ——
+    那种 bug 在本机开发时永远复现不出来。
 
     锚点选 `sys.base_prefix` 而非 `sys.prefix`：venv 里后者指向 `.venv`，
     虽然也存在，但「Python 安装根」语义更稳。

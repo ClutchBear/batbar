@@ -151,18 +151,19 @@ def already_running(name: str = MUTEX_NAME) -> bool:
 
 
 def pid_path() -> Path:
-    """PID 文件路径：与日志目录同级（`%LOCALAPPDATA%\\batbar\\agent.pid`）。
+    """PID 文件路径 —— **数据目录**下的 `agent.pid`（落点见 `paths.py`）。
 
-    跟 `applog.default_dir()` 走而不是自己拼路径，是为了让 `BATBAR_LOG_DIR`
-    重定向（测试 / 便携部署）时两者一起搬家。
+    打包后就是 `batbar.exe` 同目录（绿色模式）；源码运行在
+    `%LOCALAPPDATA%\\batbar\\`。既有约定 `BATBAR_LOG_DIR` 仍然生效：
+    它一设，PID 就跟去日志目录（测试 / 便携部署用）。
     """
-    from . import applog
+    from . import applog, paths
 
     env = os.environ.get(applog.ENV_DIR)
     if env:
         # 日志目录被重定向时，PID 就放同一处（不往外跳一级）
         return Path(env) / PID_NAME
-    return applog.default_dir().parent / PID_NAME
+    return paths.pid_path()
 
 
 def write_pid(path: str | os.PathLike[str] | None = None) -> Path | None:

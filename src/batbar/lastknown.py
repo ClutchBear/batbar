@@ -10,7 +10,8 @@
     receiver24.py），此时唯一可用的就是它上一次在蓝牙上留下的读数。
 
 所以这里存一张 {设备名: (电量, unix 时间戳)} 的表，跨进程、跨重启复用。
-存盘路径 %LOCALAPPDATA%\\batbar\\last-known.json；任何 I/O 失败都静默降级
+存盘路径由 `paths.py` 统一决定：**打包后 = exe 同目录下的 `last-known.json`**
+（绿色模式），源码运行 = `%LOCALAPPDATA%\\batbar\\last-known.json`；任何 I/O 失败都静默降级
 （只丢 memory，不影响主流程）。测试可用 BATBAR_LASTKNOWN 重定向到临时目录。
 """
 from __future__ import annotations
@@ -31,12 +32,13 @@ _mem: dict[str, tuple[int, float]] | None = None   # 内存缓存（懒加载）
 
 
 def path() -> Path:
-    """存盘文件位置。"""
+    """存盘文件位置。`BATBAR_LASTKNOWN` 可重定向到指定目录（测试用）。"""
     override = os.environ.get(_ENV)
     if override:
         return Path(override) / _FILENAME
-    appdata = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA") or "."
-    return Path(appdata) / _DIRNAME / _FILENAME
+    from . import paths
+
+    return paths.lastknown_path()
 
 
 def _load() -> dict[str, tuple[int, float]]:

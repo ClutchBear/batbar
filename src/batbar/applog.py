@@ -1,7 +1,8 @@
 """日志落盘：常驻托盘程序没有控制台窗口，出问题只能靠猜，所以必须写文件。
 
-默认落点 `%LOCALAPPDATA%\\batbar\\logs\\<name>.log`，滚动 1 MB × 2 份
-（`agent.log` / `agent.log.1` / `agent.log.2`），UTF-8。
+默认落点：**打包后 = `batbar.exe` 同目录下的 `logs\\<name>.log`**（绿色模式），
+源码运行 = `%LOCALAPPDATA%\\batbar\\logs\\<name>.log`；滚动 1 MB × 2 份，UTF-8。
+（落点推导全在 `paths.py`，本模块不自己拼路径。）
 
 级别：
   默认 INFO；`--verbose` 或环境变量 `BATBAR_DEBUG=1` 开 DEBUG。
@@ -21,9 +22,10 @@ from pathlib import Path
 
 log = logging.getLogger("batbar.applog")
 
-APP_DIR = "batbar"
+APP_DIR = "batbar"               # 回退目录名（源码运行时的 %LOCALAPPDATA%\batbar）
 ENV_DEBUG = "BATBAR_DEBUG"
-ENV_DIR = "BATBAR_LOG_DIR"       # 测试 / 便携部署时可重定向
+#: 单独重定向日志目录（测试 / 便携部署）。完整落盘策略见 `paths.py`。
+ENV_DIR = "BATBAR_LOG_DIR"
 
 DEFAULT_MAX_BYTES = 1 << 20    # 1 MB
 DEFAULT_BACKUPS = 2
@@ -37,12 +39,14 @@ _MARK = "_batbar_app_handler"     # 给本模块装的 handler 打标记，便�
 
 
 def default_dir() -> Path:
-    """日志目录。优先级：BATBAR_LOG_DIR > %LOCALAPPDATA% > 用户目录。"""
-    env = os.environ.get(ENV_DIR)
-    if env:
-        return Path(env)
-    base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-    return Path(base) / APP_DIR / "logs"
+    """日志目录 —— 委托给 `paths.logs_dir()`（落盘位置的唯一真相源）。
+
+    优先级：`BATBAR_LOG_DIR` > `BATBAR_DATA_DIR`/绿色模式 > `%LOCALAPPDATA%`。
+    打包后是 **exe 同目录下的 `logs\\`**（绿色软件形态，2026-10-13 改）。
+    """
+    from . import paths
+
+    return paths.logs_dir()
 
 
 def debug_enabled(verbose: bool = False) -> bool:
