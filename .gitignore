@@ -1,0 +1,57 @@
+# ============ 本机调试产物（不属于源码）============
+# _tmp/ 是开发期临时脚本与抓包输出，含大量一次性探针
+_tmp/
+*.log
+agent.pid
+last-known.json
+
+# ============ 第三方源码参考（体积大，非本仓库内容）============
+# OpenLogi（Rust 项目）仅作协议参考的本地快照，不应随本仓库分发
+OpenLogi-master/
+
+# ============ 虚拟环境（体积大且含本机绝对路径）============
+.venv/
+.venv-win/
+venv/
+env/
+ENV/
+
+# ============ Python 构建/缓存 ============
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+.eggs/
+build/
+dist/
+wheels/
+pip-wheel-metadata/
+
+# 测试与静态检查缓存
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# ============ 编辑器 / IDE ============
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.bak
+*.orig
+*.rej
+
+# ============ 操作系统 ============
+Thumbs.db
+ehthumbs.db
+desktop.ini
+.DS_Store

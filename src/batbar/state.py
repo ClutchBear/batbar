@@ -1,0 +1,178 @@
+"""电量状态机（controller 侧逻辑，纯标准库，把 session 当鸭子类型依赖注入）。
+
+职责：
+  1. 轮询节奏：正常 60s 一次；设备睡眠（PING 超时）退避到 5min；醒来后 10s 内补读
+  2. 通知缓存：Windows agent 把设备主动上报的电池通知透传过来，直接刷新缓存并置 dirty
+  3. 蓝牙兜底：agent 定期跑 PowerShell 读 BTHENUM 电量属性，结果透传给 controller
+  4. 变化检测：percent/charging 变化或跨 5% 档位 → dirty → 触发重新渲染图标
+"""
+from __future__ import annotations
+
+import logging
+import time
+from dataclasses import dataclass, field
+
+from . import hidpp as H
+
+log = logging.getLogger("batbar.state")
+
+POLL_ACTIVE = 60.0
+POLL_SLEEPING = 300.0
+WAKE_GRACE = 10.0
+BT_POLL_EVERY = 300.0
+CACHE_TTL = 30.0
+
+
+@dataclass
+class BatteryState:
+    info: H.BatteryInfo | None = None
+    sleeping: bool = False
+    last_ok_ts: float = 0.0
+    last_poll_ts: float = 0.0
+    dirty: bool = True
+    _last_render_key: tuple | None = field(default=None, repr=False)
+
+    @property
+    def percent(self) -> int | None:
+        return self.info.percent if self.info else None
+
+    def tooltip(self, device_name: str = "Logitech mouse") -> str:
+        if self.sleeping or self.info is None:
+            return f"{device_name}: 睡眠中/未知"
+        p = self.percent
+        # 读不出电量用 "--" 而不是 "?"（2026-10-13 用户定稿：任何时候不显示问号）
+        s = f"{device_name}: {p}%" if p is not None else f"{device_name}: {self.info.approx or '--'}"
+        if self.info.charging:
+            s += "（充电中）"
+        return s
+
+    def render_key(self) -> tuple | None:
+        if self.info is None:
+            return None
+        p = self.percent
+        return (None if p is None else (p // 5) * 5, self.info.charging)
+
+
+class BatteryPoller:
+    """controller 的调度核心。
+
+    两种驱动方式：
+      A. 同步 session（Windows 直跑模式）：传 session=read_battery()/ping() 对象，poll_once() 直接用
+      B. 异步 RPC（旧桥接模式，已非主路径）：session=None，外部自己发请求，
+         收到回包后调 poll_response(info, sleeping=...) 回灌；due()/note_* 照常
+
+    bt_provider: () -> (percent, charging) | None，蓝牙兜底（Windows 侧 PowerShell）。
+    """
+
+    def __init__(self, session=None, bt_provider=None, now=time.monotonic):
+        self._s = session
+        self._bt = bt_provider
+        self._now = now
+        self.state = BatteryState()
+        self._last_bt_ts = 0.0
+        self._awaiting = False   # 异步模式：是否有一条请求在途
+
+    # ---- 外部事件 ----
+    def on_notification(self, info: H.BatteryInfo) -> None:
+        """设备主动上报（经 agent 透传）：最高优先，直接采信。"""
+        self.state.info = info
+        self.state.sleeping = False
+        self.state.last_ok_ts = self._now()
+        self._mark_dirty()
+
+    def on_bt_battery(self, percent: int, charging: bool = False) -> None:
+        """蓝牙兜底读数。仅当 HID++ 链路当前不可用（睡眠/读不到/未支持）才采信，
+        避免双数据源打架。"""
+        if self._hidpp_alive():
+            return
+        self.state.info = H.BatteryInfo(percent, None, charging, None, "bluetooth")
+        self._mark_dirty()
+
+    def _hidpp_alive(self) -> bool:
+        return (self.state.info is not None
+                and not self.state.sleeping
+                and self.state.info.source != "bluetooth"
+                and (self._now() - self.state.last_ok_ts) < POLL_SLEEPING * 2)
+
+    # ---- 同步模式（Windows 直跑） ----
+    def due(self) -> bool:
+        t = self._now()
+        interval = POLL_SLEEPING if self.state.sleeping else POLL_ACTIVE
+        return t - self.state.last_poll_ts >= interval
+
+    def poll_once(self) -> None:
+        """同步 session 的轮询一步。异步模式请用 request_due()+poll_response()。"""
+        if self._s is None:
+            raise RuntimeError("async mode: use request_due()/poll_response()")
+        self.state.last_poll_ts = self._now()
+        try:
+            info = self._s.read_battery()
+        except Exception as exc:  # noqa: BLE001
+            log.debug("read_battery failed: %s", exc)
+            info = None
+        self.poll_response(info)
+
+    def poll_response(self, info: H.BatteryInfo | None, sleeping: bool | None = None) -> None:
+        """异步回灌 / 同步收尾：把一次读的结果写进状态机。
+
+        Args:
+            info: 电量读数；None 表示本次没读到
+            sleeping: 仅当 info=None 时有意义——agent 已替我们判过睡眠
+        """
+        self._awaiting = False
+        self.state.last_poll_ts = self._now()
+        if info is not None:
+            self.state.info = info
+            self.state.sleeping = False
+            self.state.last_ok_ts = self._now()
+            self._mark_dirty()
+            return
+        if sleeping is True:
+            self.state.sleeping = True
+            self._maybe_bt()
+            return
+        # 读失败且没断言睡眠：保留旧值；连续失败视为 sleeping 退避以省 CPU
+        if self.state.info is None:
+            self.state.sleeping = True
+        self._maybe_bt()
+
+    # ---- 异步模式（旧桥接，已非主路径） ----
+    def request_due(self) -> bool:
+        """异步模式：现在该发一次读请求吗？"""
+        if self._awaiting:
+            return False
+        return self.due()
+
+    def mark_request_sent(self) -> None:
+        self._awaiting = True
+        self.state.last_poll_ts = self._now()  # 超时也刷新周期，防止请求风暴
+
+    def note_timeout(self) -> None:
+        """在途请求超时（controller 计时），等同一次失败回灌。"""
+        if self._awaiting:
+            self.poll_response(None, sleeping=None)
+
+    def _maybe_bt(self) -> None:
+        """设备睡眠/读不到时，若配置了蓝牙兜底且到期，则拉一次。"""
+        t = self._now()
+        if self._bt and (t - self._last_bt_ts) >= BT_POLL_EVERY:
+            self._last_bt_ts = t
+            try:
+                r = self._bt()
+                if r is not None:
+                    self.on_bt_battery(*r)
+            except Exception as exc:  # noqa: BLE001
+                log.debug("bt provider failed: %s", exc)
+
+    def _mark_dirty(self) -> None:
+        key = self.state.render_key()
+        if key != self.state._last_render_key:
+            self.state.dirty = True
+
+    def take_icon_update(self) -> BatteryState | None:
+        """有变化返回当前 state 并清 dirty，否则 None。controller 渲染循环用。"""
+        if self.state.dirty:
+            self.state.dirty = False
+            self.state._last_render_key = self.state.render_key()
+            return self.state
+        return None
