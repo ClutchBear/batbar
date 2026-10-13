@@ -857,6 +857,11 @@ batbar/
 ├── README.md                   # 本文件
 ├── ARCHITECTURE.md             # 模块职责表、功能路由直达表、改代码铁律
 ├── LICENSE                     # MIT
+├── .github/                     # CI（推 tag 自动出 Release，见 §6-L）
+│   ├── workflows/build-exe.yml #   测试 → PyInstaller → 组装 → 冒烟 → zip → Release
+│   ├── dist-extra/
+│   │   └── 使用说明.txt         #   整目录复制进 zip 根（中文名不进 CI 脚本正文）
+│   └── release-notes.md        #   Release 正文（下载/系统要求/构建方式/许可）
 ├── batbar.spec                 # PyInstaller 规格（onefile + 无控制台，见 §6-K）
 ├── build-exe.bat               # 双击即打包，产出 dist\batbar.exe
 ├── assets/
@@ -1584,6 +1589,94 @@ dist\batbar.exe
 `.venv\Scripts\pythonw.exe`（源码部署）。改成 exe 部署只要把计划任务的「操作」
 换成 `dist\batbar.exe` 的路径即可，不再需要 venv。
 
+### L. 自动构建（2026-10-13 新增，`.github/workflows/build-exe.yml`）
+
+本机打包靠 `build-exe.bat`，**对外发版**靠 GitHub Actions —— 别人不用装 Python、
+不用懂 PyInstaller，点开 Release 就能下：
+
+| 触发 | 结果 |
+|---|---|
+| 推 tag（`v0.1.0`） | 测试 → 打包 → **发布 Release**，zip 作为附件公开可下 |
+| 推 `main` / 手动 `workflow_dispatch` | 测试 → 打包 → 存为 **Actions artifact**（需登录下载，保留 90 天） |
+
+流水线（`windows-latest`，Python 3.12）：
+
+| # | 步骤 | 说明 |
+|---|---|---|
+| 1 | 检出代码 | `actions/checkout@v4` |
+| 2-4 | 装 Python + 缓存 pip + 装依赖 | `pip install -e ".[agent,dev]" pyinstaller`（**pyinstaller 不进 pyproject**：只有打包用得到） |
+| 5 | 读版本号 | 推 tag 用 tag 名，否则用 `pyproject.toml` 的 `version`；写进 `GITHUB_ENV` |
+| 6 | **跑单元测试** | 477 项。这道闸门是白送的 —— batbar 的测试**不需要任何 HID 硬件**（纯逻辑与 I/O 严格分离，见 §4） |
+| 7 | 构建 exe | `python -m PyInstaller --noconfirm --clean batbar.spec` |
+| 8 | 组装发布目录 | `package/` = `batbar.exe` + `LICENSE` + `使用说明.txt` |
+| 9 | 冒烟检查 | 体积区间 / **`FileVersion` 与 pyproject 一致** / 许可与说明齐全 / 无运行期产物混入 / **真跑一次 `--help` 要求 rc=0** / 不留常驻进程 |
+| 10-11 | 打包 zip + 核对 | 手写 `ZipArchive` 条目（见下），再断言根目录有 exe 与 LICENSE、条目名无反斜杠 |
+| 12-13 | 上传 artifact /（仅 tag）发 Release | `gh release create ... --notes-file .github/release-notes.md` |
+
+**发布目录叫 `package/` 而不是 `dist/`**：`dist/` 是 PyInstaller 的输出目录，
+组装前要清空的正是它 —— 两个目录重名会把自己刚编出来的 exe 删掉。
+
+**zip 为什么手写条目、不用 `Compress-Archive`**：后者会产生重复条目、且分隔符
+不可控。条目名必须用正斜杠（ZIP 规范），否则部分解压工具会把 `assets\a.png`
+当成一个平铺的文件名，目录结构整个丢失。只写文件条目、不写目录条目。
+
+**发版**：
+
+```bash
+git tag -a v0.1.0 -F _tmp/tagmsg.txt     # 用 -a 打注释标签；中文说明写文件，别走命令行内联
+git push origin v0.1.0
+```
+
+> tag 名与 `pyproject.toml` 的 version 保持一致（workflow 从 `$env:version` 推 zip 名，
+> tag 是 `v$version`），否则下载页会出现 `v0.1.0` 挂着 `...-v0.0.9-...zip` 这种自相矛盾的文件名。
+
+**推之前先本地预演**，别盲推 workflow 再看日志 —— 这是这件事上最慢的路径。
+用的是 `github-actions-win-release` 技能里的 `run_workflow_steps.py`：它**按 YAML
+结构抽出真实的 `run` 块**逐块执行（手抄一份命令去测，测绿的是"你的副本"，不是
+workflow 本身），并在步骤之间模拟 runner 的 `GITHUB_ENV` 注入。
+
+预演当场查出三处问题，都属于**只在 CI 上才会炸**的那类：
+
+1. **`run` 块正文里的中文注释会让 PS 解析失败**。规则是「中文写 YAML 注释、
+   正文纯 ASCII」—— 我之前把解释性注释留在正文里，判据脚本直接拦下。
+2. **`$env:RUNNER_TEMP` 在非 runner 环境是空的** → `Join-Path` 报「参数为 null」。
+   已加 `[System.IO.Path]::GetTempPath()` 兜底（顺带让这一步在本机也能跑）。
+3. **onefile 的拆解是异步的**：`Start-Process -Wait` 返回后立刻查进程，会误判
+   「exe 还在跑」。已改成先取进程数基线、再轮询 20×250ms 确认回落。
+
+> ⚠️ 附带的坑：那个预演驱动的**输出目录里也有它自己**，而它执行的是该目录下
+> 所有 `*.ps1` —— 于是它会递归调用自己，嵌套运行的 `Set-Content` 又把日志反复
+> 截断，现象是「日志只剩第一步」。把驱动复制到目录外、**并把原件删掉**才干净。
+> 另外注意它读 `Get-Process -Name batbar` 之类的判断在**本机**可能命中你自己
+> 正开着的托盘实例，所以要取基线再比，别直接判「有进程就是错」。
+
+**CI 第一次跑就抓到一处本机永远不暴露的问题**（这才是它值钱的地方）：
+
+```
+FAILED tests/test_boot_pid.py::PidFile::test_pid_path_follows_log_dir
+AssertionError: WindowsPath('C:/Users/RUNNER~1/AppData/Local/Temp/batbar-pid-.../agent.pid')
+            != WindowsPath('C:/Users/runneradmin/AppData/Local/Temp/batbar-pid-.../agent.pid')
+```
+
+runner 的用户名是 `runneradmin`（>8 字符）⇒ 系统给 `%TEMP%` 生成了 **8.3 短名**
+`RUNNER~1`；而用例把 `pid_path()` 的**原始串**去比 `Path(...).resolve()` 的**长名**。
+`pid_path()` 是纯路径拼接、不做规范化，而 `resolve()` 在 Windows 上会调
+`GetFinalPathNameByHandle` 把短名展开 —— 两边**永远不可能相等**。本机用户名
+`xin` 短、没有短名别名，所以本地 477 项一直全绿。
+
+修法是**两边都 `resolve()`**（断言的是「PID 跟着日志目录搬家」这个语义，
+不是字符串形态）。已单独验证 `resolve()` 对**尚不存在的尾段**也会规范化
+（`C:/PROGRA~1/WorkBuddy/nope.pid` → `C:\Program Files\WorkBuddy\nope.pid`），
+正是 CI 那种「目录在、文件不在」的情形。
+
+> 顺带一条经验：**匿名 GitHub API 限额 60 次/小时**。别用 20 秒轮询的长脚本盯 CI
+> （实测几分钟就 `403 rate limit exceeded`），改成按需单次查询；本机可用
+> `git credential fill` 取已存的 token 提到 5000/小时（只放请求头，别打印）。
+
+**CI 侧硬性要求**：`permissions: contents: write`（`gh release create` 需要）。
+若仓库的 Workflow permissions 是只读，发 Release 那步会 403
+（`Resource not accessible by integration`）。
+
 ## ④-bis 突破：迈从电量藏在 0xFF04 口的 Feature Report 0x06（2026-10-12 11:12）
 
 `--collections 15` 扫描结果**推翻了「彻底终结」预案**：
@@ -1805,6 +1898,8 @@ subscribe 通知（`command==0x0a && type==0x05` → batteryLevel），主动查
 | **全屏/游戏感知** | ✅ **已实测**（2026-10-13）：造真全屏窗口 → 6s 进入静音（QUNS=BUSY）、关窗 10s 恢复；`BATBAR_FULLSCREEN` 三种模式均验证（§6-H） |
 | **启动锚定工作目录** | ✅ **已实测**（2026-10-13）：子进程 cwd 强制设 System32 → 锚定后切到 Python 安装根；全仓审计确认**当前零相对路径**（§6-I） |
 | **打包成单文件 exe** | ✅ **已实测**（2026-10-13）：`dist\batbar.exe` **16.28 MB** 双击起托盘，`NIM_ADD` 内容 `'鼠标 罗技 G304: 90%'`；`--scan` rc=0 读到真机 90%；cwd 锚定落在 exe 目录（§6-K） |
+| **CI 自动构建（GitHub Actions）** | ✅ **已实测**（2026-10-13）：推 `main` 触发 `windows-latest` 全流程（测试→打包→冒烟→zip）产出 artifact；推 tag 走 Release（§6-L）。**推之前已按 workflow 的真实 `run` 块本地预演过**（当场的三处问题都在预演里修掉，没让 CI 去发现） |
+| **从 Release zip 解压即用** | ✅ **已实测**（2026-10-13）：解压出的 `batbar.exe` 与构建产物 **md5 逐字节一致**，且从解压目录启动能真读到 `鼠标 罗技 G304: 90%` 并贴进托盘 |
 | **2.4G 键盘通道（LEOBOG / 迈从 K87）** | ✅ **已实测**：被动推送 + 主动轮询 + 有线兜底三路均已真机验证（§3.4、§6-E、④ 系列） |
 | **蓝牙耳机 / 键盘电量** | ✅ **已实测**：CIM 查询 + WinRT 权威复核（§3.2） |
 | Bolt 接收器 = `VID_046D&PID_C53F`、MI_02 vendor collection、非蓝牙 | ✅ **已在本机 PowerShell 只读探测确认** |

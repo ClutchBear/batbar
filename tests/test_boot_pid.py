@@ -53,7 +53,14 @@ class PidFile(unittest.TestCase):
         from batbar import applog
         with unittest.mock.patch.dict(os.environ, {"BATBAR_LOG_DIR": self._tmp()}):
             importlib.reload(applog)
-            self.assertEqual(SI.pid_path(),
+            # 两边都要 resolve()，不能拿 `pid_path()` 的原始串去比：
+            # `pid_path()` 是纯路径拼接、**不做规范化**，而 `Path(...).resolve()`
+            # 在 Windows 上会调 GetFinalPathNameByHandle 把 8.3 短名展开成长名。
+            # CI 的 runner 上 `%TEMP%` 就是 `C:\Users\RUNNER~1\...`（用户名叫
+            # runneradmin，超过 8 字符 ⇒ 系统给了短名），于是「原始串 == 长名」
+            # 这个断言在那边**永远不成立**（本机用户名 xin 短，所以一直没暴露）。
+            # 本用例要断言的是「PID 跟着日志目录搬家」这个语义，不是字符串形态。
+            self.assertEqual(Path(SI.pid_path()).resolve(),
                              Path(self._tmp()).resolve() / "agent.pid")
         importlib.reload(applog)
 
