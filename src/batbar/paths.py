@@ -97,6 +97,12 @@ def exe_dir() -> Path | None:
 
     注意**不是** `sys.base_prefix` / `_MEIPASS`：onefile 的解包目录是临时目录，
     锚在那儿数据会随进程退出被清掉（打包时踩过，见 ARCHITECTURE 铁律）。
+
+    这里 `resolve()` 是**故意**的，别顺手删：Windows 上 `sys.executable` 可能是
+    8.3 **短名**（`C:\\Users\\RUNNER~1\\...`），resolve 一次就成规范长名 ——
+    日志里好读，跨模块比较也稳定。代价是"经符号链接启动"时会跟到真实目录，
+    对绿色程序可以接受（用户拿到的是同一个文件夹）。相关单测：
+    `tests/test_paths.py::test_frozen_exe_dir_survives_83_short_names`。
     """
     if not is_frozen():
         return None

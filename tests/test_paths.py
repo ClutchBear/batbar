@@ -12,6 +12,7 @@
 """
 from __future__ import annotations
 
+import ctypes
 import os
 import re
 import shutil
@@ -25,6 +26,33 @@ from batbar import applog, lastknown, paths, singleinstance
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src" / "batbar"
+
+
+def _canon(p: Path) -> Path:
+    """比较路径前先规范化成长名 —— Windows 的 8.3 短名会骗过字符串相等。
+
+    CI runner 的用户名 `runneradmin` 超过 8 字符，所以 `%TEMP%` 是
+    `C:\\Users\\RUNNER~1\\AppData\\Local\\Temp`：`tempfile.mkdtemp()` 拿到的是
+    **短名**，而 `paths.exe_dir()` 会 `resolve()` 成 `runneradmin` 的**长名**。
+    两个字符串指向同一个目录，`Path` 相等判断却比字符串 ⇒ CI 上炸、本机
+    （用户名 `xin`，没有短名）永远看不见 —— 2026-10-13 推 v0.1.2 时真被它拦下过一次。
+    """
+    return p.resolve()
+
+
+def _short(p: Path) -> str | None:
+    """取路径的 8.3 短名；没启用 8dot3、或名字本来就合法（≤8.3）则 None。
+
+    用 `GetShortPathNameW` 而不是 `dir /x`：不用起子进程，也不怕中文输出乱码。
+    """
+    if os.name != "nt":
+        return None
+    buf = ctypes.create_unicode_buffer(1024)
+    n = ctypes.windll.kernel32.GetShortPathNameW(str(p), buf, len(buf))
+    if not 0 < n < len(buf):
+        return None
+    s = buf.value.replace("/", "\\")
+    return None if s.lower() == str(p).lower() else s
 
 
 class DataDirResolution(unittest.TestCase):
@@ -67,9 +95,36 @@ class DataDirResolution(unittest.TestCase):
         with unittest.mock.patch.object(sys, "frozen", True, create=True), \
                 unittest.mock.patch.object(sys, "executable", str(exe_dir / "batbar.exe")):
             paths.reset_cache()
-            self.assertEqual(paths.data_dir(), exe_dir)
+            self.assertEqual(_canon(paths.data_dir()), _canon(exe_dir))
             self.assertIn("绿色模式", paths.note())
-            self.assertEqual(paths.logs_dir(), exe_dir / "logs")
+            self.assertEqual(_canon(paths.logs_dir()), _canon(exe_dir / "logs"))
+
+    def test_frozen_exe_dir_survives_83_short_names(self):
+        """★ 8.3 短名场景 —— 2026-10-13 推 v0.1.2 就是被这条拦下的。
+
+        CI runner 的用户名 `runneradmin` 超过 8 字符，`%TEMP%` 因此是
+        `C:\\Users\\RUNNER~1\\AppData\\Local\\Temp`：`tempfile.mkdtemp()` 给的路径
+        带**短名**，而 `exe_dir()` 会 `resolve()` 成长名 —— 同一个目录、两个字符串，
+        `assertEqual(data_dir(), exe_dir)` 当场判不等。
+
+        本机用户名 `xin` 太短，复现不出来（本地第一次跑是绿的），所以这里
+        **手动造一个短名父目录**把那个场景搬进来。最后那条 `assertNotEqual`
+        是自证：短名确实和长名不同，否则这用例就是空转。
+        """
+        short_root = _short(self.tmp)
+        if short_root is None:
+            self.skipTest("本卷未启用 8.3 短名（fsutil 8dot3name query <盘符>）")
+        exe_dir = Path(short_root) / "portable"
+        exe_dir.mkdir()
+        with unittest.mock.patch.object(sys, "frozen", True, create=True), \
+                unittest.mock.patch.object(sys, "executable",
+                                           str(exe_dir / "batbar.exe")):
+            paths.reset_cache()
+            self.assertEqual(_canon(paths.data_dir()), _canon(exe_dir))
+            self.assertEqual(str(paths.data_dir()).lower(),
+                             str(exe_dir.resolve()).lower())
+            # 自证前提：短名与长名确实是两个字符串，否则上面两行没有意义
+            self.assertNotEqual(str(paths.data_dir()), str(exe_dir))
 
     def test_frozen_unwritable_falls_back(self):
         """★ exe 目录不可写（解压到 Program Files 之类）⇒ 回退用户目录。"""
@@ -121,13 +176,13 @@ class DataDirResolution(unittest.TestCase):
         a.mkdir(), b.mkdir()
         with unittest.mock.patch.object(sys, "frozen", True, create=True):
             with unittest.mock.patch.object(sys, "executable", str(a / "batbar.exe")):
-                self.assertEqual(paths.data_dir(), a)
+                self.assertEqual(_canon(paths.data_dir()), _canon(a))
             # exe 换了位置 = 输入变了 ⇒ 必须重新推导，不能吃旧缓存
             with unittest.mock.patch.object(sys, "executable", str(b / "batbar.exe")):
-                self.assertEqual(paths.data_dir(), b)
+                self.assertEqual(_canon(paths.data_dir()), _canon(b))
             paths.reset_cache()
             with unittest.mock.patch.object(sys, "executable", str(a / "batbar.exe")):
-                self.assertEqual(paths.data_dir(), a)
+                self.assertEqual(_canon(paths.data_dir()), _canon(a))
 
 
 class SingleSourceOfTruth(unittest.TestCase):
