@@ -16,7 +16,6 @@ if %errorlevel%==0 (
   ".venv\Scripts\python.exe" -m pip install -e ".[agent]"
 )
 
-echo [setup] firewall rule needs admin: run scripts\firewall-agent.ps1 separately
 echo [setup] autostart: run scripts\register_autostart.ps1
 echo [setup] done. start the agent with: run-agent.cmd
 pause

@@ -5,6 +5,10 @@
 `agent.py` 里 `HOST = "0.0.0.0"` / `PORT = 51788` 和 `_serve()` 没有一起删
 ⇒ 每次双击 exe，Windows 防火墙就弹一次「是否允许 batbar.exe 访问网络」。
 
+⚠️ 分清因果：**弹窗的是 agent.py 那个监听**（v0.1.3 删）。`controller.py`
+是 TCP **客户端**、`wire.py` 只是编解码 —— 它们从没监听过任何端口，只是
+「那个监听存在的理由」。三件套在 v0.1.4 随桥接一起删除，别把守卫指错方向。
+
 ⚠️ 为什么必须靠测试守住，不能靠手测：
 
 1. **防火墙提示**通常**每台机器只弹一次** —— 在本机点过「取消」之后就再也不
@@ -16,6 +20,11 @@
 判定口径：不看「有没有 import socket」，只看**「有没有真的 listen」** ——
 禁止 `.bind(` 与 `listen(` 这两个动作。旧双进程架构（agent + controller 走
 本地 TCP 桥）已连根删掉，任何形态的监听都不该再出现。
+
+⚠️ **扫描型守卫最容易犯的错是「永远通过」**：SRC 路径算错、或 glob 一个文件
+都没匹配到 ⇒ 结果是空列表、断言直接过 ⇒ 比没有守卫更危险（给了虚假安全感）。
+所以下面每条扫描断言都**先自证扫到了东西**（见 `test_scan_actually_reaches_sources`
+与各断言里的存在性检查），再断言内容。
 """
 from __future__ import annotations
 
@@ -33,11 +42,19 @@ _PATTERNS = {
     "listen": re.compile(r"\blisten\("),
 }
 
+# 旧桥接三件套 —— 可从 git 历史里捞回来，故需按**文件名**在任意层级守门
+# （只查顶层的话，挪进 src/batbar/_legacy/ 就绕过了）。
+_DEAD_BRIDGE = ("wire.py", "net.py", "controller.py")
+
+
+def _py_files() -> list[Path]:
+    return sorted(SRC.rglob("*.py"))
+
 
 def _scan() -> list[str]:
     """扫出 src/batbar 下所有「开了监听」的地方。"""
     hits: list[str] = []
-    for p in sorted(SRC.rglob("*.py")):
+    for p in _py_files():
         for i, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1):
             for kind, pat in _PATTERNS.items():
                 if pat.search(line):
@@ -48,6 +65,17 @@ def _scan() -> list[str]:
 class NoListener(unittest.TestCase):
     """源码扫描守门：任何模块都不许再开监听端口。"""
 
+    def test_scan_actually_reaches_sources(self):
+        """阳性自证：守卫本身有效 —— 防「零命中 = 永远通过」的假通过。
+
+        若 SRC 算错或 glob 没匹配到任何文件，`_scan()` 会返回 `[]`，
+        `assertEqual(hits, [])` 直接通过。这条先证明「确实扫到了一批文件」。
+        """
+        self.assertTrue(SRC.is_dir(), "扫描根 %s 不存在 —— 守卫在空转" % SRC)
+        n = len(_py_files())
+        self.assertGreater(n, 10,
+                           "只扫到 %d 个 .py —— SRC 路径或 glob 写错了，断言会假通过" % n)
+
     def test_no_module_binds_or_listens(self):
         hits = _scan()
         self.assertEqual(
@@ -55,31 +83,46 @@ class NoListener(unittest.TestCase):
             "这些地方会开监听端口 ⇒ 触发防火墙弹窗，请删掉（batbar 读电量走本地 "
             "HID，完全不需要联网）：\n  " + "\n  ".join(hits))
 
-    def test_agent_does_not_import_socket(self):
-        """agent 是托盘常驻进程，连 socket 都不该 import（更强的约定）。
+    def test_no_module_imports_socket(self):
+        """整个包都不该再有 socket 的立足点（扫**全包**，与这句话对齐）。
 
-        旧架构里的 controller.py 是 TCP 客户端，它已随桥接一起删除 ⇒ 现在整个
-        包都不该再有 socket 的立足点（ping / 探测自己 IP 这类需求一律不要加）。
+        旧架构里 controller.py 是 TCP 客户端、net.py 查本机 IP —— 二者已随桥接
+        一起删除 ⇒ 现在包内任何模块出现 socket 都是回归（ping / 探测自己 IP
+        这类需求一律不要加）。
         """
-        body = (SRC / "agent.py").read_text(encoding="utf-8")
-        self.assertNotIn("import socket", body)
-        self.assertNotIn("socket.socket", body)
+        files = _py_files()
+        self.assertTrue(files, "扫不到任何 .py —— 本条会假通过")
+        for p in files:
+            body = p.read_text(encoding="utf-8")
+            self.assertNotIn("import socket", body,
+                             "%s 又 import socket 了 —— 包内不该有网络代码" % p.name)
+            self.assertNotIn("socket.socket", body,
+                             "%s 又建 socket 了 —— 包内不该有网络代码" % p.name)
 
     def test_no_hardcoded_port_constants(self):
         """`HOST`/`PORT` 这对桥接常量不该回来了（防止顺手抄回旧代码）。"""
-        body = (SRC / "agent.py").read_text(encoding="utf-8")
-        self.assertFalse(re.search(r"^PORT\s*=", body, re.M), "agent.py 又出现了 PORT 常量")
-        self.assertFalse(re.search(r"^HOST\s*=", body, re.M), "agent.py 又出现了 HOST 常量")
+        for p in _py_files():
+            body = p.read_text(encoding="utf-8")
+            self.assertFalse(re.search(r"^PORT\s*=", body, re.M),
+                             "%s 又出现了 PORT 常量" % p.name)
+            self.assertFalse(re.search(r"^HOST\s*=", body, re.M),
+                             "%s 又出现了 HOST 常量" % p.name)
 
     def test_legacy_bridge_modules_stay_deleted(self):
         """wire.py / net.py / controller.py 不许复活（可从 git 历史里捞回，故需守门）。
 
-        它们在 v0.1.4 被删 —— 留着就是「每次启动弹一次防火墙」的种子，
-        且 controller 已无任何调用方（agent 不再监听，它永远连不上）。
+        它们在 v0.1.4 被删：v0.1.3 删掉 agent 侧监听后，controller 永远连不上，
+        三个文件彻底失去调用方。留着它们**不会**直接弹防火墙（监听不在这儿），
+        但会让「谁在跟谁通信」再次变得含糊 —— 正是这种含糊让那个监听多活了三个
+        版本。
+
+        按**文件名**在任意层级匹配 —— 只查顶层的话，挪进 `src/batbar/_legacy/`
+        就绕过了。
         """
-        for name in ("wire.py", "net.py", "controller.py"):
-            self.assertFalse((SRC / name).exists(),
-                             "%s 又回来了 —— 旧双进程桥接已废弃，不要恢复" % name)
+        present = sorted(p.relative_to(SRC).as_posix()
+                         for p in SRC.rglob("*") if p.name in _DEAD_BRIDGE)
+        self.assertEqual(present, [],
+                         "旧双进程桥接已废弃，不要恢复：%s" % ", ".join(present))
 
 
 if __name__ == "__main__":

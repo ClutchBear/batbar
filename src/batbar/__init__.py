@@ -11,8 +11,12 @@
 
 旧双进程架构（agent + controller 走本地 TCP 桥）已于 v0.1.4 整套删除，
 包括 wire.py / net.py / controller.py 及配套单测。不要把它们抄回来 ——
-它们会让 exe 每次启动都开一个 0.0.0.0:51788 监听，触发防火墙弹窗
-（判据与守卫见 tests/test_no_listener.py）。
+它们是 controller 侧的东西，v0.1.3 删掉 agent 侧监听后 controller 永远连不上，
+留着只会占地方、并让「谁在跟谁通信」这件事再次变得含糊。
+
+⚠️ 注意分辨：**弹防火墙的是 `agent.py` 里那个 `0.0.0.0:51788` 监听**（v0.1.3 已删），
+不是这三个文件 —— controller.py 是 TCP **客户端**，wire.py 只是编解码，它们从没
+监听过任何端口。别把守卫指向错的地方（判据见 tests/test_no_listener.py）。
 """
 
 __version__ = "0.1.4"
