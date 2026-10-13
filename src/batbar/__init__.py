@@ -13,4 +13,4 @@
 > 详见 ARCHITECTURE.md §2.3。新功能不要引用它们。
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"

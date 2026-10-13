@@ -1623,9 +1623,17 @@ dist\batbar.exe
 **发版**：
 
 ```bash
-git tag -a v0.1.0 -F _tmp/tagmsg.txt     # 用 -a 打注释标签；中文说明写文件，别走命令行内联
-git push origin v0.1.0
+# 1. 先把版本号改齐（见下）并提交
+# 2. 打注释标签；中文说明写文件，别走命令行内联
+git tag -a v0.1.1 -F _tmp/tagmsg.txt
+git push origin v0.1.1
 ```
+
+> **版本号共 4 处，必须同步**：`pyproject.toml` 的 `version`、
+> `src/batbar/__init__.py` 的 `__version__`、`scripts/version_info.txt` 里的
+> `filevers=`/`prodvers=` 元组、以及同文件的 `FileVersion`/`ProductVersion` 字符串。
+> 漏改不会在本地暴露 —— CI 冒烟那步会断言 **`FileVersion` 与 pyproject 一致**，
+> 漏改就是推到远端才红。
 
 > tag 名与 `pyproject.toml` 的 version 保持一致（workflow 从 `$env:version` 推 zip 名，
 > tag 是 `v$version`），否则下载页会出现 `v0.1.0` 挂着 `...-v0.0.9-...zip` 这种自相矛盾的文件名。
