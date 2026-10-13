@@ -1,7 +1,7 @@
 """Windows 侧 HID transport：用 hidapi（cython-hidapi）打开罗技 vendor collection。
 
 只在本模块 import hid —— 这样不需要碰 USB 的代码（如纯逻辑层单测）即使没装 hidapi 也能跑
-（controller 根本不读 USB，读 USB 的是 Windows 侧的 agent）。
+（纯逻辑层根本不读 USB，读 USB 的是 Windows 侧的 agent）。
 
 罗技接收器（Bolt C53F / Unifying C52x）暴露多个 HID collection，HID++ 走
 usage_page=0xFF00/0xFF40/0xFF41/0xFFB0 系的 vendor collection（本机 C53F 是

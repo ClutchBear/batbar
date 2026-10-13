@@ -1,36 +1,8 @@
-"""wire 桥接协议 + state 状态机单测（纯标准库）。"""
+"""state 状态机单测（纯标准库）。"""
 import unittest
 
-from batbar import wire
 from batbar import hidpp as H
 from batbar.state import BatteryPoller, BatteryState
-
-
-class TestWire(unittest.TestCase):
-    def test_roundtrip(self):
-        data = wire.msg_read(2)
-        self.assertTrue(data.endswith(b"\n"))
-        f = wire.decode_line(data)
-        self.assertEqual(f.type, "read")
-        self.assertEqual(f.get("devnum"), 2)
-
-    def test_bad_lines_never_raise(self):
-        self.assertIsNone(wire.decode_line(b""))
-        self.assertIsNone(wire.decode_line(b"not json"))
-        self.assertIsNone(wire.decode_line(b'{"no_t":1}'))
-        self.assertIsNone(wire.decode_line(b"\xff\xfe"))
-
-    def test_png_base64_roundtrip(self):
-        msg = wire.msg_icon(b"\x89PNG\r\n\x1a\nfake", "tip", 85, False)
-        f = wire.decode_line(msg)
-        self.assertEqual(wire.un_b64_png(f.get("png")), b"\x89PNG\r\n\x1a\nfake")
-        self.assertEqual(f.get("percent"), 85)
-        self.assertEqual(f.type, "icon")
-
-    def test_hello_has_version(self):
-        f = wire.decode_line(wire.msg_hello())
-        self.assertEqual(f.type, "hello")
-        self.assertEqual(f.get("v"), wire.PROTO_VERSION)
 
 
 class TestState(unittest.TestCase):

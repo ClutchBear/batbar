@@ -1,9 +1,9 @@
-"""电量状态机（controller 侧逻辑，纯标准库，把 session 当鸭子类型依赖注入）。
+"""电量状态机（纯标准库，把 session 当鸭子类型依赖注入）。
 
 职责：
   1. 轮询节奏：正常 60s 一次；设备睡眠（PING 超时）退避到 5min；醒来后 10s 内补读
   2. 通知缓存：Windows agent 把设备主动上报的电池通知透传过来，直接刷新缓存并置 dirty
-  3. 蓝牙兜底：agent 定期跑 PowerShell 读 BTHENUM 电量属性，结果透传给 controller
+  3. 蓝牙兜底：agent 定期跑 PowerShell 读 BTHENUM 电量属性，结果透传给本状态机
   4. 变化检测：percent/charging 变化或跨 5% 档位 → dirty → 触发重新渲染图标
 """
 from __future__ import annotations
@@ -54,7 +54,7 @@ class BatteryState:
 
 
 class BatteryPoller:
-    """controller 的调度核心。
+    """轮询调度核心。
 
     两种驱动方式：
       A. 同步 session（Windows 直跑模式）：传 session=read_battery()/ping() 对象，poll_once() 直接用
@@ -148,7 +148,7 @@ class BatteryPoller:
         self.state.last_poll_ts = self._now()  # 超时也刷新周期，防止请求风暴
 
     def note_timeout(self) -> None:
-        """在途请求超时（controller 计时），等同一次失败回灌。"""
+        """在途请求超时（调用方计时），等同一次失败回灌。"""
         if self._awaiting:
             self.poll_response(None, sleeping=None)
 
@@ -170,7 +170,7 @@ class BatteryPoller:
             self.state.dirty = True
 
     def take_icon_update(self) -> BatteryState | None:
-        """有变化返回当前 state 并清 dirty，否则 None。controller 渲染循环用。"""
+        """有变化返回当前 state 并清 dirty，否则 None。agent 渲染循环用。"""
         if self.state.dirty:
             self.state.dirty = False
             self.state._last_render_key = self.state.render_key()

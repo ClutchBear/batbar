@@ -127,7 +127,7 @@ class HidppSession:
         return None
 
     def _on_notification(self, payload: bytes) -> None:
-        """通知帧回调钩子（controller 可注入以更新缓存）。默认吞掉。"""
+        """通知帧回调钩子（由 agent 注入以刷新缓存）。默认吞掉。"""
         if self._battery_feat and self._notify_cb:
             featnum, featidx = self._battery_feat
             info = H.parse_notification_battery(payload, featidx, featnum)

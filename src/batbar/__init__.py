@@ -9,8 +9,10 @@
   * I/O 层（transport / agent / bt_battery / dongle / poll24 / receiver24 /
     wired24 / win32ctypes / singleinstance / applog）——Windows-only。
 
-> 旧双进程架构的残留模块（wire / net / controller）已不在主路径，
-> 详见 ARCHITECTURE.md §2.3。新功能不要引用它们。
+旧双进程架构（agent + controller 走本地 TCP 桥）已于 v0.1.4 整套删除，
+包括 wire.py / net.py / controller.py 及配套单测。不要把它们抄回来 ——
+它们会让 exe 每次启动都开一个 0.0.0.0:51788 监听，触发防火墙弹窗
+（判据与守卫见 tests/test_no_listener.py）。
 """
 
-__version__ = "0.1.3"
+__version__ = "0.1.4"

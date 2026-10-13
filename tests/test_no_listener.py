@@ -13,8 +13,9 @@
 2. 监听的是 `0.0.0.0`（**全部网卡**），不只是 127.0.0.1 ⇒ 等于对局域网开放
    一个没人用的端口。这既是弹窗来源，也是无谓的攻击面。
 
-判定口径：不看「有没有 import socket」（controller 作为**客户端**还要用），
-只看**「有没有真的 listen」** —— 禁止 `.bind(` 与 `listen(` 这两个动作。
+判定口径：不看「有没有 import socket」，只看**「有没有真的 listen」** ——
+禁止 `.bind(` 与 `listen(` 这两个动作。旧双进程架构（agent + controller 走
+本地 TCP 桥）已连根删掉，任何形态的监听都不该再出现。
 """
 from __future__ import annotations
 
@@ -57,7 +58,8 @@ class NoListener(unittest.TestCase):
     def test_agent_does_not_import_socket(self):
         """agent 是托盘常驻进程，连 socket 都不该 import（更强的约定）。
 
-        controller.py 作为客户端仍可用 socket —— 所以这条只约束 agent.py。
+        旧架构里的 controller.py 是 TCP 客户端，它已随桥接一起删除 ⇒ 现在整个
+        包都不该再有 socket 的立足点（ping / 探测自己 IP 这类需求一律不要加）。
         """
         body = (SRC / "agent.py").read_text(encoding="utf-8")
         self.assertNotIn("import socket", body)
@@ -68,6 +70,16 @@ class NoListener(unittest.TestCase):
         body = (SRC / "agent.py").read_text(encoding="utf-8")
         self.assertFalse(re.search(r"^PORT\s*=", body, re.M), "agent.py 又出现了 PORT 常量")
         self.assertFalse(re.search(r"^HOST\s*=", body, re.M), "agent.py 又出现了 HOST 常量")
+
+    def test_legacy_bridge_modules_stay_deleted(self):
+        """wire.py / net.py / controller.py 不许复活（可从 git 历史里捞回，故需守门）。
+
+        它们在 v0.1.4 被删 —— 留着就是「每次启动弹一次防火墙」的种子，
+        且 controller 已无任何调用方（agent 不再监听，它永远连不上）。
+        """
+        for name in ("wire.py", "net.py", "controller.py"):
+            self.assertFalse((SRC / name).exists(),
+                             "%s 又回来了 —— 旧双进程桥接已废弃，不要恢复" % name)
 
 
 if __name__ == "__main__":
