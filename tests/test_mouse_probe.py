@@ -274,7 +274,6 @@ class ManualRefreshConsistency(unittest.TestCase):
         sess._devnum = 1
         sess.read_battery.return_value = None
         a._ensure_device = lambda: sess
-        a._broadcast = lambda *_: None
         a._push_fresh_read()
         self.assertIsNone(a._last_info)
 
@@ -285,7 +284,6 @@ class ManualRefreshConsistency(unittest.TestCase):
         sess._devnum = H.DEV_RECEIVER
         sess.read_battery.return_value = None
         a._ensure_device = lambda: sess
-        a._broadcast = lambda *_: None
         a._push_fresh_read()
         self.assertIsNone(a._last_info)
 
@@ -326,7 +324,6 @@ class ManualRefreshRevives(unittest.TestCase):
             made.append(s)
             return s
         a._ensure_device = ensure
-        a._broadcast = lambda *_: None
         return a, made
 
     def test_ff_dropped_then_rebuilt_revives(self):

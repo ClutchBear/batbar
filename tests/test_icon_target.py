@@ -27,7 +27,6 @@ def _fake_agent(snap, tracked_name="鼠标 罗技 G304", manual=None, until=0.0)
     a.devices_snapshot = lambda: dict(snap)
     a._tracked_name = lambda: tracked_name
     a._last_info = None
-    a._clients = []
     a._manual_name = manual
     a._manual_until = until
     return a
@@ -142,7 +141,6 @@ class ManualTtl(unittest.TestCase):
         a = object.__new__(A.Agent)
         a._tracked = "24G:键盘 LEOBOG Hi98C Pro"
         a._bt_misses = 0
-        a._broadcast = lambda *_: None
         a._tracked_name = lambda: "键盘 LEOBOG Hi98C Pro (有线)"
         a._icon = None                       # 不触发刷新线程
         with mock.patch.object(A.threading, "Thread") as th:
@@ -155,7 +153,6 @@ class ManualTtl(unittest.TestCase):
         a = object.__new__(A.Agent)
         a._tracked = "hidpp"
         a._bt_misses = 0
-        a._broadcast = lambda *_: None
         a._tracked_name = lambda: "鼠标 罗技 G304"
         a._icon = None
         with mock.patch.object(A, "MANUAL_TTL", 10.0), \
@@ -217,9 +214,8 @@ class MenuCheck(unittest.TestCase):
         self._patch.start()
         self.addCleanup(self._patch.stop)
 
-    def _agent(self, snap, tracked_name="鼠标 罗技 G304", clients=()):
+    def _agent(self, snap, tracked_name="鼠标 罗技 G304"):
         a = _fake_agent(snap, tracked_name=tracked_name)
-        a._clients = list(clients)
         return a
 
     def test_check_follows_icon(self):
@@ -243,11 +239,6 @@ class MenuCheck(unittest.TestCase):
         self.assertEqual(a._icon_display_name(), "键盘 迈从 K87 (2.4G)")
         self.assertEqual(a._key_for_name("键盘 迈从 K87 (2.4G)"),
                          "24G:键盘 迈从 K87")
-
-    def test_bridge_mode_keeps_tracked(self):
-        """bridge 模式（controller 连着）图标由 controller 画 → 对勾跟跟踪源。"""
-        a = self._agent({"耳机 西圣 XISEM-Air": 50}, clients=[object()])
-        self.assertEqual(a._icon_display_name(), "鼠标 罗技 G304")
 
     def test_key_for_name_variants(self):
         self.assertEqual(A.Agent._key_for_name(None, "鼠标 罗技 G304"), "hidpp")

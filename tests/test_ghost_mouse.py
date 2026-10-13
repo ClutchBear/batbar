@@ -89,7 +89,6 @@ class NotifyRejectsNullPercent(unittest.TestCase):
         a = object.__new__(A.Agent)
         a._last_info = None
         a._last_read_ts = 0.0
-        a._broadcast = lambda _d: None
         return a
 
     def test_null_percent_notify_not_cached(self):

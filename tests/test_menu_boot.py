@@ -60,12 +60,10 @@ def _build(ready: bool, snap=None, snapshot_raises: bool = False,
     a._running = True
     a._tracked = "hidpp"
     a._manual_name = None
-    a._clients = []
     a._tracked_name = lambda: "鼠标 罗技 G304"
     a._key_for_name = lambda _n: "hidpp"
     a._is_charging = lambda _n: False
     a._refresh_from_tracked = lambda: None
-    a._broadcast = lambda _d: None
     if snapshot_raises:
         def boom():
             raise AssertionError("启动阶段菜单读了硬件（会把图标一起拖住）")

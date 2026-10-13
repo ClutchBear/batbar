@@ -28,7 +28,6 @@ import argparse
 import io
 import logging
 import os
-import socket
 import struct
 import threading
 import time
@@ -37,7 +36,6 @@ from . import fullscreen as FS
 from . import hidpp as H
 from . import lowbattery
 from . import transport as T
-from . import wire
 from .session import HidppSession, TransportClosed
 
 log = logging.getLogger("batbar.agent")
@@ -185,8 +183,6 @@ def install_crash_log() -> None:
     sys.excepthook = _hook
 
 
-HOST = "0.0.0.0"        # 监听全部入口（旧桥接遗留；主路径单进程自跑用不到）
-PORT = 51788
 READ_TTL = 25.0         # 电量缓存：轮询间隔内不重复戳硬件
 MOUSE_FRESH = 8.0       # 罗技读数保鲜期（秒）——超过这么久没新读数，后台探测
                         # 主动重读一次，读不到就清掉条目。
@@ -290,9 +286,6 @@ class Agent:
         self._session: HidppSession | None = None
         self._icon = None
         self._lock = threading.Lock()          # 护 _session
-        self._clients_lock = threading.Lock()  # 护 _clients（独立锁：_broadcast 会在
-        self._clients: list[socket.socket] = []  # session 锁内被 _on_notify 调用，与
-                                                 # _ensure_device 的锁交叉会死锁）
         self._last_info: H.BatteryInfo | None = None
         self._last_read_ts = 0.0
         self._last_devnum: int | None = None       # 上次扫中的对码槽位（重开时快路径）
@@ -458,9 +451,6 @@ class Agent:
         """
         if info.percent is not None:
             self._last_info, self._last_read_ts = info, time.monotonic()
-        msg = wire.encode_msg("battery", source=info.source, percent=info.percent,
-                              charging=info.charging, state="ok")
-        self._broadcast(msg)
 
     # ---------- 罗技在/离线探测（不应答 = 不在） ----------
     def _read_with_second_chance(self, sess) -> H.BatteryInfo | None:
@@ -753,12 +743,11 @@ class Agent:
     def _set_tracked(self, device: str, *, snap: dict | None = None) -> None:
         """切换跟踪源。`snap` = 菜单点击时传入的**弹菜单那一刻的同一份快照**：
         图标刷新直接吃它，不再异步重读 —— 修「菜单行 100、点下去图标变 99」
-        （2026-10-12 22:32 用户报）。不带 snap 的调用方（bridge 指令、启动）
-        仍走 `_tracked_read()` 现读。"""
+        （2026-10-12 22:32 用户报）。不带 snap 的调用方（启动）仍走
+        `_tracked_read()` 现读。"""
         self._tracked = device
         self._bt_misses = 0
         log.info("tracking %s", device)
-        self._broadcast(wire.encode_msg("tracking", device=device))
         # 手动切换：图标显示这台（用户需求 2026-10-12）。MANUAL_TTL=None 时
         # **粘住不回退**——用户点谁就盯谁，直到点另一台或它从快照消失；
         # 设了 BATBAR_MANUAL_TTL 才恢复旧的「N 秒后交还自动规则」行为。
@@ -1202,17 +1191,6 @@ class Agent:
             return False
         return True
 
-    def _broadcast(self, data: bytes) -> None:
-        with self._clients_lock:
-            dead = []
-            for c in self._clients:
-                try:
-                    c.sendall(data)
-                except OSError:
-                    dead.append(c)
-            for c in dead:
-                self._clients.remove(c)
-
     # ---------- 托盘 ----------
     def _key_for_name(self, name: str) -> str:
         """显示名 → 跟踪 key（菜单点击用）：hidpp / 24G:<基名> / BT:<名>。
@@ -1230,12 +1208,8 @@ class Agent:
     def _icon_display_name(self, snap: dict | None = None) -> str:
         """图标**此刻显示的是哪台**（菜单对勾必须与图标一致，用户需求 2026-10-12）。
 
-        旧 bridge 模式（有外部连接）例外：那种模式图标由外部按
-        跟踪源绘制，agent 侧的自绘选源不生效，对勾就还跟跟踪源走。
         `snap`：菜单构建传入的同一份快照（见 `_icon_target` 的说明）。
         """
-        if self._clients:
-            return self._tracked_name()
         try:
             tgt = self._icon_target(snap)
         except Exception:  # noqa: BLE001
@@ -1248,7 +1222,6 @@ class Agent:
 
         def on_quit(icon, _item):
             self._running = False
-            self._broadcast(wire.encode_msg("bye"))
             icon.stop()
 
         def on_refresh(_icon, _item):
@@ -1466,9 +1439,6 @@ class Agent:
             if info is not None:
                 self._last_info, self._last_read_ts = info, time.monotonic()
                 self._sleep_until = 0.0
-                self._broadcast(wire.encode_msg("battery", source=info.source,
-                                                percent=info.percent,
-                                                charging=info.charging, state="ok"))
             else:
                 if self._last_info is not None:
                     log.info("罗技条目隐藏：立即刷新两次读取都无应答（鼠标关机）")
@@ -1586,78 +1556,6 @@ class Agent:
         except Exception as exc:  # noqa: BLE001
             log.warning("seticon failed: %s", exc)
             return False
-
-    # ---------- TCP（旧 bridge 模式，已非主路径） ----------
-    def _serve(self) -> None:
-        srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        try:
-            srv.bind((HOST, PORT))
-        except OSError as exc:
-            log.error("无法监听 %s:%d —— 端口被占或权限不足：%s", HOST, PORT, exc)
-            return
-        srv.listen(4)
-        log.info("agent listening on %s:%d", HOST, PORT)
-        while self._running:
-            try:
-                c, addr = srv.accept()
-            except OSError:
-                break
-            log.info("controller connected from %s", addr[0])
-            with self._clients_lock:
-                self._clients.append(c)
-            threading.Thread(target=self._handle_client, args=(c,), daemon=True).start()
-
-    def _iter_lines(self, sock: socket.socket):
-        buf = b""
-        while self._running:
-            try:
-                data = sock.recv(4096)
-            except OSError:
-                return
-            if not data:
-                return
-            buf += data
-            while b"\n" in buf:
-                line, buf = buf.split(b"\n", 1)
-                yield line
-
-    def _handle_client(self, c: socket.socket) -> None:
-        try:
-            for line in self._iter_lines(c):
-                f = wire.decode_line(line)
-                if f is None:
-                    continue
-                if f.type == "hello":
-                    c.sendall(wire.encode_msg("hi", platform="win", hid=True))
-                    c.sendall(wire.encode_msg("devices", **self.devices_snapshot()))
-                elif f.type == "read":
-                    self._do_read(c)
-                elif f.type == "switch":
-                    self._set_tracked(f.get("device", "hidpp"))
-                    c.sendall(wire.encode_msg("devices", **self.devices_snapshot()))
-                elif f.type == "icon":
-                    self._set_icon(wire.un_b64_png(f.get("png", "")), f.get("tooltip", "Logitech"))
-                elif f.type == "quit":
-                    self._running = False
-        except OSError:
-            pass
-        finally:
-            with self._clients_lock:
-                if c in self._clients:
-                    self._clients.remove(c)
-            try:
-                c.close()
-            except OSError:
-                pass
-
-    def _do_read(self, c: socket.socket) -> None:
-        # 非 HIDPP 源（或 HIDPP 但缓存过期）统一走 _tracked_read；
-        # hidpp 的 TTL 快速路径在 _tracked_read 内部实现
-        pct, chg, st = self._tracked_read()
-        source = "hidpp" if self._tracked == "hidpp" else self._tracked
-        c.sendall(wire.encode_msg("battery", source=source, percent=pct,
-                                  charging=chg, state=st))
 
     # ---------- standalone 模式 ----------
     def _standalone_loop(self) -> None:
@@ -1797,9 +1695,7 @@ class Agent:
         # 后面（虽然各自只是毫秒级，但没理由让「证明我启动了」这件事排队）。
         self._build_tray()
         assert self._icon is not None
-        if not standalone:
-            threading.Thread(target=self._serve, daemon=True).start()
-        else:
+        if standalone:
             threading.Thread(target=self._standalone_loop, daemon=True).start()
         threading.Thread(target=self._bt_warm_loop, daemon=True).start()
         # 全屏/游戏感知（2026-10-13）：独立线程每 2s 采一次 QUNS 维护迟滞门。
