@@ -85,7 +85,7 @@ def _raw_mouse(us_flags=0, buttons=0, dx=0, dy=0, dw_type=W.RIM_TYPEMOUSE,
                size=48):
     """按真机实测的 x64 布局拼一条 RAWINPUT（用于离线单测）。
 
-    布局（`_tmp/probe_rawinput_size.py` 实测）：header 24B + RAWMOUSE 24B。
+    布局（`probes/probe_rawinput_size.py` 实测）：header 24B + RAWMOUSE 24B。
       header: dwType(0) dwSize(4) hDevice(8) wParam(16)
       mouse : usFlags(24) pad(26) ulButtons(28) ulRawButtons(32)
               lLastX(36,signed) lLastY(40,signed) ulExtra(44)
@@ -240,7 +240,7 @@ class WindowProcDispatch(unittest.TestCase):
 
     直接提取内部 `_wnd_proc` 不易（闭包在 `_loop` 里），改为验证**契约**：
     agent 源码中窗口过程必须处理这三个消息常量。这是防回归的静态检查
-    （真窗口的消息投递已由 `_tmp/probe_device_events2.py` 实测证明）。
+    （真窗口的消息投递已由 `probes/probe_device_events2.py` 实测证明）。
     """
 
     def test_wndproc_handles_device_and_taskbar(self):

@@ -9,7 +9,7 @@ CPU（游戏已吃满资源）。系统其实**知道**用户正在全屏 ——
 
 ── 信号源：`SHQueryUserNotificationState`（Windows 官方"别打扰"判据）──
 shell32 的这个导出是 Windows 自己决定"要不要弹通知"时用的权威 API，
-返回 `QUNS_*` 枚举。本机实测（`_tmp/probe_quns.py` / `probe_quns_fullscreen.py`，
+返回 `QUNS_*` 枚举。本机实测（`probes/probe_quns.py` / `probe_quns_fullscreen.py`，
 2026-10-13）：
 
     普通桌面（有焦点窗口）      → 5  QUNS_ACCEPTS_NOTIFICATIONS

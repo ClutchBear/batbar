@@ -91,7 +91,7 @@ PORT = 51788
 READ_TTL = 25.0         # 电量缓存：轮询间隔内不重复戳硬件
 MOUSE_FRESH = 8.0       # 罗技读数保鲜期（秒）——超过这么久没新读数，后台探测
                         # 主动重读一次，读不到就清掉条目。
-                        # 2026-10-13 从 20s 收到 8s：实测（_tmp/probe_sleep_deep.py）
+                        # 2026-10-13 从 20s 收到 8s：实测（probes/probe_sleep_deep.py）
                         # 空闲 40s 的鼠标依然 0.20s 内应答 ⇒ 探测很便宜、也不会把
                         # 鼠标「戳醒」影响续航；而窗口越短，**关机后条目消失越快**
                         # （窗口 = 关机到下一次探测之间的最大延迟）。
@@ -369,7 +369,7 @@ class Agent:
 
         ── 为什么判据是「不应答 = 不在」（2026-10-13 11:00 实测纠正）──
         曾经以为「不应答 = 睡眠」（01:52 那次误判），于是真槽位不应答就保留
-        条目。今天用 `_tmp/probe_sleep_deep.py` 实测推翻了它：**静置 40s 的
+        条目。今天用 `probes/probe_sleep_deep.py` 实测推翻了它：**静置 40s 的
         G304 依然在 0.20s 内应答**（空闲 ≠ 不应答，HID++ 请求本身就能把它叫
         醒）；而接收器寄存器 0x02 的「已连接数」在鼠标关机后也**不掉**
         （日志里从来没有 `1 → 0`）—— 两个「睡眠判据」都不成立。
@@ -1467,7 +1467,7 @@ class Agent:
                 self._icon.icon = _IcoBmpImage(img)   # pystray 热替换图标
                 self._icon.title = tooltip or "Logitech"
                 # ★ 内容变了要**重新注册**一次（NIM_DELETE + NIM_ADD），不能只靠
-                #   `icon = ...` 那条 NIM_MODIFY：2026-10-13 实测（_tmp/
+                #   `icon = ...` 那条 NIM_MODIFY：2026-10-13 实测（probes/
                 #   probe_tray_modify.py + 日志时间线）——图标 add 之后的**第一次**
                 #   NIM_MODIFY 会被 shell 收下（返回 1、GetLastError=0）却**不重绘**，
                 #   托盘画面停在 add 那一帧（用户看到的 `--` + 「启动中…」），要等
@@ -1764,7 +1764,7 @@ class Agent:
 
         # ★ 等首帧内容就绪再注册图标（2026-10-13 09:49 + 10:05 用户两次报「6~7 秒
         #   才显示电量」）：实测 shell 在图标 add 之后的一段时间里**收下 NIM_MODIFY
-        #   却不重绘**（`_tmp/probe_tray_modify.py`：返回 1、GetLastError=0，托盘
+        #   却不重绘**（`probes/probe_tray_modify.py`：返回 1、GetLastError=0，托盘
         #   画面却停在 add 那一帧），而 **add 那一帧必然被渲染**（首帧 `--` 秒出即证）。
         #   所以把真读数赶在 add 之前准备好 —— 托盘一出现就是电量，而不是先挂
         #   `--` +「启动中…」。有界等待：鼠标在睡 / 一台设备都没有时，最多等
@@ -2254,7 +2254,7 @@ def _start_theme_watch() -> None:
             log.debug("theme watch: RegisterDeviceNotification 失败: %s", exc)
         # ── 注册 RAWINPUT 鼠标监听（2026-10-13）──
         # RIDEV_INPUTSINK 让这个**隐藏、无焦点**的窗口也能收到 WM_INPUT
-        # （2026-10-13 实测：15s 收到 322 条，见 _tmp/probe_rawinput.py）。
+        # （2026-10-13 实测：15s 收到 322 条，见 probes/probe_rawinput.py）。
         # 失败不致命：退化成纯轮询（只是复活慢几秒），不影响任何既有功能。
         try:
             _register_raw_mouse(user32, hwnd)
@@ -2272,7 +2272,7 @@ def _start_theme_watch() -> None:
 def _register_usb_notify(user32, hwnd) -> None:
     """给窗口注册 USB 设备接口通知（DEVICE_NOTIFY_WINDOW_HANDLE）。
 
-    实测（`_tmp/probe_device_events2.py`）：注册后能精确收到
+    实测（`probes/probe_device_events2.py`）：注册后能精确收到
     `DBT_DEVICEARRIVAL` / `DBT_DEVICEREMOVECOMPLETE`，与设备树变化分开。
     这里只注册 USB 接口这一个类别 —— 本项目的目标设备（接收器/键盘/鼠标）
     都是 USB 形态，不需要监听卷/端口等其它类别。
@@ -2321,7 +2321,7 @@ def _register_raw_mouse(user32, hwnd) -> None:
       agent 常驻托盘、永远没有焦点，不加这个标志就一条 WM_INPUT 都收不到；
     * `hwndTarget=hwnd` —— 输入投递到这个隐藏消息窗口。
 
-    实测（`_tmp/probe_rawinput.py`）：隐藏窗口 + INPUTSINK 15s 收到 322 条
+    实测（`probes/probe_rawinput.py`）：隐藏窗口 + INPUTSINK 15s 收到 322 条
     WM_INPUT，全部 type=mouse ⇒ 方案在本机成立。
 
     只注册鼠标注册表（不碰键盘/HID）：少一份噪音，也就少一份解析开销。
@@ -2369,7 +2369,7 @@ def _query_quns() -> int | None:
     ── 为什么要它 ──
     这是 Windows 自己"要不要弹通知"时用的**权威判据**，比"看前台窗口是否
     占满屏幕"准得多（后者要处理多显示器、DPI、置顶/工具窗口一堆边界）。本机
-    实测（`_tmp/probe_quns_fullscreen.py`）：无边框全屏窗口获得焦点 → 返回
+    实测（`probes/probe_quns_fullscreen.py`）：无边框全屏窗口获得焦点 → 返回
     `QUNS_BUSY`(2)；关掉 → 立刻回 `QUNS_ACCEPTS_NOTIFICATIONS`(5)。
 
     ⚠️ **绝不能只认 `QUNS_RUNNING_D3D_FULL_SCREEN`**：实测无边框全屏（游戏最

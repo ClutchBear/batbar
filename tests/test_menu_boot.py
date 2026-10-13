@@ -403,7 +403,7 @@ class WaitFirstPaint(unittest.TestCase):
     「6~7 秒才显示电量」）。
 
     实测 shell 在图标 add 之后的一段时间里**收下 NIM_MODIFY 却不重绘**
-    （`_tmp/probe_tray_modify.py`：返回 1、GetLastError=0，托盘画面不动），
+    （`probes/probe_tray_modify.py`：返回 1、GetLastError=0，托盘画面不动），
     而 **add 那一帧必然被渲染**（首帧 `--` 秒出即证）⇒ 把真读数赶在 add
     之前准备好，托盘一出现就是电量。等待必须有界：鼠标在睡/没设备时不能
     把启动拖住。
@@ -481,7 +481,7 @@ class _FakeTrayIcon:
 class IconReaddOnChange(unittest.TestCase):
     """内容变化必须**重新注册**（NIM_DELETE + NIM_ADD），不能只发 NIM_MODIFY。
 
-    2026-10-13 实测（`_tmp/probe_tray_modify.py` + agent 日志时间线）：图标
+    2026-10-13 实测（`probes/probe_tray_modify.py` + agent 日志时间线）：图标
     add 之后的**第一次** NIM_MODIFY 会被 shell 收下（返回 1、GetLastError=0）
     却**不重绘** —— 托盘画面停在 add 那一帧，要等下一次刷新（实测 ~6s，正好是
     `_bt_warm_loop` 那轮）才换。而 **add 本身必然被渲染**。这正是「日志显示

@@ -1,7 +1,7 @@
 """启动首帧与快速重启的契约（2026-10-13）。
 
 用户报「双击重启脚本后五六秒才看到托盘图标」。进程内启动实测只要 0.2 秒
-（`_tmp/probe_boot_timing.py`：import 0.10s / 首帧渲染 0.03s），所以耗时在
+（`probes/probe_boot_timing.py`：import 0.10s / 首帧渲染 0.03s），所以耗时在
 Python 之外 —— 真凶是重启脚本里 `Get-CimInstance Win32_Process` 的全进程
 CIM 枚举（3~8s）。
 

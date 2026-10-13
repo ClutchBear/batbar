@@ -45,7 +45,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 AGENT = ROOT / "src" / "batbar" / "agent.py"
 
 # 启动序列里「不碰硬件」的阶段（NIM_ADD 之前都该在 1s 内出现）。
-# 真机实测基线（_tmp/relaunch_agent.py）：日志就绪 +0.03s / 单实例 +0.05s
+# 真机实测基线（probes/relaunch_agent.py）：日志就绪 +0.03s / 单实例 +0.05s
 # / Agent 构造 +0.10s / 托盘首帧 +0.21s / NIM_ADD +0.24s。
 EARLY_STAGES = ["日志就绪", "单实例锁已占", "Agent 构造完成", "托盘首帧已请求"]
 LATE_STAGE = "图标已注册（NIM_ADD）"

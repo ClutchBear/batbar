@@ -504,7 +504,7 @@ class BluetoothBattery:
             False = 连接态问不出（失败/超时，fail-safe 维持宽限）或仍有
                     设备报「已连接」（那空表必是 CIM 抖动）。
 
-        现场取证（2026-10-13 11:41 `_tmp/probe_bt_last_device.py`）：键盘
+        现场取证（2026-10-13 11:41 `probes/probe_bt_last_device.py`）：键盘
         关机后 `_PS_QUERY` 整表空，但 WinRT 对其 MAC 如实报 false——
         这正是把「真离线」从「查询抖动」里摘出来的权威信号。
         """

@@ -93,7 +93,7 @@ class ConnJudge(unittest.TestCase):
     旧判据②「活跃 HID 派生节点」要**另起一个 ~2s 的 CIM 进程**，且蓝牙 HID
     设备**关机后节点 Present 不及时移除** → 把已关机误判成在连，快判
     （drop_disconnected_now）失效、退化成等 CIM 全量查询（~3-4s）。
-    全景枚举实测（`_tmp/probe_bt_all_status.py`）：le API 对在连 BLE 报
+    全景枚举实测（`probes/probe_bt_all_status.py`）：le API 对在连 BLE 报
     Connected、对离线 BLE 报 Disconnected，准确且不陈旧 → 取代 hid 补证。
     现在 Python 侧只解析 PS 合并后的 {mac: bool}，不再做任何补证。
     """
@@ -271,7 +271,7 @@ class EmptyVerifyByWinRT(unittest.TestCase):
     4-5s 消失（用户实测正常）；关掉最后一台，其 PnP 节点整表消失 →
     CIM 返回**空表** → 掉进 EMPTY_GRACE=180s 防抖宽限 → 卡满 3 分钟。
     空表自己分不清「抖动」与「真离线」，但 WinRT 连接态分得清
-    （现场取证 `_tmp/probe_bt_last_device.py`：键盘关机后整表空、
+    （现场取证 `probes/probe_bt_last_device.py`：键盘关机后整表空、
     WinRT 如实报 false）→ 宽限期内复核全离线就立即接受空表。
     """
 

@@ -189,7 +189,7 @@ Get-CimInstance Win32_PnPEntity -Filter "DeviceID LIKE 'BTH%'" | ForEach-Object 
   ~2s 的 CIM 进程**（快判被拖慢）；② 蓝牙 HID 设备**关机后节点 Present
   不及时移除**，把已关机误判成在连 → 「立即刷新」快判失效、退化成等 CIM
   全量查询（~3-4s，用户报「蓝牙关机等三四秒才消失」）。全景枚举实测
-  （`_tmp/probe_bt_all_status.py`）发现 **`BluetoothLEDevice` 的 le API 对
+  （`probes/probe_bt_all_status.py`）发现 **`BluetoothLEDevice` 的 le API 对
   BLE 连接态既准确又不陈旧**，遂取代 hid 补证：`_PS_CONN` 里 classic 报在连
   就短路，否则补查 le，合并 `classic ∪ le`，**全程同一个 PS 进程零额外开销**。
 
@@ -352,7 +352,7 @@ MAC 不在表里（查询失败/新设备）= 未知 → 保留（fail-open，�
      **丢会话只是把门打开，不重建等于没修**，用户点十次刷新只是丢了十个死会话。
      修法：丢完**当场 `_ensure_device()` 重建并重读**，且清零 `_sleep_until`
      （别让后台探测还卡在 30s 退避里）。
-  真机验证（`_tmp/verify_mouse_revive.py`）：`USB Receiver` 扫中槽位 **1**，
+  真机验证（`probes/verify_mouse_revive.py`）：`USB Receiver` 扫中槽位 **1**，
   `read_battery` → **90%**，复活链路通。
 - **★ 蓝牙缓存空结果翻烙饼（2026-10-13 00:05 用户报：图标显示 99、菜单却
   「未发现设备」；LEOBOG 蓝牙跟踪 18s 后被误判离线回落 hidpp；列表忽有忽无）**：
@@ -360,7 +360,7 @@ MAC 不在表里（查询失败/新设备）= 未知 → 保留（fail-open，�
   查询间歇性抽风（实测连着的 LEOBOG/QCY 上一轮还在、下一轮整表空）。菜单与
   图标在不同时刻各读一次缓存，撞上空表/满表各不相同 → 劈成两个世界。
   修法：`_accept()` 空结果**保留旧列表**；非空结果照常落盘。
-  真机复测（`_tmp/probe_bt_now.py`）：同一时刻蓝牙链路返回
+  真机复测（`probes/probe_bt_now.py`）：同一时刻蓝牙链路返回
   `{QCY 90 已连, LEOBOG 99 已连}`，链路本身健康，坐实是间歇性空表而非设备问题。
 - **★★ 上面那条的判据修错了：必须按时间，不能按次数（2026-10-13 01:18 用户
   复报「设备全关、只连 LEOBOG 蓝牙，托盘有电量、列表仍没有」）**：初版判据是
@@ -424,7 +424,7 @@ MAC 不在表里（查询失败/新设备）= 未知 → 保留（fail-open，�
   「Connection State」监看方案（`connection_state()` + `_receiver_watch_loop`
   每 1.5s 轮询已连接数），但**实测证伪**：Bolt C53F 上鼠标关机后该寄存器
   **不掉**（日志里从来没有 `1 → 0`，它更像「对码/挂接数」），方案整体移除。
-  同时 `_tmp/probe_sleep_deep.py` 实测推翻了「不应答 = 睡眠」：**静置 40s 的
+  同时 `probes/probe_sleep_deep.py` 实测推翻了「不应答 = 睡眠」：**静置 40s 的
   G304 依然在 0.20s 内应答**（空闲 ≠ 不应答，HID++ 请求本身就能叫醒它）。
   最终判据 = **`read_battery()` 连续两次不应答 = 不在**（关机/离队/走远），
   内置一次复读挡单次毛刺（`agent._read_with_second_chance`）；真槽位会话
@@ -448,7 +448,7 @@ MAC 不在表里（查询失败/新设备）= 未知 → 保留（fail-open，�
   查询攒下的「友好名 → MAC」映射（`_mac_by_name`，新增）反查 WinRT 连接态
   （`connected_macs(force=True)`，不吃 15s 缓存），**全部确认离线 → 立即接受
   空表**；问不出（失败=未知）或仍有在连（=空表必是抖动）→ 维持宽限，
-  抖动防护一点不丢。现场取证 `_tmp/probe_bt_last_device.py`：键盘关机后
+  抖动防护一点不丢。现场取证 `probes/probe_bt_last_device.py`：键盘关机后
   `_PS_QUERY` 整表空、WinRT 对其 MAC 如实报 false。测试 +6（含端到端），
   348 项全绿。
 - **★ bug 13 = 手动/自动下线节奏定稿（2026-10-13 12:30 用户需求）**：
@@ -471,7 +471,7 @@ MAC 不在表里（查询失败/新设备）= 未知 → 保留（fail-open，�
   （348→358 全绿）。
 - **★★ bug 14：蓝牙关机后「立即刷新」仍等三四秒（2026-10-13 13:14 用户报，
   对比 2.4G「立马消失」）**：根因不是蓝牙协议限制，是**我们自己的 hid 补证
-  逻辑**拖后腿。全景枚举取证（`_tmp/probe_bt_all_status.py`，四台配对设备
+  逻辑**拖后腿。全景枚举取证（`probes/probe_bt_all_status.py`，四台配对设备
   对比 classic/le/hid 三源）钉死：① `connected_macs` 只要**任一**设备报 False
   就触发 hid 补证——**另起一个 ~2s 的 CIM 进程**（`Win32_PnPEntity PNPClass=
   HIDClass ... Present`），耳机（经典蓝牙，WinRT classic 0.5s 就能准确报离线）
@@ -502,7 +502,7 @@ MAC 不在表里（查询失败/新设备）= 未知 → 保留（fail-open，�
   这轮**可能还没扫到它的行**（PnP 节点建立滞后于 WinRT 连接态），`_accept`
   的整体替换会把它抹掉 → 用户看到「闪现又消失」。保护期内 CIM 没扫到就沿用
   快判兜底值（`_preserve_fast_adds`）；CIM 扫到真实行 → 保护自动失效以 CIM
-  为准；保护期过 → 移除标记交常规逻辑。真机实测（`_tmp/probe_sync_now.py`）：
+  为准；保护期过 → 移除标记交常规逻辑。真机实测（`probes/probe_sync_now.py`）：
   初始 CIM 4.18s vs `sync_now` **0.68s** 秒判上线，提速 6 倍；离线的西圣耳机
   没被误加（只在明确报在连时才加）。测试 +11（`SyncNow` 7 项 + `PreserveFastAdds`
   4 项），356→447 全绿。局限：app 重启后 `_mac_by_name` 为空（纯内存），
@@ -522,7 +522,7 @@ MAC 不在表里（查询失败/新设备）= 未知 → 保留（fail-open，�
   | `WM_TIMER`(0x0113) | 去抖到期 | 真正触发刷新 |
 
   ⚠️ **必须去抖**：一次插拔实测产生 **12 条** `DBT_DEVNODES_CHANGED`
-  （`_tmp/probe_device_events2.py` 四窗口对照，含 `DBT_DEVICEARRIVAL`
+  （`probes/probe_device_events2.py` 四窗口对照，含 `DBT_DEVICEARRIVAL`
   0x8000 / `DBT_DEVICEREMOVECOMPLETE` 0x8004 / `DBT_DEVNODES_CHANGED`
   0x0007），逐条刷新会打爆 HID 队列。去抖用 Win32 `SetTimer`（600ms 静默期
   `DEBOUNCE_SECONDS=0.6`），**不是线程 sleep** —— sleep 会占着消息窗口线程
@@ -568,7 +568,7 @@ MAC 不在表里（查询失败/新设备）= 未知 → 保留（fail-open，�
   不该陪蓝牙一起等；用户已手动选源时不走这条快路径。
 - **★「启动中…」只挂一个鼠标时挂 ~20s，多设备时几乎看不到（2026-10-13 09:38
   用户报）**：不是采集慢——实测空槽位探测只要 **0.03s**（接收器对未对码槽位
-  直接回错误帧，`_tmp/probe_boot_cost.py`），首轮真正的大头是首次蓝牙 CIM
+  直接回错误帧，`probes/probe_boot_cost.py`），首轮真正的大头是首次蓝牙 CIM
   查询（`cached_devices()` 阻塞 ~5s，`prewarm()` 本身是异步的）。真凶是
   **首轮跑完没人重绘**：`stale` 判据比的是**图标数字**，而启动占位图本来就是
   `--`（percent=None）⇒ 空快照下 `stale` 恒 False，`tgt` 与 `_last_warn`
@@ -578,7 +578,7 @@ MAC 不在表里（查询失败/新设备）= 未知 → 保留（fail-open，�
   重绘条件——「启动中…」→「未发现设备」是**文案**变化，不在 stale 判据里。
   首轮 ≈ 5~7s（蓝牙查询）后文案即归位。
 - **★「双击后五六秒才看到图标」的真凶是重启脚本，不是 agent（2026-10-13
-  00:40 复现）**：进程内启动实测只要 **0.2 秒**（`_tmp/probe_boot_timing.py`：
+  00:40 复现）**：进程内启动实测只要 **0.2 秒**（`probes/probe_boot_timing.py`：
   import 全部依赖 0.10s、首帧渲染 0.03s、`Agent()` 0.00s）。耗时全在 Python
   之外——`restart-diag.bat` / `restart-dpi.bat` 的**第一步**是
   `powershell Get-CimInstance Win32_Process`（带 CommandLine 的全进程 WMI
@@ -605,7 +605,7 @@ MAC 不在表里（查询失败/新设备）= 未知 → 保留（fail-open，�
   （「启动中… / 立即刷新 / 退出」，毫秒级、零硬件读取）；`_ready` 置位后
   由 `_menu_ready()` 延迟 0.1s 异步 `update_menu()` 换成真实清单（延迟是
   为了避开「菜单构建中调 `_apply_icon` → 递归回菜单构建」）。
-  修复后真机 boot 打点（`_tmp/relaunch_agent.py` 实测）：
+  修复后真机 boot 打点（`probes/relaunch_agent.py` 实测）：
 
   ```
   +0.03s 日志就绪      +0.09s 托盘首帧已请求   +0.10s 后台通道就绪
@@ -620,7 +620,7 @@ MAC 不在表里（查询失败/新设备）= 未知 → 保留（fail-open，�
   慢在脚本、慢在进程、还是慢在任务栏。
 - **★★ add 之后的第一次 NIM_MODIFY 会被 shell「收下但不重绘」（2026-10-13 09:49
   用户报「只有鼠标时 6~7 秒才显示电量，之前不到 1 秒」）**：agent 日志明明写着
-  `首个真读数已画 +0.57s`，用户却 6~7 秒后才看到数字。实测（`_tmp/
+  `首个真读数已画 +0.57s`，用户却 6~7 秒后才看到数字。实测（`probes/
   probe_tray_modify.py`，直接抓 `Shell_NotifyIcon` 的返回值）：
 
   ```
@@ -663,7 +663,7 @@ MAC 不在表里（查询失败/新设备）= 未知 → 保留（fail-open，�
   ~3s）→ NIM_ADD 被拖后 3 秒。修法：新增 `_tray_shown`（`_setup` 里置位），
   菜单门控改成 `not (self._ready and self._tray_shown)` → 静态清单；
   `_menu_ready()`（换真实清单）同样等 `_tray_shown`，托盘注册后由 `_setup`
-  再叫一次。实测（`_tmp` 观测 + 日志）：**NIM_ADD +3.63s → +0.53s，且
+  再叫一次。实测（`probes/` 观测 + 日志）：**NIM_ADD +3.63s → +0.53s，且
   内容=`鼠标 罗技 G304: 90%`** —— 图标一出现就是电量。
 - **★★ 菜单内容只在 `update_menu()` 时才变：右键弹的是**上一次**建好的 HMENU
   （2026-10-13 10:40 用户报「无设备启动 → 10s 后开鼠标 → 托盘有电量，右键菜单
@@ -855,6 +855,8 @@ COL03 系统控制器 / COL04 键盘 / COL05 鼠标 / COL06 供应商定义，�
 batbar/
 ├── pyproject.toml              # PEP 621；[agent]/[dev] 依赖组
 ├── README.md                   # 本文件
+├── ARCHITECTURE.md             # 模块职责表、功能路由直达表、改代码铁律
+├── LICENSE                     # MIT
 ├── run-agent.cmd               # Windows 启动 agent（前台调试）
 ├── setup-agent.cmd             # Windows 一键建 venv + 装依赖
 ├── smoke-test.bat              # 双击即跑黑盒冒烟测试（真起 agent，验启动链）
@@ -888,6 +890,18 @@ batbar/
 │   ├── singleinstance.py       # Windows-only：命名互斥量，挡住第二个实例（防抢 HID 帧）
 │   ├── applog.py               # 日志落盘 %LOCALAPPDATA%\batbar\logs（滚动，含降噪）
 │   └── migrate.py              # ★纯逻辑：旧数据目录一次性迁移 logi-tray→batbar（改名善后，见 §6-J）
+├── probes/                     # 一次性取证探针（本 README 里所有「实测」的证据来源）
+│   ├── README.md               #   索引：每个脚本回答了什么问题、怎么跑
+│   ├── probe_bt_*.py           #   蓝牙链路取证（离线判据四源对照、睡眠 vs 关机…）
+│   ├── probe_boot_*.py         #   启动耗时分解（逐 import 打点）
+│   ├── probe_device_events*.py #   WM_DEVICECHANGE 收不到的原因排查（两代对照）
+│   ├── probe_quns_fullscreen.py#   造全屏窗口实测 QUNS 返回值
+│   ├── probe_rawinput_size.py  #   RAWINPUT 结构体真实尺寸
+│   ├── probe_tray_modify.py    #   抓 Shell_NotifyIcon 返回值（图标不刷新归因）
+│   ├── exp_*.py                #   HID++ / 私有 2.4G 协议决定性实验
+│   ├── verify_*.py             #   真机验证（cwd 锚定 / argtypes 共享 / 鼠标复活）
+│   ├── relaunch_agent.py       #   分离启动 agent 并打印 boot 打点
+│   └── *.md                    #   真实数据样本（feature 采样 / keybeat 时序）
 ├── tools/
 │   ├── keybeat.py              # 节拍助手：按时间表敲键 + HID 帧对齐（验证协议用）
 │   ├── keybeat.bat             # 双击即跑，自动找 .venv
@@ -999,7 +1013,7 @@ python tools\keybeat.py --at 0 15 40 75        rem 自定义时刻
 
 时长按驱动里「休眠」滑块设计（当前 30 秒）；改了滑块就 `--idle N` 同步，
 报告会把「停手 → 背光灭帧」的实际延迟与设定值做对照。报告落在
-`_tmp\keybeat-*.md`，含自动判读（电量帧是否只在活动后出现、停手后是否
+`probes\keybeat-*.md`，含自动判读（电量帧是否只在活动后出现、停手后是否
 彻底静默）。
 
 ### D. 单实例保护与日志落盘
@@ -1235,7 +1249,7 @@ ATTRIBUTES_CHANGED）；**按键与滚轮位全在 union `ulButtons`**（RAWMOUS
 | `RAWMOUSE.lLastX` | 36 | 4 | 有符号 |
 | `RAWMOUSE.lLastY` | 40 | 4 | 有符号 |
 
-（尺寸经 `_tmp/probe_rawinput_size.py` 实测：header 24 + mouse 24 = 48，
+（尺寸经 `probes/probe_rawinput_size.py` 实测：header 24 + mouse 24 = 48，
 `pcbSize` 上报 48、`ret=48`。）
 
 **门控逻辑**（`_on_mouse_activity`，防「狂晃鼠标把硬件打爆」）：
@@ -1280,7 +1294,7 @@ hr = shell32.SHQueryUserNotificationState(byref(state))   # 只读，<0.1ms
 
 **★ 关键实测：`QUNS_BUSY` 也算"别打扰"**
 
-本机实测（`_tmp/probe_quns_fullscreen.py`，造一个覆盖全屏的 `WS_POPUP` 窗口
+本机实测（`probes/probe_quns_fullscreen.py`，造一个覆盖全屏的 `WS_POPUP` 窗口
 并抢焦点）：
 
 | 场景 | QUNS 值 |
@@ -1384,7 +1398,7 @@ def anchor_cwd(target=None):
    还没装好，所以这里**不打日志**，靠 `_boot("日志就绪")` 后的
    `log.debug("cwd 已锚定：%s", _cwd)` 体现。
 
-**真机验证**（`_tmp/verify_cwd_anchor.py`，子进程 cwd 强制设成 System32）：
+**真机验证**（`probes/verify_cwd_anchor.py`，子进程 cwd 强制设成 System32）：
 
 ```
 BEFORE: C:\Windows\System32
@@ -1524,7 +1538,7 @@ report 里**，主机同步 `HidD_GetFeature` 就能拉——不需要固件任�
   input（键盘推送帧 + `poll24` 代发官方查询的应答帧）；
 - `agent.run()`：`feature24.start()` 接线（独立 try 块，失败不拖垮主链路）；
 - `tools/feature_watch.py`：样本采集器（默认 60s 一拉跑 2 小时，落盘
-  `_tmp/feature-samples-<日期>.md`）；
+  `probes/feature-samples-<日期>.md`）；
 - GetFeature 是同步 IOCTL，**不消耗输入队列**，与 0xFF02 单读者监听并存
   （实测托盘与拉取同跑无互抢）。
 
@@ -1858,7 +1872,7 @@ subscribe 通知（`command==0x0a && type==0x05` → batteryLevel），主动查
       3. **声明函数只做一次**（`ensure_argtypes()` 幂等）：谁先谁后都一样。
     - **铁律**：新增 Win32 HID/SetupAPI 调用时，**签名一律加在 `win32ctypes.py`**，
       业务模块里**绝不许**再写 `xxx.argtypes = [...]`。
-    - **复核手段**：`_tmp/verify_argtypes_shared.py` 直接读 `windll` 上的
+    - **复核手段**：`probes/verify_argtypes_shared.py` 直接读 `windll` 上的
       `argtypes`，断言「含 `POINTER(_私有类型)` 的签名数 = 0」，再交叉真调四个模块
       入口确认无 `TypeError`。**光靠单测查不出来**——466 项 mock 测试全绿时这个
       bug 还在（mock 从不真调 Win32）。
@@ -1870,7 +1884,7 @@ subscribe 通知（`command==0x0a && type==0x05` → batteryLevel），主动查
     （光标不动）」被判成无活动 ⇒ 点鼠标唤不醒条目。真机实测布局（x64）：
     header 24B（dwType@0 / dwSize@4 / hDevice@8 / wParam@16）+
     mouse 24B（usFlags@24 / ulButtons@28 / ulRawButtons@32 / lLastX@36 /
-    lLastY@40 / ulExtra@44）= 48。尺寸用 `_tmp/probe_rawinput_size.py` 实测确认。
+    lLastY@40 / ulExtra@44）= 48。尺寸用 `probes/probe_rawinput_size.py` 实测确认。
 
 14. **`RIDEV_INPUTSINK` 是「无焦点窗口也能收 RAWINPUT」的唯一开关**
     （2026-10-13）：agent 常驻托盘、永远没焦点，注册时不带

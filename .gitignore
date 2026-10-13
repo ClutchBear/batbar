@@ -2,6 +2,8 @@
 # _tmp/ 是开发期临时脚本与抓包输出，含大量一次性探针
 _tmp/
 *.log
+# 例外：probes/ 下的样本日志是精选出来要分发的
+!probes/*.log
 agent.pid
 last-known.json
 

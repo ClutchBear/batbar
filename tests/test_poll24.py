@@ -1,6 +1,6 @@
 """poll24 轮询器 + dongle 命令应答帧解析的防回归测试。
 
-样本帧全部来自 2026-10-12 16:56 监听窗口实抓（_tmp/snap-listen2.log）。
+样本帧全部来自 2026-10-12 16:56 监听窗口实抓（probes/snap-listen2.log）。
 """
 import os
 import time

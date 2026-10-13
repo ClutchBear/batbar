@@ -9,7 +9,7 @@
 同时 `WM_TASKBARCREATED` 能让托盘图标在 **explorer 崩溃重启后自动重建**
 （现在没监听，explorer 一崩图标就永久消失，只能手动重启 agent）。
 
-── 实测取证（2026-10-13 18:17，`_tmp/probe_device_events2.py`）──
+── 实测取证（2026-10-13 18:17，`probes/probe_device_events2.py`）──
 一次「拔接收器 → 等 3s → 插回」的实测序列（4 种窗口样式全部收到，一条不差）：
 
     18:17:49  DBT_DEVNODES_CHANGED        ← 拔（设备树变化）
@@ -120,8 +120,8 @@ def classify(wparam: int) -> str | None:
 #
 # ── 为什么 RAWINPUT 能补这一刀 ──
 # `WM_INPUT` + `RIDEV_INPUTSINK` 让**隐藏、无焦点**的窗口也能收到全局鼠标输入
-# （2026-10-13 实测：`_tmp/probe_rawinput.py` 隐藏窗口 15s 收到 322 条 WM_INPUT，
-# 全部 type=mouse；`_tmp/probe_rawinput_size.py` 确认尺寸语义）。
+# （2026-10-13 实测：`probes/probe_rawinput.py` 隐藏窗口 15s 收到 322 条 WM_INPUT，
+# 全部 type=mouse；`probes/probe_rawinput_size.py` 确认尺寸语义）。
 # 「鼠标此刻有活动」= 「它醒着」——收到就**立即触发一次探测**，不必等轮询。
 #
 # ⚠️ 三条边界（很重要，别把 RAWINPUT 当罗技专属信号）：

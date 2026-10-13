@@ -223,7 +223,7 @@
     ⇒ 结构体（`GUID/IFD/DETAIL/ATTRS/CAPS`）与签名**只此一份**；指针参数
     一律 `c_void_p`（`byref(任意 Structure)` 合法）；`ensure_argtypes()` 幂等。
     新增 Win32 调用时签名加进 `win32ctypes.py`，**业务模块里绝不许写
-    `xxx.argtypes = [...]`**。复核脚本：`_tmp/verify_argtypes_shared.py`。
+    `xxx.argtypes = [...]`**。复核脚本：`probes/verify_argtypes_shared.py`。
     **单测查不出这个 bug**（mush 全绿时它仍在）。
 12. **新事件源一律走「注册表 + 回调」，不改窗口过程去 `import Agent`**：
     `_theme_listeners` / `_device_listeners` / `_taskbar_listeners` / `_mouse_listeners`
@@ -278,7 +278,7 @@
 > ⚠️ **RAWINPUT 三条边界的纪律**（写在 `winevents.py` RAWINPUT 节）：① 拿不到「是哪只鼠标」，只能当**催化剂**、绝不当在线判据；② 不是罗技私有信息（HID++ 才有 frame）；③ 频率极高（实测 ~33 条/s）**必须去抖**。
 
 **明确不学 FerrisPulse 的地方**：它**没有日志系统**（全程 `catch { }` 静默吞异常）。
-本项目的 `applog.py` 分级日志 + `_tmp/` 取证探针是核心优势——排障能力全靠它，守住。
+本项目的 `applog.py` 分级日志 + `probes/` 取证探针是核心优势——排障能力全靠它，守住。
 
 ---
 
@@ -289,5 +289,5 @@
 | `README.md` | 选型理由、运行步骤、协议逆向全过程（④ 系列）、各轮 bug 修复记录 |
 | `ARCHITECTURE.md`（本文件） | 模块职责、功能路由、改代码铁律、待办 |
 | `tests/` | 466 项单测，全 stdlib；每个测试文件对应一个模块的契约。**外加 `smoke_launch.py` 黑盒冒烟**（真 spawn agent 验启动链） |
-| `_tmp/` | 一次性取证探针（`probe_*.py` / `verify_*.py`），查协议/时序/ctypes 签名时的现场证据 |
+| `probes/` | 一次性取证探针（`probe_*.py` / `exp_*.py` / `verify_*.py`）+ 真实数据样本；查协议/时序/ctypes 签名时的现场证据。**已随仓库开源**，索引见 `probes/README.md` |
 | `tools/` | 常驻工具（keybeat 节拍助手、probe_query、feature_watch） |

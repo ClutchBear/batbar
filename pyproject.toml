@@ -13,7 +13,7 @@ description = "常驻 Windows 系统托盘的多设备电量指示器（鼠标 /
 requires-python = ">=3.11"
 readme = "README.md"
 license = { text = "MIT" }
-authors = [{ name = "xin" }]
+authors = [{ name = "ClutchBear" }]
 dependencies = []
 
 [project.optional-dependencies]
