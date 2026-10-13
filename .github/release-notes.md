@@ -8,6 +8,26 @@
 
 压缩包里还附了 `使用说明.txt`，含配置项与故障排查。
 
+## 本版变化（v0.1.2）
+
+**改成绿色（便携）模式** —— 数据不再写进 `%LOCALAPPDATA%\batbar`，而是跟
+`batbar.exe` 放在同一个目录：解压到哪，数据就在哪；整个目录拷走即可迁移。
+
+```
+D:\batbar\
+├── batbar.exe
+├── logs\agent.log       ← 日志
+├── last-known.json      ← 上次电量（重启后先显示旧值，不等首次读数）
+└── agent.pid            ← 供重启脚本秒杀旧实例
+```
+
+- 首次启动会把旧 `%LOCALAPPDATA%` 里的历史数据**复制**过来（只复制、不删源、
+  不覆盖已有文件）。此后新数据一律只写在 exe 旁边。
+- 若 exe 所在目录不可写（例如解压到 `Program Files`），自动回退到
+  `%LOCALAPPDATA%\batbar`，并在日志里写明回退原因 —— 不会因为写不进去就不落盘。
+- 想指定别处：设环境变量 `BATBAR_DATA_DIR=<目录>`。
+- 升级方式：解压新包覆盖 exe，把旧的 `logs\`、`last-known.json` 一起放进去即可。
+
 ## 系统要求
 
 Windows 10 / 11 64 位。
