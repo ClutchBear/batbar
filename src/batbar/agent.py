@@ -69,12 +69,21 @@ def anchor_cwd(target: str | None = None) -> str:
     `sys.prefix`，因为在 venv 里 prefix 会指向 `.venv`（同样存在，但语义上
     安装根更稳定）。目标不存在时静默放弃，绝不因此让进程起不来。
 
+    **frozen 环境（PyInstaller）另走一路**：那时 `sys.base_prefix` 被指到
+    `sys._MEIPASS`（onefile 下是 `%TEMP%\\_MEIxxxxxx`）。锚在那里会**顶掉
+    bootloader 的临时目录清理** —— Windows 不允许删除「正被某进程当作工作
+    目录」的目录，于是 TEMP 里的 `_MEI*` 越堆越多。改为锚 exe 所在目录。
+
     参数 `target` 仅供测试注入。返回最终 cwd（失败时为原 cwd）。
     """
     import sys
     want = target
     if want is None:
-        want = getattr(sys, "base_prefix", "") or ""
+        if getattr(sys, "frozen", False):
+            # PyInstaller：见 docstring —— 锚 exe 所在目录，绝不碰 _MEIPASS。
+            want = os.path.dirname(os.path.abspath(sys.executable))
+        else:
+            want = getattr(sys, "base_prefix", "") or ""
     try:
         if want and os.path.isdir(want):
             os.chdir(want)
@@ -84,6 +93,95 @@ def anchor_cwd(target: str | None = None) -> str:
         return os.getcwd()
     except Exception:             # noqa: BLE001
         return want or ""
+
+
+def attach_parent_console(attach: object = None) -> bool:
+    """无控制台时，附加到调用方（cmd / 终端）的控制台。
+
+    为什么需要：打包成 `--windowed` 的 exe 后 `sys.stdout` / `sys.stderr` 都是
+    `None`。而 CPython 的 `print()` 对 `sys.stdout is None` 是**静默 no-op**
+    （不抛异常！），也就是说 `batbar.exe --scan` 在 cmd 里跑会一个字都不打印，
+    还以为是自己参数写错了 —— 比直接报错更难查。这里调 `AttachConsole` 把
+    标准流接到调用者的控制台，让诊断模式在打包后依然可用。
+
+    双击运行（没有父控制台）时 `AttachConsole` 失败 → 返回 False，一切照旧
+    （日志照常落盘，`%LOCALAPPDATA%\\batbar\\logs\\agent.log`）。
+
+    必须早于 `applog.setup()`：安装器是靠「`sys.stdout` 是不是 None」来决定
+    装不装控制台 handler 的，晚了就永远没有控制台输出。
+
+    参数 `attach` 仅供测试注入（True/False 模拟附加结果）。永不抛异常。
+    """
+    import sys
+    if sys.stdout is not None:
+        return True                  # 源码运行 / console 版 exe：本来就有
+    ok = False
+    if attach is None:
+        try:
+            import ctypes
+            # ATTACH_PARENT_PROCESS = -1
+            ok = bool(ctypes.windll.kernel32.AttachConsole(-1))
+        except Exception:            # noqa: BLE001
+            ok = False
+    else:
+        ok = bool(attach)
+    if not ok:
+        return False
+    try:
+        sys.stdout = open("CONOUT$", "w", encoding="utf-8",
+                          errors="replace", buffering=1)
+        sys.stderr = open("CONOUT$", "w", encoding="utf-8",
+                          errors="replace", buffering=1)
+    except Exception:                # noqa: BLE001 —— 接不上就退化成"只有日志"
+        return False
+    return True
+
+
+def make_console_safe() -> None:
+    """让控制台输出**永不因编码而崩**。
+
+    中文 Windows 的 `sys.stdout.encoding` 是 cp936(GBK)。往它写 emoji
+    （✅/❌/⚠️）会抛 `UnicodeEncodeError` 并**直接终止进程** —— 2026-10-13
+    打包 exe 时实测：`batbar.exe --scan` 跑到「✅ 可用写长度」那行就没了，
+    rc=1，日志里一个字都没有（print 不走 logging，所以查不到）。而 Git Bash
+    / VS Code 的 UTF-8 终端**永远复现不出来**，只在中文 cmd 与打包版上炸。
+
+    这里是兜底层：把 errors 调成 `replace`，万一还有漏网字符最多显示成 `?`。
+    真正的修复是把字符本身换成 GBK 可编码的（`_scan` 里已改 √ / ×）。
+    """
+    import sys
+    for name in ("stdout", "stderr"):
+        stream = getattr(sys, name, None)
+        if stream is None:
+            continue
+        try:
+            stream.reconfigure(errors="replace")   # Python 3.7+ TextIOWrapper
+        except Exception:            # noqa: BLE001 —— 换不了就算了，别因此起不来
+            pass
+
+
+def install_crash_log() -> None:
+    """windowed exe 里未捕获异常会**凭空消失**，把它们钉进日志。
+
+    没有控制台时 traceback 无处可去，用户看到的只是"跑一半没了"。上面那个
+    `--scan` 的编码崩溃就是这么被藏住的。装个 excepthook，至少保证日志文件
+    里有现场。
+
+    必须在 `applog.setup()` **之后**调用 —— 之前装的话日志还没有文件 handler，
+    写进去也是丢。
+    """
+    import sys
+    import traceback
+
+    def _hook(exc_type, exc, tb) -> None:
+        try:
+            log.error("未捕获异常，进程即将退出：\n%s",
+                      "".join(traceback.format_exception(exc_type, exc, tb)))
+        except Exception:            # noqa: BLE001
+            pass
+        sys.__excepthook__(exc_type, exc, tb)
+
+    sys.excepthook = _hook
 
 
 HOST = "0.0.0.0"        # 监听全部入口（旧桥接遗留；主路径单进程自跑用不到）
@@ -1897,7 +1995,7 @@ def _scan(a: Agent) -> int:
             print(f"  up=0x{d.get('usage_page'):04X} uu=0x{d.get('usage'):04X} 写被拒（保留为只读监听）")
             listeners.append(dev)
             continue
-        print(f"  up=0x{d.get('usage_page'):04X} uu=0x{d.get('usage'):04X} ✅ 可用写长度 = {n} 字节")
+        print(f"  up=0x{d.get('usage_page'):04X} uu=0x{d.get('usage'):04X} √ 可用写长度 = {n} 字节")
         writable.append((d, dev, n))
 
     print("\n== 逐 collection × 逐 device_index 探测（电池特性为主判据）==")
@@ -1938,10 +2036,10 @@ def _scan(a: Agent) -> int:
     print("\n== 结论 ==")
     if hits:
         path, up, idx, bf = hits[0]
-        print(f"✅ 可用组合：usage_page=0x{up:04X}, device_index={idx}, 电池特性=0x{bf[0]:04X}")
+        print(f"√ 可用组合：usage_page=0x{up:04X}, device_index={idx}, 电池特性=0x{bf[0]:04X}")
         print(f"   → 在 agent 里设 BATBAR_USAGE_PAGE=0x{up:04X} BATBAR_DEVNUM={idx} 即可锁定")
     else:
-        print("❌ 没有任何槽位读到电池特性。可能：鼠标真在睡（多晃几下再跑）/ "
+        print("× 没有任何槽位读到电池特性。可能：鼠标真在睡（多晃几下再跑）/ "
               "该接收器走的是标准 HID 电量而非 HID++（那要换读取路径）")
     return 0
 
@@ -2498,6 +2596,15 @@ def _enable_dark_menus() -> None:
 
 def main():
     _enable_dpi_awareness()   # 必须最先：建托盘窗口/菜单之前
+    # ★ 打包版（windowed exe）没有控制台：`sys.stdout` 是 None，而 CPython 的
+    #   print 对 None 是**静默 no-op** ⇒ `batbar.exe --scan` 会一个字都不打印。
+    #   这里把调用方的控制台接回来。必须早于 applog.setup() —— 后者靠「stdout
+    #   是不是 None」来决定装不装控制台 handler，晚了就永远只剩文件日志。
+    attach_parent_console()
+    # ★ 控制台编码兜底：中文 cmd 的 stdout 是 cp936，写 emoji 会抛
+    #   UnicodeEncodeError 并**直接终止进程**（--scan 实测栽在「✅ 可用写长度」
+    #   那一行）。放在 attach 之后 —— 它可能刚把 stdout 换成新的对象。
+    make_console_safe()
     # ★ cwd 锚定（2026-10-13）：开机自启/计划任务的 cwd 可能是 System32。
     #   放在 argparse 之前 —— 任何文件访问都可能受 cwd 影响，越早锚定越好。
     #   日志此刻还没装好，所以这里**不能**打日志，靠返回值和 _boot 打点体现。
@@ -2525,6 +2632,9 @@ def main():
     if path is not None:
         log.info("日志文件：%s", path)
     _boot("日志就绪")
+    # ★ 未捕获异常落盘：windowed exe 里 traceback 无处可去（用户只看到"跑一半
+    #   没了"）。必须晚于 applog.setup() —— 早装的话日志还没有文件 handler。
+    install_crash_log()
     log.debug("cwd 已锚定：%s", _cwd)
     if _migrated:
         log.info("数据目录迁移：%s", _migrate_why)

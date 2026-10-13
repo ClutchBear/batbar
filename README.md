@@ -833,7 +833,7 @@ COL03 系统控制器 / COL04 键盘 / COL05 鼠标 / COL06 供应商定义，�
 
 **分层原则（仍然保留，是单测可跑的前提）**：纯逻辑与 I/O 严格分离 ——
 `hidpp/session/state/wire/lowbattery/lastknown/winevents/fullscreen` 零第三方依赖，
-`transport.py` 是唯一 `import hid` 的文件。这样 466 项单测**无需任何硬件**就能全绿。
+`transport.py` 是唯一 `import hid` 的文件。这样 477 项单测**无需任何硬件**就能全绿。
 
 ### 4.1 所需依赖
 
@@ -857,6 +857,10 @@ batbar/
 ├── README.md                   # 本文件
 ├── ARCHITECTURE.md             # 模块职责表、功能路由直达表、改代码铁律
 ├── LICENSE                     # MIT
+├── batbar.spec                 # PyInstaller 规格（onefile + 无控制台，见 §6-K）
+├── build-exe.bat               # 双击即打包，产出 dist\batbar.exe
+├── assets/
+│   └── batbar.ico              # exe 图标（7 档 16→256，由 tools/make_icon.py 生成）
 ├── run-agent.cmd               # Windows 启动 agent（前台调试）
 ├── setup-agent.cmd             # Windows 一键建 venv + 装依赖
 ├── smoke-test.bat              # 双击即跑黑盒冒烟测试（真起 agent，验启动链）
@@ -865,7 +869,9 @@ batbar/
 ├── uv.lock                     # 依赖锁（uv 生成；改名后须 uv lock 重新生成）
 ├── scripts/
 │   ├── register_autostart.ps1  # 注册开机自启计划任务（当前用户，无需管理员）
-│   └── agent-hidden.vbs        # 静默启动 agent（无控制台窗口），供计划任务调用
+│   ├── agent-hidden.vbs        # 静默启动 agent（无控制台窗口），供计划任务调用
+│   ├── entry-exe.py            # PyInstaller 入口 stub（以包身份 import batbar.agent）
+│   └── version_info.txt        # exe 版本信息（右键属性里的公司/版本/版权行）
 ├── src/batbar/
 │   ├── __init__.py
 │   ├── hidpp.py                # ★纯逻辑：HID++2.0 帧编解码、特性号常量、电池解析
@@ -906,8 +912,9 @@ batbar/
 │   ├── keybeat.py              # 节拍助手：按时间表敲键 + HID 帧对齐（验证协议用）
 │   ├── keybeat.bat             # 双击即跑，自动找 .venv
 │   ├── probe_query.py          # 主动查询实验探针：写候选命令帧→收回帧（跑前须退托盘）
-│   └── feature_watch.py        # feature 样本采集器：跨电量多拉几组，解译电压/百分比语义
-└── tests/                      # 466 项单测 + 1 个黑盒冒烟，全 stdlib，无需硬件
+│   ├── feature_watch.py        # feature 样本采集器：跨电量多拉几组，解译电压/百分比语义
+│   └── make_icon.py            # 程序化绘制 assets/batbar.ico（逐尺寸渲染 7 档）
+└── tests/                      # 477 项单测 + 1 个黑盒冒烟，全 stdlib，无需硬件
     ├── smoke_launch.py         #   ★黑盒冒烟：真 spawn agent，读真实日志验启动链（见 §6-F）
     ├── test_hidpp.py           #   帧编码/解析、错误帧、通知判据、电压插值
     ├── test_session.py         #   特性发现、读电池、通知回显、transport 失效传播
@@ -930,7 +937,7 @@ batbar/
     └── test_framing.py         #   TCP 粘包/半包/垃圾行的分片鲁棒性
 ```
 
-★ = 纯标准库层，任意 Python 3.11+ 直接可测（本项目已用 Python 3.13 实测 466 项全绿）。
+★ = 纯标准库层，任意 Python 3.11+ 直接可测（本项目已用 Python 3.13 实测 477 项全绿）。
 
 ---
 
@@ -991,7 +998,7 @@ smoke-test.bat                          rem 双击即跑，完整冒烟
 tests\smoke_launch.py --quick           rem 只验「进程能起来 + 构造函数不炸」
 ```
 
-区别：上面 466 项单测**全在测试进程内 mock**，从不真起托盘；冒烟测试真 spawn
+区别：上面 477 项单测**全在测试进程内 mock**，从不真起托盘；冒烟测试真 spawn
 子进程 + 读真实日志。两者互补，**改设备枚举路径（receiver24/wired24/dongle/
 feature24/win32ctypes）后两者都要跑**。详见 §6-F。
 
@@ -1045,12 +1052,12 @@ python tools\keybeat.py --at 0 15 40 75        rem 自定义时刻
 
 ### E. 本轮三功能验证（主动查询 / 有线 / 低电量）
 
-三者判定逻辑均已进 §B 的单测（466 项）；**硬件相关**的确认要你本机跑：
+三者判定逻辑均已进 §B 的单测（477 项）；**硬件相关**的确认要你本机跑：
 
 **① 主动查询探针 —— 已实测证否（2026-10-12），此路关闭**：
 
 三轮扫描（WriteFile / SetOutputReport 两条投递通道 × 7 条候选命令帧）结论：
-- 输出 reportID = **0x13**（`SetOutputReport` 对首字节非 0x13 的帧报 err=1466）；
+- 输出 reportID = **0x13**（`SetOutputReport` 对首字节非 0x13 的帧报 err=1477）；
 - 合法格式的镜像查询帧 `13 0a 01 00 04 05 00…`（电量帧同款帧头）已送达设备，
   **零回帧**；
 - `--post-listen` 收尾段抓到过非电量帧 `11 11 ff fa fd af da da da fa×6`
@@ -1105,7 +1112,7 @@ python tools\keybeat.py --at 0 15 40 75        rem 自定义时刻
 
 第三轮实测（2026-10-12 10:53，`--set-out` IOCTL 通道）：修复后回显干净
 （`OK 20B`）。**关键情报：迈从的输出 reportID 也是 0x13**——首字节 0x13 的
-三条帧全部 `OK 20B`，0x4d/0x55/0x00 的全部 `FAIL err=1466`，判别行为与
+三条帧全部 `OK 20B`，0x4d/0x55/0x00 的全部 `FAIL err=1477`，判别行为与
 LEOBOG **完全同构**（同源公版实锤）。但两条合法通道的查询帧照旧零回帧；
 post-listen 8s 亦零帧（用户目击：扫描中途灯灭又亮=3 分钟休眠定时器，
 唤醒瞬间也没推电量帧——与 LEOBOG 的最后一处分野）。
@@ -1143,10 +1150,10 @@ rem 扫完立刻敲迈从 15 秒。⚠️ 含标准键盘口，监听期间可�
 
 ### F. 黑盒冒烟测试（2026-10-13 新增，`tests/smoke_launch.py`）
 
-**为什么需要它**：上面 466 项单测全部跑在**测试进程内**（import 走 `sys.path`
+**为什么需要它**：上面 477 项单测全部跑在**测试进程内**（import 走 `sys.path`
 注入、hidapi DLL 用桩、Win32 窗口从不起）——所以「import 链断裂 / venv 缺依赖 /
 ctypes 签名写错 / 单实例互斥量抢不到 / boot 卡在某一步」这类**只有真跑才会暴露**
-的问题，466 项一条都测不出来。冒烟测试补上这一层：**真 spawn 一个 python 子进程
+的问题，477 项一条都测不出来。冒烟测试补上这一层：**真 spawn 一个 python 子进程
 跑 agent，读它写出的真实日志**判定启动链是否走完，最接近「用户双击 exe」。
 
 **双击即跑**：
@@ -1507,6 +1514,76 @@ dir /b D:\workbuddy\space\batbar\.venv\Lib\site-packages | findstr /i logi
 > ⚠️ 3、4 步是**手动**的：改名脚本管不到「注册表 / 计划任务 / 已装好的 venv」。
 > 这也是为什么改名后要跑一次 `pytest` + `smoke_launch.py` 才算收工。
 
+### K. 打包成单文件 exe（2026-10-13 新增，`batbar.spec` + `build-exe.bat`）
+
+目标形态：**一个 exe，双击即用，目标机不需要装 Python**。
+
+```bat
+:: 双击 build-exe.bat 即可；或手动三步：
+uv pip install --python .venv\Scripts\python.exe pyinstaller
+.venv\Scripts\python.exe -m PyInstaller --noconfirm --clean batbar.spec
+:: 产物：dist\batbar.exe
+```
+
+**实测结果**（本机 Win11 25H2 / Python 3.12.15 / PyInstaller 6.22.3）：
+
+| 项 | 值 |
+|---|---|
+| 体积 | **17,067,889 B ≈ 16.28 MB**（onefile） |
+| 启动到托盘首帧 | **+0.99s**，`NIM_ADD` 内容 = `'鼠标 罗技 G304: 90%'` |
+| 嵌入图标 | 7 档 RT_ICON（16→256，`tools/make_icon.py` 逐尺寸渲染） |
+| 版本信息 | 右键属性可见（`scripts/version_info.txt`） |
+| 运行时依赖 | **零** —— Python / hidapi / Pillow / pystray 全打进包 |
+| 构建耗时 | 首次约 23s；`--clean` 后每次重编 |
+
+**为什么是 PyInstaller**：
+
+| 方案 | 体积 | 适配成本 | 结论 |
+|---|---|---|---|
+| **PyInstaller** | **16 MB** | 一个 spec 文件、零改源码 | ✅ **选中** |
+| Nuitka | ~12 MB（转 C 编译） | 要装 MSVC，首编 5~15 分钟 | ❌ 省 4 MB 换整条编译链，不划算 |
+| cx_Freeze | ~20 MB | 要自己维护包列表 | ❌ 无优势 |
+| 只发源码 + venv | — | — | ❌ 目标机得装 Python |
+
+**打包暴露的三个真问题**（都是「只在打包版 / 中文 cmd 上炸」的，详见 §8 坑 20~23）：
+
+1. **`--scan` 跑到「✅ 可用写长度」那一行直接崩**（rc=1，日志一片空白）。
+   根因**不在打包**，而在 `print` 里的 emoji 撞上 cp936 —— **源码版在中文 cmd
+   里同样会崩**，只是平时用 UTF-8 终端测不出来。已换字符 + 加兜底 + 加单测守门。
+2. **frozen 下 cwd 锚定必须换目标**：`sys.base_prefix` 变成 `_MEIPASS` 临时
+   目录，锚它会顶掉 PyInstaller 的临时目录清理（Windows 不让删「正被当作
+   cwd 的目录」）。已改锚 exe 所在目录。
+3. **windowed exe 的异常不留痕**：补了 `install_crash_log()` 把 traceback 写进
+   日志 —— 上面第 1 条就是靠它才找到的。
+
+**打完包怎么验收**：`tools/verify_exe.py` 一条命令跑两层 —— 静态（体积 / sha256 /
+PE 版本信息 / 图标条目数）与动态（真起 exe 20 秒、**cwd 故意设成
+`C:\Windows\System32`**、从日志确认它读到了真实电量，再收尸）。
+
+> 为什么非要有这一层：**打包后的失败几乎全是静默的**（无控制台、`sys.stdout`
+> 是 `None`、缺 hiddenimport 只表现为"双击没反应"）。唯一会说话的是日志文件。
+
+**诊断模式在打包版里怎么用**：
+
+```bat
+:: ★ 从 cmd 里跑：exe 会 AttachConsole 把输出接到当前控制台
+dist\batbar.exe --scan
+dist\batbar.exe --probe -v
+:: 双击 = 常驻托盘（无窗口；退出走托盘右键菜单）
+dist\batbar.exe
+```
+
+> ⚠️ **双击运行时没有控制台**，`--scan` 的输出无处可去（`make_console_safe`
+> 保证不崩，但你看不到内容）。要排查硬件请**从 cmd 里跑**，或直接看
+> `%LOCALAPPDATA%\batbar\logs\agent.log`。
+>
+> ⚠️ `build-exe.bat` 与 `batbar.spec` 里引用了 `.venv`，是给**本机开发**用的。
+> 分发给别人只需要 `dist\batbar.exe` 单个文件。
+
+**打包部署的开机自启**：`scripts/register_autostart.ps1` 目前指向
+`.venv\Scripts\pythonw.exe`（源码部署）。改成 exe 部署只要把计划任务的「操作」
+换成 `dist\batbar.exe` 的路径即可，不再需要 venv。
+
 ## ④-bis 突破：迈从电量藏在 0xFF04 口的 Feature Report 0x06（2026-10-12 11:12）
 
 `--collections 15` 扫描结果**推翻了「彻底终结」预案**：
@@ -1722,17 +1799,18 @@ subscribe 通知（`command==0x0a && type==0x05` → batteryLevel），主动查
 
 | 部分 | 状态 |
 |---|---|
-| HID++ 协议编解码、会话编排、状态机、桥接协议、分片鲁棒性 | ✅ **已实测**：**466 单测**在 Python 3.13 全绿 |
+| HID++ 协议编解码、会话编排、状态机、桥接协议、分片鲁棒性 | ✅ **已实测**：**477 单测**在 Python 3.13 全绿 |
 | **真实启动链（process→托盘 NIM_ADD）** | ✅ **已实测**：`tests/smoke_launch.py` 黑盒冒烟，真起 agent 验启动链（§6-F） |
 | **RAWINPUT 鼠标唤醒** | ✅ **已实测**（2026-10-13）：隐藏窗口 + `RIDEV_INPUTSINK` 真机收 971 条输入 100% 解码正确、去抖成 11 次事件；`MOUSE_FRESH` 门控验证通过（§6-G） |
 | **全屏/游戏感知** | ✅ **已实测**（2026-10-13）：造真全屏窗口 → 6s 进入静音（QUNS=BUSY）、关窗 10s 恢复；`BATBAR_FULLSCREEN` 三种模式均验证（§6-H） |
 | **启动锚定工作目录** | ✅ **已实测**（2026-10-13）：子进程 cwd 强制设 System32 → 锚定后切到 Python 安装根；全仓审计确认**当前零相对路径**（§6-I） |
+| **打包成单文件 exe** | ✅ **已实测**（2026-10-13）：`dist\batbar.exe` **16.28 MB** 双击起托盘，`NIM_ADD` 内容 `'鼠标 罗技 G304: 90%'`；`--scan` rc=0 读到真机 90%；cwd 锚定落在 exe 目录（§6-K） |
 | **2.4G 键盘通道（LEOBOG / 迈从 K87）** | ✅ **已实测**：被动推送 + 主动轮询 + 有线兜底三路均已真机验证（§3.4、§6-E、④ 系列） |
 | **蓝牙耳机 / 键盘电量** | ✅ **已实测**：CIM 查询 + WinRT 权威复核（§3.2） |
 | Bolt 接收器 = `VID_046D&PID_C53F`、MI_02 vendor collection、非蓝牙 | ✅ **已在本机 PowerShell 只读探测确认** |
 | 特性号/帧布局/电池响应解析/状态枚举/电压折点表 | ✅ 逐项对照 **Solaar master 源码**（注释带出处） |
 | pyhidapi vs cython-hidapi、win_amd64 wheel、pystray 0.19.5 依赖 | ✅ 已查 PyPI 确认 |
-| **真机读电量 / 托盘实际显示** | ⚠️ **未实测**：HID 设备访问在当前沙箱黑名单，无法替你跑。请按 §6 在你的机器上验证 |
+| **真机读电量 / 托盘实际显示** | ✅ **已实测**（2026-10-13）：黑盒冒烟与打包 exe 两条路都读到真机 `鼠标 罗技 G304: 90%` 并成功 `NIM_ADD` 贴到托盘（§6-F、§6-K） |
 | `0x1004` 各功能号在**你的具体型号**上的响应字节 | ⚠️ 帧布局按 Solaar 通用实现，个别型号若有偏差，跑通后用 `-v` 看日志里 `source` 字段定位 |
 
 ## 8. 已知坑备忘
@@ -1806,7 +1884,7 @@ subscribe 通知（`command==0x0a && type==0x05` → batteryLevel），主动查
    **⇒ 2026-10-12 09:35 闭环：主动查询也已证否，「活动驱动」是唯一通道。**
    `tools/probe_query.py` 三轮扫描：WriteFile 与 `HidD_SetOutputReport` 两条
    投递通道 × 7 条候选命令帧（dbt-K99v2 / mcb 鼠标异或 / mcb-kbd / 自研镜像），
-   输出 reportID 确认 = 0x13（非 0x13 首字节报 err=1466），合法格式的镜像
+   输出 reportID 确认 = 0x13（非 0x13 首字节报 err=1477），合法格式的镜像
    查询帧 `13 0a 01 00 04 05 00…` 已送达，**零回帧**；`--post-listen` 收尾段
    还抓到过非电量帧 `11 11 ff fa fd af da da da fa×6`（len=14，parse_frame
    拒绝，系该 collection 漏进来的标准 HID 键盘/唤醒报文）——输入通道活着、
@@ -1874,7 +1952,7 @@ subscribe 通知（`command==0x0a && type==0x05` → batteryLevel），主动查
       业务模块里**绝不许**再写 `xxx.argtypes = [...]`。
     - **复核手段**：`probes/verify_argtypes_shared.py` 直接读 `windll` 上的
       `argtypes`，断言「含 `POINTER(_私有类型)` 的签名数 = 0」，再交叉真调四个模块
-      入口确认无 `TypeError`。**光靠单测查不出来**——466 项 mock 测试全绿时这个
+      入口确认无 `TypeError`。**光靠单测查不出来**——477 项 mock 测试全绿时这个
       bug 还在（mock 从不真调 Win32）。
 
 13. **★ RAWINPUT 的按键位在 `ulButtons`，不在 `usFlags`**（2026-10-13 鼠标唤醒踩的）：
@@ -1926,3 +2004,42 @@ subscribe 通知（`command==0x0a && type==0x05` → batteryLevel），主动查
     `.venv`）；② **目标不存在 / `chdir` 抛异常一律静默放弃** —— 这是保险不是
     断言，绝不能因此让进程起不来；③ 锚定发生在日志装好之前，所以那里
     **不许打日志**（打了也是丢进未配置的 logger），要靠之后的 DEBUG 行体现。
+
+20. **★★ `print()` 里的 emoji 会在中文 cmd 上直接干掉整个进程**（2026-10-13 打包时发现，本轮最阴的一个）：
+    中文 Windows 的 `sys.stdout.encoding` 是 **cp936(GBK)**，往它写 `✅`/`❌`
+    会抛 `UnicodeEncodeError` —— 关键在**这不是"打不出来"，是直接终止进程**。
+    症状：`batbar.exe --scan` 跑到「✅ 可用写长度」那一行就没了，`rc=1`，
+    而**日志里一个字都没有**（`print` 不走 logging，完全没有留痕）。
+    最阴的是环境依赖：Git Bash / VS Code / WSL 终端全是 UTF-8，**本机开发永远
+    复现不出来**，只在中文 cmd 和打包版上炸 —— 属于"交付才暴露"的一类。
+    ⇒ 三层防护：
+    ① `_scan` 里的 ✅/❌ 换成 GBK 可编码的 `√`/`×`（真修复）；
+    ② `main()` 里 `make_console_safe()` 把 stdout/stderr 的 `errors` 调成
+    `replace`，漏网字符最多显示成 `?`，不再崩（兜底）；
+    ③ **单测守门** —— `test_menu_boot.py::ConsoleEncoding` 扫 `src/` 下所有
+    `print()` 行，出现任何 GBK 编不了的字符就红。
+    ⚠️ 本文档正文里的 ✅/❌ 可以保留：它们不经过 stdout。
+
+21. **★ 打包后 `sys.base_prefix` 指向 `_MEIPASS`，cwd 绝不能锚它**（2026-10-13）：
+    PyInstaller onefile 的 `_MEIPASS` 是 `%TEMP%\_MEIxxxxxx`（临时目录），而
+    **Windows 不允许删除"正被某进程当作工作目录"的目录** —— 锚在那里会让
+    bootloader 退出时的临时目录清理失败，`%TEMP%` 里的 `_MEI*` 越堆越多。
+    ⇒ `anchor_cwd()` 加 frozen 分支，改锚 `os.path.dirname(sys.executable)`。
+    实测落在 `D:\workbuddy\space\batbar\dist`（永久存在，且语义直白：程序在哪
+    cwd 就在哪）。验证方式：故意用 `cwd=C:\Windows\System32` 起 exe，看日志。
+
+22. **PyInstaller 必须手动点名两个模块**（2026-10-13）：
+    ① `pystray._win32` —— pystray 的托盘后端是**运行时按平台动态 import** 的
+    （`_win32`/`_darwin`/`_gtk`/`_appindicator`），静态分析扫不到；漏了就在启动
+    瞬间 `ImportError`，而 windowed 版没有控制台 ⇒ 表现为"双击没反应"。
+    ② `hid` —— cython-hidapi 的产物是**顶层扩展模块**
+    `hid.cp312-win_amd64.pyd`（直接躺在 site-packages 根，**不在** `hid/` 包
+    目录里），这种"平台后缀顶层模块"别赌它猜中。
+    另外 `tkinter` 必须 `excludes`：Pillow 的官方 hook 会把 `ImageTk` 拉进来，
+    连带 tcl/tk 运行时约 12 MB，而本项目只画 PNG 贴托盘。
+
+23. **windowed exe 的未捕获异常会凭空消失**（2026-10-13）：没有控制台就没有
+    stderr，traceback 无处可去，用户只看到"跑一半没了"——坑 20 就是这么被藏住
+    的。⇒ `main()` 里装 `install_crash_log()`（`sys.excepthook` 把 traceback
+    写进日志），且必须在 `applog.setup()` **之后**：早装的话日志还没有文件
+    handler，写了也是丢。

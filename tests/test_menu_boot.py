@@ -708,6 +708,139 @@ class CwdAnchor(unittest.TestCase):
         self.assertLess(i_anchor, i_parse,
                         "anchor_cwd() 必须在 ap.parse_args() 之前")
 
+    # ---------- frozen（PyInstaller）分支 ----------
+
+    def test_frozen_anchors_to_exe_dir_not_meipass(self):
+        """打包后 `sys.base_prefix` 被指到 `_MEIPASS`，绝不能锚在那里。
+
+        onefile 的 `_MEIPASS` 是 `%TEMP%\\_MEIxxxxxx`，Windows 不允许删除
+        「正被某进程当作工作目录」的目录 ⇒ 锚在那里会让 bootloader 退出时的
+        临时目录清理失败，TEMP 里 `_MEI*` 越堆越多。必须改锚 exe 所在目录。
+        """
+        import os
+        import sys
+        fake_exe = os.path.join("X:" + os.sep, "Apps", "batbar", "batbar.exe")
+        with mock.patch.object(sys, "frozen", True, create=True), \
+                mock.patch.object(sys, "executable", fake_exe), \
+                mock.patch.object(A.os.path, "isdir", return_value=True), \
+                mock.patch.object(A.os, "chdir") as chdir:
+            A.anchor_cwd()
+        chdir.assert_called_once()
+        self.assertEqual(chdir.call_args[0][0], os.path.dirname(fake_exe))
+        self.assertNotEqual(chdir.call_args[0][0], getattr(sys, "base_prefix", ""))
+
+    def test_frozen_exe_dir_unusable_is_not_fatal(self):
+        """frozen 下锚定失败同样只能咽下去 —— 打包后更不能起不来。"""
+        import sys
+        with mock.patch.object(sys, "frozen", True, create=True), \
+                mock.patch.object(A.os, "chdir", side_effect=OSError("nope")):
+            A.anchor_cwd()          # 不抛即通过
+
+    def test_explicit_target_beats_frozen_default(self):
+        """显式注入永远优先，否则 frozen 环境里没法做测试注入。"""
+        import sys
+        import tempfile
+        with mock.patch.object(sys, "frozen", True, create=True):
+            with tempfile.TemporaryDirectory() as d:
+                with mock.patch.object(A.os, "chdir") as chdir:
+                    A.anchor_cwd(d)
+                self.assertEqual(chdir.call_args[0][0], d)
+
+
+class ConsoleAttach(unittest.TestCase):
+    """打包成 windowed exe 后没有控制台（2026-10-13 打包 exe 时补）。
+
+    `sys.stdout is None` 时 CPython 的 `print()` 是**静默 no-op**（不报错）——
+    于是 `batbar.exe --scan` 一声不吭，比抛异常更难查。这一层负责接回控制台。
+    """
+
+    def test_passthrough_when_stdout_present(self):
+        """源码运行 / console 版 exe 本来就有 stdout → 直接 True，不做多余动作。"""
+        self.assertTrue(A.attach_parent_console(attach=False))
+
+    def test_false_when_attach_fails(self):
+        """没有父控制台（双击运行）→ False，且绝不抛。"""
+        import sys
+        with mock.patch.object(sys, "stdout", None):
+            self.assertFalse(A.attach_parent_console(attach=False))
+
+    def test_success_path_never_raises(self):
+        """附加成功要去开 `CONOUT$`：环境不给也必须咽下去。"""
+        import sys
+        with mock.patch.object(sys, "stdout", None):
+            A.attach_parent_console(attach=True)      # 不抛即通过
+
+    def test_called_before_log_setup_in_main(self):
+        """必须先于 `applog.setup()`：安装器靠 stdout 是否为 None 决定装不装
+        控制台 handler，晚了就永远没有控制台输出。"""
+        from pathlib import Path
+        src = (Path(__file__).resolve().parents[1]
+               / "src" / "batbar" / "agent.py").read_text(encoding="utf-8")
+        self.assertEqual(src.count("attach_parent_console()"), 1)
+        body = src.split("def main():", 1)[1]
+        # 用完整的调用形式匹配 —— 注释里也写着 applog.setup()，只匹配函数名
+        # 会命中注释（这个坑在 test_migrate 里已经踩过一次）
+        self.assertLess(body.index("attach_parent_console()"),
+                        body.index("path = applog.setup("))
+
+
+class ConsoleEncoding(unittest.TestCase):
+    """中文 cmd（代码页 936 / cp936）下的编码地雷（2026-10-13 打包 exe 时发现）。
+
+    往 cp936 的 stdout 写 emoji 会抛 `UnicodeEncodeError` 并**终止进程**。
+    打包后的 exe 吃了个正着：`batbar.exe --scan` 跑到「✅ 可用写长度」那行就
+    退出，rc=1，日志一片空白（print 不走 logging）。而 Git Bash / VS Code 的
+    UTF-8 终端**永远复现不出来** —— 所以必须由测试来守住，不能靠手测。
+    """
+
+    def test_no_print_uses_non_gbk_chars(self):
+        """src/ 里所有 print() 行只能出现 GBK 能编码的字符。"""
+        from pathlib import Path
+        src_dir = Path(__file__).resolve().parents[1] / "src"
+        bad = []
+        for p in sorted(src_dir.rglob("*.py")):
+            for i, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1):
+                if "print(" not in line:
+                    continue
+                for ch in line:
+                    try:
+                        ch.encode("gbk")
+                    except UnicodeEncodeError:
+                        bad.append(f"{p.name}:{i} U+{ord(ch):04X}")
+                        break
+        self.assertEqual(bad, [], f"这些 print 在中文 cmd 上会崩：{bad}")
+
+    def test_make_console_safe_never_raises(self):
+        """兜底层跑在 main() 最前面，自己绝不能抛；重复调也要安全。"""
+        A.make_console_safe()
+        A.make_console_safe()
+
+    def test_crash_hook_logs_traceback(self):
+        """未捕获异常必须留下现场（windowed exe 里 traceback 本来无处可去）。"""
+        import sys
+        old = sys.excepthook
+        try:
+            A.install_crash_log()
+            with mock.patch.object(A.log, "error") as err:
+                try:
+                    raise ValueError("boom-测试用")
+                except ValueError:
+                    sys.excepthook(*sys.exc_info())
+            self.assertTrue(err.called, "excepthook 没把异常写进日志")
+            self.assertIn("boom-测试用", str(err.call_args))
+        finally:
+            sys.excepthook = old
+
+    def test_crash_hook_installed_after_log_setup(self):
+        """excepthook 必须在 `applog.setup()` **之后**装：之前装的话日志还没有
+        文件 handler，写进去也丢。"""
+        from pathlib import Path
+        src = (Path(__file__).resolve().parents[1]
+               / "src" / "batbar" / "agent.py").read_text(encoding="utf-8")
+        body = src.split("def main():", 1)[1]
+        self.assertLess(body.index("path = applog.setup("),
+                        body.index("install_crash_log()"))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -36,7 +36,7 @@
 
 **分层原则（仍然保留，是单测可跑的前提）**：
 `hidpp/session/state/wire/lowbattery/lastknown/winevents/fullscreen` 零第三方依赖，
-`transport.py` 是唯一 `import hid` 的文件 —— 这样 466 项单测**无需任何硬件**就能全绿。
+`transport.py` 是唯一 `import hid` 的文件 —— 这样 477 项单测**无需任何硬件**就能全绿。
 
 > `wire.py` / `net.py` / `controller.py` 是旧双进程架构的遗留物（`wire.py` / `net.py`
 > 仍有单测覆盖，`controller.py` 已不在主路径）。**不要**在新功能里引用它们。
@@ -65,7 +65,7 @@
 | 文件 | 行数 | 唯一职责 | 关键约束 |
 |---|---:|---|---|
 | `transport.py` | 141 | **唯一** import `hid` 的地方；打开罗技 vendor collection | collection 选择对齐 Solaar base.py；import 名 `hid`（PyPI 包名 `hidapi`） |
-| `agent.py` | 2558 | **主进程**：读设备 + 托盘 + 全部业务编排 | 见 §3 主循环与线程模型；改动前必读本文件顶部三张契约说明 |
+| `agent.py` | 2668 | **主进程**：读设备 + 托盘 + 全部业务编排 | 见 §3 主循环与线程模型；改动前必读本文件顶部三张契约说明 |
 | `bt_battery.py` | 645 | 蓝牙设备电量（一次 CIM 查询）+ **权威连接态过滤** | 判据演进史见 README §3.2；快判服务 `sync_now` 供手动刷新 |
 | `dongle.py` | 463 | 2.4G 厂商通道（0xFF02）**被动监听**，拿实时电量与在离线 | **只读**，自己不写一字节；写查询由 poll24 用独立句柄做 |
 | `poll24.py` | 251 | 2.4G **周期性主动查询**（官方 getBattery 帧），刷新静默期旧读数 | `SCAN_INTERVAL=60s`；`scan_now()` 供「立即刷新」 |
@@ -91,7 +91,7 @@
 
 ---
 
-## 3. agent.py 内部结构（2558 行，最大文件，按需直达）
+## 3. agent.py 内部结构（2668 行，最大文件，按需直达）
 
 **为何这么大**：它是唯一的编排层——所有数据源、托盘、菜单、快照、低电量接线都汇到这里。
 代价是它成了「改动热点」，所以单列一张内部路由。
@@ -179,8 +179,11 @@
 | **设备枚举报 `TypeError: expected LP__XXX instead of pointer to _XXX`** | `win32ctypes.py` | ★ argtypes 被多模块互相覆盖 → 统一到共享模块；**签名一律加这里**（铁律 11） |
 | **改任何 Win32 HID/SetupAPI 调用签名** | `win32ctypes.py` `ensure_argtypes()` | 业务模块里**绝不许**再写 `xxx.argtypes = [...]` |
 | **启动链断了 / import 炸 / venv 缺依赖** | `tests/smoke_launch.py` | 真起 agent 读日志；单测查不出这类问题（§6-F） |
-| **开机自启 / 常驻无控制台运行** | `scripts/register_autostart.ps1` + `scripts/agent-hidden.vbs` | 计划任务 + VBS 静默启动，无需管理员；任务名 `batbar-agent` |
-| **进程工作目录（cwd）/ 相对路径诡异行为** | `agent.anchor_cwd()` | 在 `main()` 里先于 argparse 调用，锚到 `sys.base_prefix`；失败静默放弃（绝不让进程起不来） |
+| **开机自启 / 常驻无控制台运行** | `scripts/register_autostart.ps1` + `scripts/agent-hidden.vbs` | 计划任务 + VBS 静默启动，无需管理员；任务名 `batbar-agent`。**exe 部署**则把计划任务的「操作」改指向 `dist\batbar.exe` |
+| **打包成 exe / 改 exe 图标 / 版本信息** | `batbar.spec` + `build-exe.bat` + `assets/batbar.ico` + `scripts/version_info.txt` | 图标由 `tools/make_icon.py` 生成；改完重跑 `build-exe.bat`。spec 里的 `hiddenimports` 是**硬需求**（铁律 18） |
+| **打包版跑 `--scan` 看不到输出 / 双击没反应** | `agent.attach_parent_console()` + `agent.install_crash_log()` | 双击没有控制台 ⇒ 请**从 cmd 里跑**；异常现在会落日志 `%LOCALAPPDATA%\batbar\logs\agent.log` |
+| **`print` 在中文 cmd 上崩掉或乱码** | `agent.make_console_safe()` + `tests/test_menu_boot.py::ConsoleEncoding` | 只用 GBK 能编码的字符；单测会拦下（铁律 17） |
+| **进程工作目录（cwd）/ 相对路径诡异行为** | `agent.anchor_cwd()` | 在 `main()` 里先于 argparse 调用；源码运行锚 `sys.base_prefix`，**打包后改锚 exe 所在目录**（`_MEIPASS` 绝不能锚，见铁律 18）；失败静默放弃（绝不让进程起不来） |
 | **改名后日志/电量表不见了 / 旧数据没搬** | `migrate.py` | 一次性 `%LOCALAPPDATA%\logi-tray` → `\batbar`；**新目录已存在则不合并**（README §6-J）；调用点须在 `applog.setup()` 之前 |
 | **日志级别/落点/滚动** | `applog.py` | `BATBAR_DEBUG=1` 或 `--verbose` 开 DEBUG |
 | **日志路径** | `%LOCALAPPDATA%\batbar\logs\agent.log` | 排障第一现场 |
@@ -193,7 +196,7 @@
 从踩过的坑里提炼，违反任一条大概率引入回归：
 
 1. **纯逻辑与 I/O 严格分离**：`hidpp/session/state/lowbattery/lastknown/winevents/fullscreen/migrate`
-   保持零第三方依赖 —— 这是「无需硬件即可跑 466 项测试」的前提，不要往里塞
+   保持零第三方依赖 —— 这是「无需硬件即可跑 477 项测试」的前提，不要往里塞
    `import hid` / `import pystray` / subprocess。
 2. **`transport.py` 是唯一能 `import hid` 的文件**。别的地方要碰 USB 一律走注入的 transport。
 3. **`singleinstance.py` 不可绕过**：HID 每个 collection 只有一条输入队列，
@@ -206,7 +209,7 @@
 7. **Windows 侧脚本正文只写 ASCII**（无 BOM 的 UTF-8 `.ps1` 在 PS 5.1 下按 GBK 读，
    中文会乱码）；`>>` 重定向是 UTF-16LE，写环境变量类文件要用
    `[IO.File]::AppendAllText` + `UTF8Encoding($false)`。
-8. **改完必跑**：`.venv/Scripts/python.exe -m pytest tests/ -q`（当前 466 项应全绿），
+8. **改完必跑**：`.venv/Scripts/python.exe -m pytest tests/ -q`（当前 477 项应全绿），
    再 `py_compile` 改动文件。
 9. **改动前先读 `README.md` 对应章节**：很多「看似该这么改」的地方，
    README 里记着「为什么不能这么改」（如 0x02 寄存器、feature24 语义）。
@@ -255,6 +258,26 @@
     `anchor_cwd()` → `migrate.migrate()` → `applog.setup()`。
     另：**新目录已存在就绝不合并**（省掉按时间戳仲裁 `last-known.json` 的风险），
     宁可留一行日志让人肉处理。失败一律静默 —— 迁移是善后，不是断言。
+17. **`print()` 只准用 GBK 能编码的字符**（2026-10-13 打包时踩到）：中文 Windows
+    的 `sys.stdout.encoding` 是 **cp936**，写 emoji 会抛 `UnicodeEncodeError` 并
+    **直接终止进程**（不是"打不出来"那么轻）。`--scan` 就栽在「✅ 可用写长度」
+    那一行：rc=1、**日志一片空白**（print 不走 logging，完全没有留痕）。
+    最坑的是 Git Bash / VS Code 的 UTF-8 终端**永远复现不出来**。
+    ⇒ ① 字符本身换成 `√`/`×`；② `main()` 里 `make_console_safe()` 把
+    stdout/stderr 的 errors 调成 `replace` 兜底；③ `test_menu_boot.py::ConsoleEncoding`
+    扫 `src/` 所有 `print()` 行守住这条 —— **改 print 之前先跑它**。
+18. **打包（frozen）的三处特判，位置各不相同**（2026-10-13）：
+    ① `anchor_cwd()` 在 `sys.frozen` 下改锚 `os.path.dirname(sys.executable)` ——
+    这时 `sys.base_prefix` 是 `_MEIPASS`（onefile 为 `%TEMP%\_MEIxxx`），锚它会
+    让 Windows 拒绝删除「正被当作 cwd 的目录」，顶掉 bootloader 的临时目录清理；
+    ② `attach_parent_console()` 把 windowed exe 的输出接到调用者控制台 ——
+    `sys.stdout is None` 时 CPython 的 `print` 是**静默 no-op**，比报错更难查；
+    ③ `install_crash_log()` 装 excepthook 把 traceback 写日志（windowed 无 stderr，
+    异常凭空消失）。
+    ⚠️ **顺序不是一个**：`attach_parent_console()` / `make_console_safe()` 必须在
+    `applog.setup()` **之前**（setup 靠「stdout 是不是 None」决定装不装控制台
+    handler），`install_crash_log()` 必须在 `applog.setup()` **之后**（早装则日志
+    还没有文件 handler）。
 
 ---
 
@@ -274,6 +297,7 @@
 | ~~全屏/游戏感知~~ | ✅ **已完成**（2026-10-13，`fullscreen.py` + `agent.py`） | `SHQueryUserNotificationState`（QUNS）采样 → 迟滞门 → **静音提醒 + 暂停后台轮询**；`BATBAR_FULLSCREEN=auto\|off\|on` 可覆盖 | 全屏/游戏中不弹 toast、不周期读硬件；真机实测造全屏窗口 6s 进入静音、关窗 10s 恢复。★ 实测无边框全屏返回 `QUNS_BUSY` 而非 `D3D_FULL_SCREEN` |
 | ~~启动锚定工作目录~~ | ✅ **已完成**（2026-10-13，`agent.anchor_cwd()`） | `os.chdir(sys.base_prefix)` 防 cwd 漂移，在 `main()` 里**先于 argparse** 调用 | 开机自启/计划任务/`restart-diag.bat` 的 cwd 不再停在 System32；真机实测 `System32 → ...\cpython-3.12-...`。**当前代码零相对路径，属防御性保险**（挡「将来有人写相对路径」那类只在用户机上炸的 bug） |
 | ~~项目改名 + 数据目录迁移~~ | ✅ **已完成**（2026-10-13，`logi-tray` → `batbar`，`migrate.py`） | 进程级常量全量替换（包名/logger/`BATBAR_*`/互斥量/窗口类/线程名/临时前缀/计划任务/entry point）+ 旧 `%LOCALAPPDATA%` 数据一次性搬迁 | 名字不再绑罗技品牌（现覆盖鼠标/耳机/机械键盘三类）；旧日志与电量表无缝续用。⚠️ venv 的 `.pth`/`dist-info`/console script 带旧绝对路径，**改名后必须重装可编辑包**（README §6-J.4） |
+| ~~打包成单文件 exe~~ | ✅ **已完成**（2026-10-13，`batbar.spec` + `build-exe.bat`） | PyInstaller onefile + `console=False`；`hiddenimports` 点名 `pystray._win32` / `hid`，`excludes` 掉 `tkinter`（Pillow 的 hook 会拉 tcl/tk ~12 MB） | **17,067,889 B ≈ 16.28 MB**，双击即用、目标机零 Python 依赖；托盘首帧 **+0.99s**。⚠️ 顺带挖出「cp936 下 `print` emoji 直接杀进程」这个真 bug（README §8 坑 20 / 铁律 17） |
 
 > ⚠️ **RAWINPUT 三条边界的纪律**（写在 `winevents.py` RAWINPUT 节）：① 拿不到「是哪只鼠标」，只能当**催化剂**、绝不当在线判据；② 不是罗技私有信息（HID++ 才有 frame）；③ 频率极高（实测 ~33 条/s）**必须去抖**。
 
@@ -288,6 +312,6 @@
 |---|---|
 | `README.md` | 选型理由、运行步骤、协议逆向全过程（④ 系列）、各轮 bug 修复记录 |
 | `ARCHITECTURE.md`（本文件） | 模块职责、功能路由、改代码铁律、待办 |
-| `tests/` | 466 项单测，全 stdlib；每个测试文件对应一个模块的契约。**外加 `smoke_launch.py` 黑盒冒烟**（真 spawn agent 验启动链） |
+| `tests/` | 477 项单测，全 stdlib；每个测试文件对应一个模块的契约。**外加 `smoke_launch.py` 黑盒冒烟**（真 spawn agent 验启动链） |
 | `probes/` | 一次性取证探针（`probe_*.py` / `exp_*.py` / `verify_*.py`）+ 真实数据样本；查协议/时序/ctypes 签名时的现场证据。**已随仓库开源**，索引见 `probes/README.md` |
 | `tools/` | 常驻工具（keybeat 节拍助手、probe_query、feature_watch） |
