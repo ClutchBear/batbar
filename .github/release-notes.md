@@ -42,7 +42,10 @@ python -m pytest
 python -m PyInstaller --noconfirm --clean batbar.spec
 ```
 
-`dist\batbar.exe` + `LICENSE` + `使用说明.txt` 打包成 zip。构建步骤见仓库的
+`dist\batbar.exe` + `LICENSE` + `使用说明.txt` 打包成 zip —— **恰好这三个文件**。
+CI 会拿发布目录做「真跑 exe 前后必须一模一样」的比对，所以 `logs\`、
+`last-known.json`、`agent.pid` 这些运行期产物不会被夹带进包里。
+构建步骤见仓库的
 [`.github/workflows/build-exe.yml`](https://github.com/ClutchBear/batbar/blob/main/.github/workflows/build-exe.yml)，
 本地打包用 `build-exe.bat`，两条路径的产物一致。
 

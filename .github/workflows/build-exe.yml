@@ -123,9 +123,15 @@ jobs:
           }
 
       - name: 冒烟检查
-        # 四件事：体积合理 / 版本资源真嵌进去了 / 许可与说明齐全 / 不留运行期产物
+        # 五件事：体积合理 / 版本资源真嵌进去了 / 许可与说明齐全 / 不留运行期产物
         # 再加上一条真跑：--help 能起来且退出码 0（冻结后依赖是否齐，只有真跑才知道）
-        # 运行期产物（日志含本机路径、last-known 含设备名）绝不能混进发布包
+        # 运行期产物（日志含本机路径、last-known 含设备名）绝不能混进发布包。
+        #
+        # ★ 泄漏判据是「snapshot 前后发布目录必须一模一样」，不是「查有没有某种
+        #   名字的文件」。2026-10-14 实录：冒烟拿 `--help` 真跑一次 exe，绿色模式
+        #   下数据目录就是发布目录，历史数据搬迁把 %LOCALAPPDATA% 的存档复制了
+        #   进来，最后随 zip 发出去 —— 而那一刻检查早跑完了（顺序反了）。
+        #   按名字查是查不全的（下次换个文件名照样漏），比对整个清单才是兜底。
         shell: pwsh
         run: |
           $exe = Join-Path $env:STAGE $env:BIN_NAME
@@ -142,10 +148,13 @@ jobs:
           if (-not (Test-Path (Join-Path $env:STAGE 'LICENSE'))) { throw "LICENSE missing from stage" }
           if (@(Get-ChildItem $env:STAGE -Filter *.txt).Count -lt 1) { throw "usage txt missing from stage" }
 
-          $leak = Get-ChildItem $env:STAGE -Recurse -File |
-                  Where-Object { $_.Name -like '*.log' -or $_.Name -like 'last-known*' -or
-                                 $_.Name -like '*.db'  -or $_.Name -like '*.pid' }
-          if ($leak) { throw ("runtime file leaked into stage: " + ($leak.FullName -join ', ')) }
+          # ---- 快照：此刻发布目录里有什么（任何真跑之前）-------------------
+          function Get-StageFingerprint {
+            Get-ChildItem $env:STAGE -Recurse -File | Sort-Object FullName |
+              ForEach-Object { "{0}|{1}" -f $_.FullName, $_.Length }
+          }
+          $baseline = @(Get-StageFingerprint)
+          Write-Host ("stage baseline: {0} file(s)" -f $baseline.Count)
 
           # windowed exe still hands stdout to the parent pipe (verified locally)
           # RUNNER_TEMP is always set on GitHub runners but NOT locally - fall back
@@ -171,6 +180,17 @@ jobs:
             Start-Sleep -Milliseconds 250
           }
           if ($after -gt $before) { throw "batbar.exe left running after --help" }
+
+          # ---- 比对：真跑之后不许多/少/变一个字节 -------------------------
+          $now = @(Get-StageFingerprint)
+          $diff = @(Compare-Object $baseline $now)
+          if ($diff.Count -gt 0) {
+            Write-Host "!! stage changed during smoke test:"
+            $diff | ForEach-Object { Write-Host ("   {0} {1}" -f $_.SideIndicator, $_.InputObject) }
+            throw ("stage directory changed after running the exe ({0} diff) - " +
+                   "the exe must not write into its own directory for --help" -f $diff.Count)
+          }
+          Write-Host ("stage unchanged after --help ({0} file(s)) - clean" -f $now.Count)
 
       - name: 打包 zip
         # 手写 zip 条目，不用 Compress-Archive：

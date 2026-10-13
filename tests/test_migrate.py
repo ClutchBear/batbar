@@ -190,6 +190,19 @@ class MigrateIsWiredBeforeLogSetup(unittest.TestCase):
         body = self.src[self.src.index("def main("):]
         self.assertLess(body.index("anchor_cwd()"), body.index("migrate.migrate()"))
 
+    def test_migrate_after_arg_parse(self):
+        """★ 搬迁必须晚于 `parse_args()` —— `--help` 不许有落盘副作用。
+
+        2026-10-14 CI 实录：冒烟步骤拿 `--help` 真跑一次 exe，绿色模式的
+        数据目录正是 exe 所在目录（= 发布目录），搬迁随即把 CI 机器上的历史
+        存档复制进发布目录并被打进 zip。把搬迁挪到 `parse_args()` 之后，
+        argparse 遇到 `--help` / 参数错误会直接 exit，就轮不到搬迁上场了。
+        """
+        body = self.src[self.src.index("def main("):]
+        self.assertLess(body.index("args = ap.parse_args()"),
+                        body.index("migrate.migrate()"),
+                        "搬迁必须晚于 parse_args()，否则 --help 也会产生落盘副作用")
+
 
 if __name__ == "__main__":
     unittest.main()

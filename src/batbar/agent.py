@@ -2610,13 +2610,6 @@ def main():
     #   放在 argparse 之前 —— 任何文件访问都可能受 cwd 影响，越早锚定越好。
     #   日志此刻还没装好，所以这里**不能**打日志，靠返回值和 _boot 打点体现。
     _cwd = anchor_cwd()
-    # ★ 历史数据搬迁（2026-10-13）：落盘位置走过两代（logi-tray → batbar →
-    #   现在的绿色模式「跟 exe 同目录」）。这里把老位置的文件**复制**进当前
-    #   数据目录（只复制不移动、目标已有就不覆盖、源目录保留）。必须在
-    #   applog.setup() **之前** —— 要搬的东西之一就是日志文件本身。
-    #   失败只静默降级（等价于没搬），结果先存着，等 setup 后补打一行。
-    from . import migrate
-    _migrated, _migrate_why = migrate.migrate()
     ap = argparse.ArgumentParser(prog="batbar-agent")
     ap.add_argument("--device", default=None, help="蓝牙直连设备名关键字（USB 接收器用户不需要）")
     ap.add_argument("--standalone", action="store_true",
@@ -2629,6 +2622,18 @@ def main():
     ap.add_argument("--allow-multiple", action="store_true",
                     help="调试用：跳过单实例检查（两个实例会抢同一条 HID 输入队列）")
     args = ap.parse_args()
+    # ★ 历史数据搬迁（2026-10-13）：落盘位置走过两代（logi-tray → batbar →
+    #   现在的绿色模式「跟 exe 同目录」）。把老位置的文件**复制**进当前数据目录
+    #   （只复制不移动、目标已有就不覆盖、源目录保留）。必须在 applog.setup()
+    #   **之前** —— 要搬的东西之一就是日志文件本身；失败只静默降级（等价于没搬），
+    #   结果先存着，等 setup 后补打一行。
+    #   ★ 它又必须晚于 parse_args()：`--help` / 参数敲错时 argparse 直接退出，
+    #   这时**不该有任何落盘副作用**。这不是洁癖 —— CI 的冒烟步骤正是拿
+    #   `--help` 真跑一次 exe，而绿色模式下数据目录 == exe 所在目录（= 发布
+    #   目录），迁移一跑就把 %LOCALAPPDATA%\batbar 的历史电量表复制进了发布
+    #   目录，随后被打进 zip 发出去（2026-10-13 首次构建 v0.1.2 真踩到）。
+    from . import migrate
+    _migrated, _migrate_why = migrate.migrate()
     from . import applog, singleinstance, paths
     path = applog.setup("agent", verbose=args.verbose)
     if path is not None:

@@ -193,9 +193,13 @@ class SingleSourceOfTruth(unittest.TestCase):
         self.addCleanup(lambda: shutil.rmtree(self.tmp, ignore_errors=True))
         paths.reset_cache()
         self.addCleanup(paths.reset_cache)
+        # ★ conftest 的 autouse fixture 会把 BATBAR_LASTKNOWN 指到 pytest 临时
+        #   目录，但**本类测的就是「不设 override 时 lastknown 跟数据目录走」**，
+        #   所以这里显式清空（empty string 是 falsy，等价于没设）。
         p = unittest.mock.patch.dict(
             os.environ,
-            {"BATBAR_DATA_DIR": str(self.tmp), "BATBAR_LOG_DIR": ""})
+            {"BATBAR_DATA_DIR": str(self.tmp), "BATBAR_LOG_DIR": "",
+             "BATBAR_LASTKNOWN": ""})
         p.start()
         self.addCleanup(p.stop)
 
