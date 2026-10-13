@@ -8,7 +8,7 @@
 
 [project]
 name = "batbar"
-version = "0.1.3"
+version = "0.1.4"
 description = "常驻 Windows 系统托盘的多设备电量指示器（鼠标 / 耳机 / 机械键盘）"
 requires-python = ">=3.11"
 readme = "README.md"
