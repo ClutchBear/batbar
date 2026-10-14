@@ -232,7 +232,7 @@ class _IcoBmpImage:
         return getattr(self._img, name)
 
 
-def _install_menu_refresh(icon) -> None:
+def _install_menu_refresh(icon, items_factory) -> None:
     """让托盘菜单在**每次弹出之前**重建（pystray 默认复用上次建好的 HMENU）。
 
     ── 为什么必须这样（2026-10-13 10:40 用户报「托盘已显示电量，右键菜单却还是
@@ -252,6 +252,25 @@ def _install_menu_refresh(icon) -> None:
     ⚠️ 实现细节：pystray 在 `__init__` 里就把 `self._on_notify`（**绑定方法**）
     存进了 `_message_handlers` 字典，窗口过程每次按字典查表 —— 所以**只改类属性
     没用**，必须把字典里那一条换掉（这里按 `__func__` 认人，不硬编码消息号）。
+
+    ★★ `items_factory`（2026-10-14）：**必须自己求值一次再交给 pystray**，
+    不能图省事把 callable 直接塞进 `pystray.Menu(...)`。
+
+    pystray 的 `Menu.items` 是 **property**，`_base.py` 里写的是
+    `return self._items[0]()` —— **每访问一次就重跑一遍工厂**。而
+    `_win32._create_menu()` 一次构建要访问它**两回**：
+
+        if not descriptors:                       # ① __bool__ → _visible_items → items
+        for i, descriptor in enumerate(descriptors):   # ② __iter__ → 同上一路
+
+    实测（`Menu(factory)`，bool + enumerate 各一次）工厂正好被调用 **2 次**。
+    后果不只是日志里「菜单快照」成对出现 —— 每次右键都把 `devices_snapshot()`
+    （PowerShell CIM 查询 + USB 枚举，实测 ~3s）**整个跑两遍**。
+
+    所以这里先 `items_factory()` 求值一次，把**具体 tuple** 装进
+    `pystray.Menu(*items)`（`Menu.items` 对非 callable 直接返回 `self._items`，
+    不再重跑）；而 `Icon.menu` 的 setter 自己会调 `update_menu()`，无需再手动
+    调一次（否则白白多销毁/重建一个 HMENU）。
     """
     if getattr(icon, "_batbar_menu_refresh", False):
         return
@@ -263,11 +282,17 @@ def _install_menu_refresh(icon) -> None:
         log.warning("pystray 后端结构不认识：菜单内容将不会随弹出刷新")
         return
     WM_RBUTTONUP = 0x0205
+    # pystray 是**函数内懒导入**（`_build_tray` 里那句），为的是让本模块在
+    # 非 Windows 上也能被 import —— 所以这里不能直接在闭包里写 `pystray.`，
+    # 得自己引一次（模块已缓存，开销为零）。
+    import pystray
 
     def _on_notify(self, wparam, lparam):
         if lparam == WM_RBUTTONUP:
             try:
-                self.update_menu()
+                # 见上面 docstring：自己求值一次，交给 pystray 具体 tuple。
+                # `Icon.menu` 的 setter 内部会 update_menu()，别再手动调一次。
+                self.menu = pystray.Menu(*items_factory())
             except Exception:         # noqa: BLE001 - 重建失败就用旧的，别影响弹出
                 log.debug("menu refresh before popup failed", exc_info=True)
         return orig(self, wparam, lparam)
@@ -1334,13 +1359,16 @@ class Agent:
             items.append(pystray.MenuItem("退出", on_quit))
             return items
 
-        # pystray Menu 支持「单个 callable → 返回 items」：每次弹出重新求值，
-        # 菜单里的电量数字与勾选态永远是最新的
-        menu = pystray.Menu(_menu_items)
+        # 初始菜单用**静态清单**（此刻 `_ready` 必为 False，见 `_static_items`）。
+        # ⚠️ 别写成 `pystray.Menu(_menu_items)`：pystray 的 `Menu.items` 是
+        # property，每次访问都重跑工厂，而它一次构建要访问两回 —— 等于把
+        # devices_snapshot() 跑两遍（详见 `_install_menu_refresh` 的说明）。
+        # 真实清单由下面的钩子在**每次弹出前**求值一次后换上。
+        menu = pystray.Menu(*_static_items())
         img = Image.new("RGBA", (ICON_SIZE, ICON_SIZE), (0, 0, 0, 0))
         self._icon = pystray.Icon("batbar", _IcoBmpImage(img), "Logitech 电量：启动中…", menu)
         # 菜单在**每次弹出之前**重建（pystray 默认复用旧 HMENU，见钩子里的说明）
-        _install_menu_refresh(self._icon)
+        _install_menu_refresh(self._icon, _menu_items)
         # 建托盘这一步**同步**画一个 "--"（用户 00:31 需求：启动后立刻有图标，
         # 证明它起来了）。旧实现这里建的是全透明空图，真正的第一帧要等后台线程
         # 读完蓝牙（首次 CIM 查询实测 4~25s）→ 头几秒托盘区域一片空白，之后又

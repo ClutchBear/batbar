@@ -418,8 +418,15 @@ MAC 不在表里（查询失败/新设备）= 未知 → 保留（fail-open，�
   所以早先「关机不显示」的需求不受影响。
   ② **图标在选不出目标时必须重绘**（`_bt_warm_loop` 的 stale 判据补
   `tgt is None` 分支）——设备真全没了就把图标打回 `--`，不许留着上一台的数字。
-  另加诊断日志：`菜单快照：{...}`（每次弹菜单一行）+ `罗技条目出现/隐藏`
+  另加诊断日志：`菜单快照：{...}`（每次弹菜单**恰好一行**）+ `罗技条目出现/隐藏`
   状态变化行——这两处过去是黑盒，正是「图标有、列表没有」类问题唯一的现场。
+  > 「恰好一行」是 2026-10-14 修出来的：曾一度**每次弹出成两行**，一开始怀疑
+  > 右键钩子被注册了两遍，真相在 pystray —— `Menu.items` 是 property，**每次
+  > 访问都重跑工厂**，而 `_win32._create_menu()` 一次构建要访问两回（`if not
+  > descriptors` + `enumerate`）。代价远不止日志重复：每次右键都白跑一遍
+  > `devices_snapshot()`（~3s CIM 查询）。修法是钩子自己求值一次，交给 pystray
+  > 的是**具体 tuple**。详见 §B `MenuBuiltOncePerPopup` 的用例与
+  > `_install_menu_refresh` 的 docstring。
 - **★★ 关机后条目不消失（两轮迭代，最终判据 2026-10-13 11:00 定稿）**：
   02:00 用户报「关电源 5s 后托盘仍显示 90%」后先试了接收器寄存器 0x02
   「Connection State」监看方案（`connection_state()` + `_receiver_watch_loop`
@@ -834,7 +841,7 @@ COL03 系统控制器 / COL04 键盘 / COL05 鼠标 / COL06 供应商定义，�
 
 **分层原则（仍然保留，是单测可跑的前提）**：纯逻辑与 I/O 严格分离 ——
 `hidpp/session/state/lowbattery/lastknown/winevents/fullscreen` 零第三方依赖，
-`transport.py` 是唯一 `import hid` 的文件。这样 502 项单测**无需任何硬件**就能全绿。
+`transport.py` 是唯一 `import hid` 的文件。这样 507 项单测**无需任何硬件**就能全绿。
 
 ### 4.1 所需依赖
 
@@ -918,7 +925,7 @@ batbar/
 │   ├── probe_query.py          # 主动查询实验探针：写候选命令帧→收回帧（跑前须退托盘）
 │   ├── feature_watch.py        # feature 样本采集器：跨电量多拉几组，解译电压/百分比语义
 │   └── make_icon.py            # 程序化绘制 assets/batbar.ico（逐尺寸渲染 7 档）
-└── tests/                      # 502 项单测 + 1 个黑盒冒烟，全 stdlib，无需硬件
+└── tests/                      # 507 项单测 + 1 个黑盒冒烟，全 stdlib，无需硬件
     ├── smoke_launch.py         #   ★黑盒冒烟：真 spawn agent，读真实日志验启动链（见 §6-F）
     ├── test_hidpp.py           #   帧编码/解析、错误帧、通知判据、电压插值
     ├── test_session.py         #   特性发现、读电池、通知回显、transport 失效传播
@@ -942,7 +949,7 @@ batbar/
     └── test_no_listener.py     #   源码扫描守门：不许 .bind(/listen(、不许 wire/net/controller 复活
 ```
 
-★ = 纯标准库层，任意 Python 3.11+ 直接可测（本项目已用 Python 3.13 实测 502 项全绿）。
+★ = 纯标准库层，任意 Python 3.11+ 直接可测（本项目已用 Python 3.13 实测 507 项全绿）。
 
 ---
 
@@ -1003,7 +1010,7 @@ smoke-test.bat                          rem 双击即跑，完整冒烟
 tests\smoke_launch.py --quick           rem 只验「进程能起来 + 构造函数不炸」
 ```
 
-区别：上面 502 项单测**全在测试进程内 mock**，从不真起托盘；冒烟测试真 spawn
+区别：上面 507 项单测**全在测试进程内 mock**，从不真起托盘；冒烟测试真 spawn
 子进程 + 读真实日志。两者互补，**改设备枚举路径（receiver24/wired24/dongle/
 feature24/win32ctypes）后两者都要跑**。详见 §6-F。
 
@@ -1057,7 +1064,7 @@ python tools\keybeat.py --at 0 15 40 75        rem 自定义时刻
 
 ### E. 本轮三功能验证（主动查询 / 有线 / 低电量）
 
-三者判定逻辑均已进 §B 的单测（502 项）；**硬件相关**的确认要你本机跑：
+三者判定逻辑均已进 §B 的单测（507 项）；**硬件相关**的确认要你本机跑：
 
 **① 主动查询探针 —— 已实测证否（2026-10-12），此路关闭**：
 
@@ -1155,10 +1162,10 @@ rem 扫完立刻敲迈从 15 秒。⚠️ 含标准键盘口，监听期间可�
 
 ### F. 黑盒冒烟测试（2026-10-13 新增，`tests/smoke_launch.py`）
 
-**为什么需要它**：上面 502 项单测全部跑在**测试进程内**（import 走 `sys.path`
+**为什么需要它**：上面 507 项单测全部跑在**测试进程内**（import 走 `sys.path`
 注入、hidapi DLL 用桩、Win32 窗口从不起）——所以「import 链断裂 / venv 缺依赖 /
 ctypes 签名写错 / 单实例互斥量抢不到 / boot 卡在某一步」这类**只有真跑才会暴露**
-的问题，502 项一条都测不出来。冒烟测试补上这一层：**真 spawn 一个 python 子进程
+的问题，507 项一条都测不出来。冒烟测试补上这一层：**真 spawn 一个 python 子进程
 跑 agent，读它写出的真实日志**判定启动链是否走完，最接近「用户双击 exe」。
 
 **双击即跑**：
@@ -1644,7 +1651,7 @@ dist\batbar.exe
 | 1 | 检出代码 | `actions/checkout@v4` |
 | 2-4 | 装 Python + 缓存 pip + 装依赖 | `pip install -e ".[agent,dev]" pyinstaller`（**pyinstaller 不进 pyproject**：只有打包用得到） |
 | 5 | 读版本号 | 推 tag 用 tag 名，否则用 `pyproject.toml` 的 `version`；写进 `GITHUB_ENV` |
-| 6 | **跑单元测试** | 502 项。这道闸门是白送的 —— batbar 的测试**不需要任何 HID 硬件**（纯逻辑与 I/O 严格分离，见 §4） |
+| 6 | **跑单元测试** | 507 项。这道闸门是白送的 —— batbar 的测试**不需要任何 HID 硬件**（纯逻辑与 I/O 严格分离，见 §4） |
 | 7 | 构建 exe | `python -m PyInstaller --noconfirm --clean batbar.spec` |
 | 8 | 组装发布目录 | `package/` = `batbar.exe` + `LICENSE` + `使用说明.txt` |
 | 9 | 冒烟检查 | 体积区间 / **`FileVersion` 与 pyproject 一致** / 许可与说明齐全 / 无运行期产物混入 / **真跑一次 `--help` 要求 rc=0** / 不留常驻进程 |
@@ -1708,7 +1715,7 @@ runner 的用户名是 `runneradmin`（>8 字符）⇒ 系统给 `%TEMP%` 生成
 `RUNNER~1`；而用例把 `pid_path()` 的**原始串**去比 `Path(...).resolve()` 的**长名**。
 `pid_path()` 是纯路径拼接、不做规范化，而 `resolve()` 在 Windows 上会调
 `GetFinalPathNameByHandle` 把短名展开 —— 两边**永远不可能相等**。本机用户名
-`xin` 短、没有短名别名，所以本地 502 项一直全绿。
+`xin` 短、没有短名别名，所以本地 507 项一直全绿。
 
 修法是**两边都 `resolve()`**（断言的是「PID 跟着日志目录搬家」这个语义，
 不是字符串形态）。已单独验证 `resolve()` 对**尚不存在的尾段**也会规范化
@@ -1949,7 +1956,7 @@ subscribe 通知（`command==0x0a && type==0x05` → batteryLevel），主动查
 
 | 部分 | 状态 |
 |---|---|
-| HID++ 协议编解码、会话编排、状态机 | ✅ **已实测**：**502 单测**在 Python 3.13 全绿 |
+| HID++ 协议编解码、会话编排、状态机 | ✅ **已实测**：**507 单测**在 Python 3.13 全绿 |
 | **真实启动链（process→托盘 NIM_ADD）** | ✅ **已实测**：`tests/smoke_launch.py` 黑盒冒烟，真起 agent 验启动链（§6-F） |
 | **RAWINPUT 鼠标唤醒** | ✅ **已实测**（2026-10-13）：隐藏窗口 + `RIDEV_INPUTSINK` 真机收 971 条输入 100% 解码正确、去抖成 11 次事件；`MOUSE_FRESH` 门控验证通过（§6-G） |
 | **全屏/游戏感知** | ✅ **已实测**（2026-10-13）：造真全屏窗口 → 6s 进入静音（QUNS=BUSY）、关窗 10s 恢复；`BATBAR_FULLSCREEN` 三种模式均验证（§6-H） |
@@ -2104,7 +2111,7 @@ subscribe 通知（`command==0x0a && type==0x05` → batteryLevel），主动查
       业务模块里**绝不许**再写 `xxx.argtypes = [...]`。
     - **复核手段**：`probes/verify_argtypes_shared.py` 直接读 `windll` 上的
       `argtypes`，断言「含 `POINTER(_私有类型)` 的签名数 = 0」，再交叉真调四个模块
-      入口确认无 `TypeError`。**光靠单测查不出来**——502 项 mock 测试全绿时这个
+      入口确认无 `TypeError`。**光靠单测查不出来**——507 项 mock 测试全绿时这个
       bug 还在（mock 从不真调 Win32）。
 
 13. **★ RAWINPUT 的按键位在 `ulButtons`，不在 `usFlags`**（2026-10-13 鼠标唤醒踩的）：

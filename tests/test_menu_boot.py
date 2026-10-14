@@ -21,18 +21,38 @@ import pystray
 from batbar import agent as A
 
 
+WM_RBUTTONUP = 0x0205
+WM_NOTIFY = 0x0401
+
+
 class _FakeIcon:
-    WM_NOTIFY = 0x0401
+    WM_NOTIFY = WM_NOTIFY
 
     def __init__(self, name, image, title, menu):
-        self.name, self.image, self.title, self.menu = name, image, title, menu
+        self.name, self.image, self.title = name, image, title
+        self._menu = menu
         self.visible = False
         self.updates = 0
         # 复刻 pystray：绑定方法快照进分发表（_install_menu_refresh 要换这条）
         self._message_handlers = {self.WM_NOTIFY: self._on_notify}
 
+    @property
+    def menu(self):
+        return self._menu
+
+    @menu.setter
+    def menu(self, value):
+        # 复刻 pystray `_base.Icon.menu` 的 setter：赋值后**自己**会 update_menu()
+        self._menu = value
+        self.update_menu()
+
     def update_menu(self):
         self.updates += 1
+        _simulate_pystray_build(self._menu)
+
+    def dispatch(self, lparam):
+        """模拟窗口过程：按分发表调用。"""
+        return self._message_handlers[self.WM_NOTIFY](0, lparam)
 
     def _on_notify(self, wparam, lparam):
         """pystray 的消息处理（钩子会包在它外面，见 _install_menu_refresh）。"""
@@ -86,13 +106,29 @@ def _build(ready: bool, snap=None, snapshot_raises: bool = False,
 
 
 def _items(cap) -> list:
-    """把动态菜单求值成条目清单。
+    """把托盘**初始**菜单求值成条目清单。
 
     注意用 `list(menu)`（`Menu.__iter__` → `_visible_items()`）而不是
     `menu(icon)` —— 后者是 pystray 的「激活整个菜单」，会真的去执行每个
     条目的 action（"立即刷新"就这么跑起来了）。
     """
     return list(cap["menu"])
+
+
+def _popup(cap) -> list:
+    """模拟一次**右键弹出**，返回那一刻真正生效的菜单条目。
+
+    初始菜单是静态清单（`_build_tray` 里 `pystray.Menu(*_static_items())`），
+    真实清单由 `_install_menu_refresh` 的钩子在弹出前求值换上 —— 所以「菜单
+    里到底有什么」必须走这条路才问得准，直接看初始 menu 永远是「启动中…」。
+    """
+    icon = cap["icon"]
+    icon.dispatch(WM_RBUTTONUP)
+    return list(icon.menu)
+
+
+def _popup_texts(cap) -> str:
+    return " | ".join(str(getattr(i, "text", i)) for i in _popup(cap))
 
 
 class BootMenu(unittest.TestCase):
@@ -111,9 +147,9 @@ class BootMenu(unittest.TestCase):
         self.assertIn("退出", texts)
 
     def test_ready_menu_reads_snapshot(self):
-        """已就绪：菜单回到真实清单（含设备行）。"""
+        """已就绪：**弹出时**的菜单是真实清单（含设备行）。"""
         a, cap = _build(ready=True, snap={"耳机 QCY Era 7": 90})
-        texts = " | ".join(str(getattr(i, "text", i)) for i in _items(cap))
+        texts = _popup_texts(cap)
         self.assertIn("耳机 QCY Era 7", texts)
         self.assertIn("90%", texts)
 
@@ -139,14 +175,13 @@ class BootMenuShown(unittest.TestCase):
 
     def test_menu_is_static_before_tray_shown(self):
         a, cap = _build(ready=True, shown=False, snapshot_raises=True)
-        texts = " | ".join(str(getattr(i, "text", i)) for i in _items(cap))
+        texts = _popup_texts(cap)                # 弹出也不许去读硬件
         self.assertIn("启动中", texts)          # 仍是静态清单
         self.assertNotIn("立即刷新  ", texts)
 
     def test_menu_reads_snapshot_after_shown(self):
         a, cap = _build(ready=True, shown=True, snap={"耳机 QCY Era 7": 90})
-        texts = " | ".join(str(getattr(i, "text", i)) for i in _items(cap))
-        self.assertIn("耳机 QCY Era 7", texts)
+        self.assertIn("耳机 QCY Era 7", _popup_texts(cap))
 
     def test_menu_stays_static_when_not_ready(self):
         """★ 2026-10-13 10:40 用户报的场景：无设备启动 → 中途打开鼠标。
@@ -155,13 +190,77 @@ class BootMenuShown(unittest.TestCase):
         到东西）；等 `_ready` 置位后，弹出前的重建才会给出真实清单。
         """
         a, cap = _build(ready=False, shown=True, snapshot_raises=True)
-        texts = " | ".join(str(getattr(i, "text", i)) for i in _items(cap))
-        self.assertIn("启动中", texts)
-        # `_ready` 置位（鼠标开机后拿到读数）→ 同一次构建就该给真实清单
+        self.assertIn("启动中", _popup_texts(cap))
+        # `_ready` 置位（鼠标开机后拿到读数）→ 下一次弹出就该给真实清单
         a._ready = True
         a.devices_snapshot = lambda: {"鼠标 罗技 G304": 90}
-        texts = " | ".join(str(getattr(i, "text", i)) for i in _items(cap))
-        self.assertIn("鼠标 罗技 G304", texts)
+        self.assertIn("鼠标 罗技 G304", _popup_texts(cap))
+
+
+def _fake_popup_icon(update_raises: bool = False):
+    """复刻 pystray 托盘图标的最小假件（菜单弹出路径用到的那几个成员）。
+
+    `menu` 必须是**带 setter 的 property**，且 setter 内部调 `update_menu()`
+    —— pystray `_base.Icon` 就是这么写的（`self._menu = value;
+    self.update_menu()`），钩子的「赋值即重建」正是靠它。
+    """
+    class FakeIcon:
+        def __init__(self):
+            self.updates = 0
+            self.seen: list = []
+            self._menu = None
+            self._update_raises = update_raises
+            # 复刻 pystray：绑定方法快照进分发表
+            self._message_handlers = {WM_NOTIFY: self._on_notify}
+
+        @property
+        def menu(self):
+            return self._menu
+
+        @menu.setter
+        def menu(self, value):
+            self._menu = value
+            self.update_menu()
+
+        def update_menu(self):
+            self.updates += 1
+            if self._update_raises:
+                raise RuntimeError("menu gone")
+            _simulate_pystray_build(self._menu)
+
+        def _on_notify(self, wparam, lparam):
+            self.seen.append(lparam)
+            return "orig"
+
+        def dispatch(self, lparam):
+            """模拟窗口过程：按分发表调用。"""
+            return self._message_handlers[WM_NOTIFY](0, lparam)
+
+    return FakeIcon()
+
+
+def _simulate_pystray_build(menu) -> None:
+    """复刻 pystray `_win32._update_menu()` 真正做的那两下。
+
+    `_create_menu(self.menu, callbacks)` 里：
+        `if not descriptors`                        → `__bool__`   → `items`
+        `for ... in enumerate(descriptors)`          → `__iter__`   → `items`
+    两条路都进 `_visible_items()` → `Menu.items`。而 `Menu.items` 对 callable
+    是**每次访问都重跑工厂**。假图标若只把 `update_menu()` 做成一个空计数器，
+    就测不出「工厂被跑了两遍」——那是本次 bug 的全部内容。
+    """
+    if menu is None:
+        return
+    bool(menu)
+    list(menu)
+
+
+def _one_item_factory(calls: list):
+    """一个「每次调用都记账」的菜单工厂（供钩子测试用）。"""
+    def factory():
+        calls.append(1)
+        return [pystray.MenuItem("设备 A", None)]
+    return factory
 
 
 class MenuRefreshOnPopup(unittest.TestCase):
@@ -175,65 +274,136 @@ class MenuRefreshOnPopup(unittest.TestCase):
     只改类属性没用 —— 这两个用例就是钉住这一点。
     """
 
-    WM_NOTIFY = 0x0401
+    WM_NOTIFY = WM_NOTIFY
 
     def _icon(self, update_raises: bool = False):
-        class FakeIcon:
-            def __init__(self):
-                self.updates = 0
-                self.seen: list = []
-                # 复刻 pystray：绑定方法快照进分发表
-                self._message_handlers = {self.WM_NOTIFY: self._on_notify}
-
-            WM_NOTIFY = 0x0401
-
-            def update_menu(self):
-                self.updates += 1
-                if update_raises:
-                    raise RuntimeError("menu gone")
-
-            def _on_notify(self, wparam, lparam):
-                self.seen.append(lparam)
-                return "orig"
-
-            def dispatch(self, lparam):
-                """模拟窗口过程：按分发表调用。"""
-                return self._message_handlers[self.WM_NOTIFY](0, lparam)
-
-        return FakeIcon()
+        return _fake_popup_icon(update_raises)
 
     def test_hook_rebuilds_before_popup(self):
         icon = self._icon()
-        A._install_menu_refresh(icon)
-        self.assertEqual(icon.dispatch(0x0205), "orig")     # WM_RBUTTONUP
+        A._install_menu_refresh(icon, _one_item_factory([]))
+        self.assertEqual(icon.dispatch(WM_RBUTTONUP), "orig")
         self.assertEqual(icon.updates, 1, "弹出前必须重建菜单")
-        self.assertEqual(icon.seen, [0x0205], "原处理逻辑仍要执行")
+        self.assertEqual(icon.seen, [WM_RBUTTONUP], "原处理逻辑仍要执行")
 
     def test_hook_ignores_other_messages(self):
         icon = self._icon()
-        A._install_menu_refresh(icon)
+        A._install_menu_refresh(icon, _one_item_factory([]))
         icon.dispatch(0x0201)                               # WM_LBUTTONDOWN
         self.assertEqual(icon.updates, 0)
 
     def test_hook_is_idempotent(self):
         icon = self._icon()
-        A._install_menu_refresh(icon)
+        A._install_menu_refresh(icon, _one_item_factory([]))
         once = icon._message_handlers[self.WM_NOTIFY]
-        A._install_menu_refresh(icon)
+        A._install_menu_refresh(icon, _one_item_factory([]))
         self.assertIs(icon._message_handlers[self.WM_NOTIFY], once,
                       "重复安装不许叠加包装")
 
     def test_hook_survives_update_failure(self):
         icon = self._icon(update_raises=True)
-        A._install_menu_refresh(icon)
-        self.assertEqual(icon.dispatch(0x0205), "orig")     # 重建失败也要能弹出
+        A._install_menu_refresh(icon, _one_item_factory([]))
+        self.assertEqual(icon.dispatch(WM_RBUTTONUP), "orig")  # 重建失败也要能弹出
 
     def test_hook_without_handlers_table_is_noop(self):
         """pystray 换了内部结构（没有分发表）→ 只告警，不许让托盘起不来。"""
         class Bare:
             def update_menu(self):
                 pass
-        A._install_menu_refresh(Bare())                     # 不抛
+        A._install_menu_refresh(Bare(), _one_item_factory([]))          # 不抛
+
+
+class MenuBuiltOncePerPopup(unittest.TestCase):
+    """菜单工厂每次弹出**只许求值一次**（2026-10-14，用户报「菜单快照成对出现」）。
+
+    一开始怀疑是 `_on_notify` 钩子被装了两遍 —— 查下来不是：钩子有
+    `_batbar_menu_refresh` 幂等标记，且窗口过程按字典查表只会命中一条。
+
+    真因在 pystray 自己身上：
+
+        `_base.Menu.items` 是 **property**，写的是
+            `return self._items[0]()`          # 传进来的 callable
+        —— **每访问一次就重跑一遍工厂**。而 `_win32._create_menu()` 一次构建
+        要访问它**两回**：
+
+            if not descriptors:                             # ① __bool__
+            for i, descriptor in enumerate(descriptors):     # ② __iter__
+
+        两条路都进 `_visible_items()` → `self.items`。实测 `Menu(factory)`
+        走完这两步，工厂正好被调用 **2 次**（见下面第一条用例，它直接拿真
+        pystray 的 Menu 类做阳性对照）。
+
+    代价远不止日志重复一行：每次右键都把 `devices_snapshot()`（PowerShell
+    CIM 查询 + USB 枚举，实测 ~3s）**整个跑两遍**，而且全程阻塞托盘线程。
+
+    修法：钩子自己 `items_factory()` 求值一次，把**具体 tuple** 装进
+    `pystray.Menu(*items)` —— 对非 callable，`Menu.items` 直接返回
+    `self._items`，不再重跑。
+    """
+
+    def test_pystray_reinvokes_factory_twice_per_build(self):
+        """阳性对照：把 callable 交给 pystray，一次构建会跑两遍工厂。
+
+        这条故意钉住**上游行为**——哪天 pystray 改成只访问一次，这条会红，
+        提醒我们「自己求值」那层可以简化掉，别让它变成无意义的仪式。
+        """
+        calls: list = []
+        m = pystray.Menu(_one_item_factory(calls))
+        self.assertEqual(calls, [], "构造本身不求值")
+        bool(m)                                  # _create_menu 第 ① 步
+        self.assertEqual(len(calls), 1)
+        list(m)                                  # _create_menu 第 ② 步
+        self.assertEqual(len(calls), 2,
+                         "pystray 改了？一次构建访问 items 的次数变了")
+
+    def test_concrete_menu_does_not_reinvoke_factory(self):
+        """交给 pystray 具体 tuple 后，它内部访问多少回都不再重跑工厂。"""
+        calls: list = []
+        m = pystray.Menu(*_one_item_factory(calls)())
+        self.assertEqual(len(calls), 1, "我们这边只求值了一次")
+        bool(m)
+        list(m)
+        self.assertEqual(len(calls), 1, "具体 tuple 不该被重复求值")
+
+    def test_hook_evaluates_factory_once_per_popup(self):
+        """★ 本轮要守的东西：一次右键 = 一次工厂调用。"""
+        calls: list = []
+        icon = _fake_popup_icon()
+        A._install_menu_refresh(icon, _one_item_factory(calls))
+        icon.dispatch(WM_RBUTTONUP)
+        self.assertEqual(len(calls), 1, "每次弹出只许求值一次")
+        self.assertEqual(icon.updates, 1, "仍然必须重建一次菜单")
+        icon.dispatch(WM_RBUTTONUP)
+        self.assertEqual(len(calls), 2, "第二次弹出再求值一次")
+
+    def test_hook_evaluates_once_with_real_agent(self):
+        """端到端：真 `_build_tray` + 真 `_menu_items`，数 `devices_snapshot` 次数。
+
+        用「数 devices_snapshot 被调用几次」而不是数工厂调用 —— 这才是用户
+        能感知到的成本（每次 ~3s 的 CIM 查询）。
+        """
+        hits: list = []
+
+        a, cap = _build(ready=True, snap={"耳机 QCY Era 7": 90})
+        real = a.devices_snapshot
+        a.devices_snapshot = lambda: hits.append(1) or real()
+
+        cap["icon"].dispatch(WM_RBUTTONUP)
+        self.assertEqual(len(hits), 1, "一次右键只许读一次硬件")
+
+    def test_initial_menu_is_concrete_not_callable(self):
+        """初始菜单必须是**具体 tuple**，不能是 callable。
+
+        否则 pystray 启动那次 `_mark_ready() → update_menu()` 就会跑两遍工厂；
+        左键单击（`Icon.__call__` → `update_menu()`）更是要跑三遍。
+        """
+        a, cap = _build(ready=False, snapshot_raises=True)
+        self.assertIsInstance(cap["menu"], pystray.Menu)
+        inner = cap["menu"]._items          # 私有字段：只有它能区分「具体 tuple」和「一个 callable」
+        self.assertGreater(len(inner), 1)
+        self.assertTrue(
+            all(isinstance(i, pystray.MenuItem) for i in inner),
+            "初始菜单里必须都是具体 MenuItem，不能只剩一个 callable")
 
 
 class StandaloneLoopDelegates(unittest.TestCase):
