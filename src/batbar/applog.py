@@ -11,11 +11,26 @@
 stdout 根本不存在。而且我们既要保留控制台（前台调试要看），又要在静默时
 有文件可查 —— 所以这里显式装两个 handler，并对「重复 setup」做幂等处理
 （换掉旧 handler，而不是叠加，否则每调用一次日志就重复一行）。
+
+⚠️ 为什么**自己写滚动 handler** 而不用 `logging.handlers.RotatingFileHandler`
+------------------------------------------------------------------------
+一句话：`import logging.handlers` 会拖进来 **9 MB 的 OpenSSL**，而 batbar
+全程不联网。
+
+链是这样的（2026-10-14 量化打包体积时挖出来的）：CPython 的
+`logging/handlers.py` 顶层 `import socket`，函数体里还 `import smtplib /
+http.client / ssl`。PyInstaller 是**静态扫描** import 语句的 —— 不管它写在
+函数体还是 try 里，一律收进依赖图。于是 `ssl` → `_ssl.pyd` →
+`libcrypto-3-x64.dll`(7.49 MB) + `libssl-3-x64.dll`(1.50 MB) 全进包。
+
+实测：去掉这一个 import，打包体积 16.28 MB → 9.29 MB（−43%）。
+（只在 spec 里 exclude `ssl` 也能省，但会留下「半残模块图」：`urllib.request`
+等模块仍在包内，而它们依赖的 `ssl`/`http.client` 被砍了 —— 哪天走到那条路径
+就是 ModuleNotFoundError。从源码断链才干净。）
 """
 from __future__ import annotations
 
 import logging
-import logging.handlers
 import os
 import sys
 from pathlib import Path
@@ -36,6 +51,69 @@ _FMT = "%(asctime)s %(name)s %(levelname)s %(message)s"
 NOISY_LOGGERS = ("PIL", "PIL.Image", "PIL.PngImagePlugin", "urllib3", "asyncio")
 
 _MARK = "_batbar_app_handler"     # 给本模块装的 handler 打标记，便于幂等替换
+
+
+class RotatingFileHandler(logging.FileHandler):
+    """按大小滚动的文件 handler —— `logging.handlers` 的替代品（见模块 docstring）。
+
+    语义对齐标准库 `RotatingFileHandler`：`file → .1 → .2 …`，超出 `backup_count`
+    的那份直接丢弃。故意不继承 `logging.handlers` 里的任何东西，本模块**不导入**
+    `logging.handlers`。
+    """
+
+    def __init__(self, filename, mode: str = "a", encoding: str | None = None,
+                 delay: bool = False, max_bytes: int = 0, backups: int = 0) -> None:
+        super().__init__(filename, mode=mode, encoding=encoding, delay=delay)
+        self.max_bytes = max_bytes
+        self.backup_count = backups
+
+    def _rotate(self) -> None:
+        """关闭 → 逐级改名 → 重开。任何一步失败都不能让写日志这件事崩掉。"""
+        if self.stream is not None:
+            try:
+                self.stream.close()
+            except Exception:                       # noqa: BLE001
+                pass
+            self.stream = None
+
+        src = Path(self.baseFilename)
+        # 最老那一份先扔：不删的话 Windows 的 os.replace 会覆盖但不报错，
+        # 结果和「丢弃」一样 —— 显式删只是让意图可见。
+        oldest = src.with_name(f"{src.name}.{self.backup_count}")
+        if self.backup_count > 0 and oldest.exists():
+            try:
+                oldest.unlink()
+            except OSError:
+                pass
+        for i in range(self.backup_count - 1, 0, -1):
+            older = src.with_name(f"{src.name}.{i}")
+            newer = src.with_name(f"{src.name}.{i + 1}")
+            if older.exists():
+                try:
+                    os.replace(older, newer)
+                except OSError:
+                    pass
+        if src.exists():
+            try:
+                os.replace(src, src.with_name(f"{src.name}.1"))
+            except OSError:
+                pass
+        if not self.delay:
+            self.stream = self._open()
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            if self.max_bytes > 0:
+                if self.stream is None:
+                    self.stream = self._open()
+                msg = "%s\n" % self.format(record)
+                # Windows 的 append 模式 tell() 不可信，先 seek 到文件尾（标准库同款写法）
+                self.stream.seek(0, 2)
+                if self.stream.tell() + len(msg) >= self.max_bytes:
+                    self._rotate()
+        except Exception:                           # noqa: BLE001
+            pass
+        super().emit(record)
 
 
 def default_dir() -> Path:
@@ -91,8 +169,8 @@ def setup(name: str = "agent", verbose: bool = False, *,
     try:
         d.mkdir(parents=True, exist_ok=True)
         path = d / f"{name}.log"
-        fh = logging.handlers.RotatingFileHandler(
-            path, maxBytes=max_bytes, backupCount=backups, encoding="utf-8")
+        fh = RotatingFileHandler(
+            path, max_bytes=max_bytes, backups=backups, encoding="utf-8")
         fh.setFormatter(fmt)
         fh.setLevel(level)
         setattr(fh, _MARK, True)

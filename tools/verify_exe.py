@@ -1,4 +1,4 @@
-"""打包产物 dist/batbar.exe 的端到端验收。
+r"""打包产物 dist/batbar.exe 的端到端验收。
 
 用法：
     python tools/verify_exe.py                       # 默认验 dist\\batbar.exe
@@ -141,12 +141,18 @@ def dynamic_check() -> int:
 
     # ⚠️ 系统命令的输出是 GBK（中文 Windows），必须 errors="replace" —— 否则
     #    Python 侧先炸在解码上（同一个坑在本项目里已经出现过两次）
+    #
+    # ⚠️ 进程名**必须取自 EXE 本身**，不能写死 `batbar.exe`：本脚本支持把任意
+    #    exe 路径当参数传进来（核验瘦身版 `batbar-slim.exe`、从 Release zip 解出
+    #    来改名过的那份），写死会让 tasklist 永远查不到 ⇒ 打印「进程存活: False」
+    #    的**假阴性**，看起来像 exe 自己崩了，其实它好好活着（2026-10-14 踩到）。
+    exe_name = EXE.name
     alive = subprocess.run(
-        ["tasklist", "/FI", "IMAGENAME eq batbar.exe", "/NH"],
+        ["tasklist", "/FI", f"IMAGENAME eq {exe_name}", "/NH"],
         capture_output=True, text=True, errors="replace", check=False,
     ).stdout
-    running = "batbar.exe" in alive
-    print(f"  进程存活: {running}")
+    running = exe_name.lower() in alive.lower()
+    print(f"  进程存活: {running}   (查 {exe_name})")
 
     subprocess.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)],
                    capture_output=True, check=False)

@@ -32,6 +32,9 @@ __pycache__/
 .eggs/
 build/
 dist/
+# 瘦身实验（batbar-slim.spec）的产物，同 build/ dist/ 一样只是本机二进制
+build-slim/
+dist-slim/
 wheels/
 pip-wheel-metadata/
 

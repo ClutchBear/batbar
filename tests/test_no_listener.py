@@ -32,6 +32,9 @@ import re
 import unittest
 from pathlib import Path
 
+# 同目录的共用扫描工具（pytest 会把 tests/ 加进 sys.path，直接 import 即可）
+import scanutil
+
 SRC = Path(__file__).resolve().parents[1] / "src" / "batbar"
 
 # 「开监听」的两个决定性动作：绑定地址 + 开始 listen。
@@ -89,15 +92,29 @@ class NoListener(unittest.TestCase):
         旧架构里 controller.py 是 TCP 客户端、net.py 查本机 IP —— 二者已随桥接
         一起删除 ⇒ 现在包内任何模块出现 socket 都是回归（ping / 探测自己 IP
         这类需求一律不要加）。
+
+        ⚠️ import 判定**必须用 AST**（见 `scanutil` 模块 docstring）：原来这里写
+        的是 `assertNotIn("import socket", body)` 子串匹配，结果有人在 docstring
+        里为了解释「为什么不能用 logging.handlers」引用了 CPython 那句
+        `import socket`，守卫当场误报。文档里提这个词是**好事**，不该被判违规。
+        `socket.socket(` 是调用写法、不在 import 语句里，仍按子串查。
         """
         files = _py_files()
         self.assertTrue(files, "扫不到任何 .py —— 本条会假通过")
         for p in files:
-            body = p.read_text(encoding="utf-8")
-            self.assertNotIn("import socket", body,
+            self.assertNotIn("socket", scanutil.imported_roots(p),
                              "%s 又 import socket 了 —— 包内不该有网络代码" % p.name)
+            body = p.read_text(encoding="utf-8")
             self.assertNotIn("socket.socket", body,
                              "%s 又建 socket 了 —— 包内不该有网络代码" % p.name)
+
+    def test_socket_guard_is_not_vacuous(self):
+        """阳性对照：确认上面那条不是「永远通过」。"""
+        self.assertIn("socket", scanutil.imported_roots_from_source("import socket\n"))
+        self.assertIn("socket", scanutil.imported_roots_from_source("import os, socket\n"))
+        # 阴性对照：docstring 里提到 **import socket** 不该算违规
+        self.assertNotIn("socket", scanutil.imported_roots_from_source(
+            '"""CPython 的 logging/handlers.py 顶层 import socket。"""\n'))
 
     def test_no_hardcoded_port_constants(self):
         """`HOST`/`PORT` 这对桥接常量不该回来了（防止顺手抄回旧代码）。"""

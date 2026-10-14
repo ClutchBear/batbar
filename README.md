@@ -841,7 +841,7 @@ COL03 系统控制器 / COL04 键盘 / COL05 鼠标 / COL06 供应商定义，�
 
 **分层原则（仍然保留，是单测可跑的前提）**：纯逻辑与 I/O 严格分离 ——
 `hidpp/session/state/lowbattery/lastknown/winevents/fullscreen` 零第三方依赖，
-`transport.py` 是唯一 `import hid` 的文件。这样 507 项单测**无需任何硬件**就能全绿。
+`transport.py` 是唯一 `import hid` 的文件。这样 518 项单测**无需任何硬件**就能全绿。
 
 ### 4.1 所需依赖
 
@@ -925,7 +925,7 @@ batbar/
 │   ├── probe_query.py          # 主动查询实验探针：写候选命令帧→收回帧（跑前须退托盘）
 │   ├── feature_watch.py        # feature 样本采集器：跨电量多拉几组，解译电压/百分比语义
 │   └── make_icon.py            # 程序化绘制 assets/batbar.ico（逐尺寸渲染 7 档）
-└── tests/                      # 507 项单测 + 1 个黑盒冒烟，全 stdlib，无需硬件
+└── tests/                      # 518 项单测 + 1 个黑盒冒烟，全 stdlib，无需硬件
     ├── smoke_launch.py         #   ★黑盒冒烟：真 spawn agent，读真实日志验启动链（见 §6-F）
     ├── test_hidpp.py           #   帧编码/解析、错误帧、通知判据、电压插值
     ├── test_session.py         #   特性发现、读电池、通知回显、transport 失效传播
@@ -949,7 +949,7 @@ batbar/
     └── test_no_listener.py     #   源码扫描守门：不许 .bind(/listen(、不许 wire/net/controller 复活
 ```
 
-★ = 纯标准库层，任意 Python 3.11+ 直接可测（本项目已用 Python 3.13 实测 507 项全绿）。
+★ = 纯标准库层，任意 Python 3.11+ 直接可测（本项目已用 Python 3.13 实测 518 项全绿）。
 
 ---
 
@@ -1010,7 +1010,7 @@ smoke-test.bat                          rem 双击即跑，完整冒烟
 tests\smoke_launch.py --quick           rem 只验「进程能起来 + 构造函数不炸」
 ```
 
-区别：上面 507 项单测**全在测试进程内 mock**，从不真起托盘；冒烟测试真 spawn
+区别：上面 518 项单测**全在测试进程内 mock**，从不真起托盘；冒烟测试真 spawn
 子进程 + 读真实日志。两者互补，**改设备枚举路径（receiver24/wired24/dongle/
 feature24/win32ctypes）后两者都要跑**。详见 §6-F。
 
@@ -1064,7 +1064,7 @@ python tools\keybeat.py --at 0 15 40 75        rem 自定义时刻
 
 ### E. 本轮三功能验证（主动查询 / 有线 / 低电量）
 
-三者判定逻辑均已进 §B 的单测（507 项）；**硬件相关**的确认要你本机跑：
+三者判定逻辑均已进 §B 的单测（518 项）；**硬件相关**的确认要你本机跑：
 
 **① 主动查询探针 —— 已实测证否（2026-10-12），此路关闭**：
 
@@ -1162,10 +1162,10 @@ rem 扫完立刻敲迈从 15 秒。⚠️ 含标准键盘口，监听期间可�
 
 ### F. 黑盒冒烟测试（2026-10-13 新增，`tests/smoke_launch.py`）
 
-**为什么需要它**：上面 507 项单测全部跑在**测试进程内**（import 走 `sys.path`
+**为什么需要它**：上面 518 项单测全部跑在**测试进程内**（import 走 `sys.path`
 注入、hidapi DLL 用桩、Win32 窗口从不起）——所以「import 链断裂 / venv 缺依赖 /
 ctypes 签名写错 / 单实例互斥量抢不到 / boot 卡在某一步」这类**只有真跑才会暴露**
-的问题，507 项一条都测不出来。冒烟测试补上这一层：**真 spawn 一个 python 子进程
+的问题，518 项一条都测不出来。冒烟测试补上这一层：**真 spawn 一个 python 子进程
 跑 agent，读它写出的真实日志**判定启动链是否走完，最接近「用户双击 exe」。
 
 **双击即跑**：
@@ -1579,7 +1579,7 @@ uv pip install --python .venv\Scripts\python.exe pyinstaller
 
 | 项 | 值 |
 |---|---|
-| 体积 | **17,067,889 B ≈ 16.28 MB**（onefile） |
+| 体积 | **9,634,327 B ≈ 9.19 MB**（onefile；v0.1.7 瘦身前是 16.28 MB） |
 | 启动到托盘首帧 | **+0.99s**，`NIM_ADD` 内容 = `'鼠标 罗技 G304: 90%'` |
 | 嵌入图标 | 7 档 RT_ICON（16→256，`tools/make_icon.py` 逐尺寸渲染） |
 | 版本信息 | 右键属性可见（`scripts/version_info.txt`） |
@@ -1590,10 +1590,52 @@ uv pip install --python .venv\Scripts\python.exe pyinstaller
 
 | 方案 | 体积 | 适配成本 | 结论 |
 |---|---|---|---|
-| **PyInstaller** | **16 MB** | 一个 spec 文件、零改源码 | ✅ **选中** |
-| Nuitka | ~12 MB（转 C 编译） | 要装 MSVC，首编 5~15 分钟 | ❌ 省 4 MB 换整条编译链，不划算 |
+| **PyInstaller** | **9.19 MB** | 一个 spec 文件、零改源码 | ✅ **选中** |
+| Nuitka | ~5~7 MB（转 C 编译） | 要装 MSVC，首编 5~15 分钟 | ❌ 只剩 2~4 MB 可省，不值整条编译链 |
 | cx_Freeze | ~20 MB | 要自己维护包列表 | ❌ 无优势 |
 | 只发源码 + venv | — | — | ❌ 目标机得装 Python |
+
+**体积都花在哪 / 怎么砍（v0.1.7）**：v0.1.6 及以前是 **16.28 MB**，砍掉
+**7 MB（−43%）**。瓶颈从头到尾不是 batbar 自己的代码，而是"让 Python 跑起来"的行李：
+
+| 组成 | v0.1.6 | v0.1.7 | 说明 |
+|---|---|---|---|
+| OpenSSL | 9.15 MB | **0** | `libcrypto` 7.49 + `libssl` 1.50 + `_ssl` 0.16 |
+| Pillow | 12.80 MB | **4.62 MB** | 只砍掉 AVIF / WebP / CMS 三个用不到的插件 |
+| Python 运行时 | 8.79 MB | 8.74 MB | `python312.dll` 6.65 + `unicodedata` 1.08 + … |
+| VC/UCRT 依赖 | 2.36 MB | 2.36 MB | 减不掉 |
+| hid（真正干活的） | 0.11 MB | 0.11 MB | — |
+
+**OpenSSL 那 9 MB 是白送的**，有两条引入路径，都得堵：
+
+1. `applog.py` 里的 `import logging.handlers`（为了用 `RotatingFileHandler`）。
+   CPython 的 `logging/handlers.py` 顶层 `import socket`、函数体里还
+   `import smtplib / http.client / ssl`，而 PyInstaller 是**静态扫描 import
+   语句**的 —— 不管写在函数体还是 `try` 里一律收进依赖图。
+   ⇒ 已改为自写 30 行的 `RotatingFileHandler`，从**源码上**断掉这条链。
+2. `PIL.Image` 用了 `xml.etree.ElementTree`，而 PyInstaller 自带
+   `hook-xml.py` 里一句 `collect_submodules('xml')` 把**整个 xml 包**（含
+   `xml.sax.*`）全收进来；`xml.sax.saxutils` 里 `import urllib` →
+   `urllib.request` → `http.client` / `ftplib` → `ssl`。
+   这条改不了上游，只能在 `batbar.spec` 里把整棵 `xml.sax` 子树排掉
+   （`xml.etree.*` 保留，PIL 真要用它）。
+
+⚠️ **为什么只排整棵子树、不单排 `ssl`**：单排 `ssl` 会留下「半残模块图」——
+`urllib.request` 等模块还在包里，而它们依赖的 `http.client`/`ssl` 被砍了，
+哪天走到那条路径就是 `ModuleNotFoundError`，编译期只有一行 warn、极易漏看。
+
+**能减内存吗？不能。** 实测同条件对比（起 12 s 沉降 + 25 s 采样）：
+
+| | 工作集 | 专用提交 | 平均 CPU（单核） |
+|---|---|---|---|
+| v0.1.6（16.28 MB） | 59.5 MB | 27.1 MB | 1.00% |
+| v0.1.7（9.19 MB） | 59.0 MB | 25.5 MB | 0.94% |
+
+被删掉的 DLL **运行时压根没被加载过**，只占磁盘和解压时间，不占内存。
+
+**继续往下砍的空间**：`python312.dll` 6.65 MB 是硬底，`_imaging` /
+`_imagingft`（画托盘图标和字要用）3.58 MB 也是 ⇒ PyInstaller 路线地板约
+8.5 MB。再往下只能换 Nuitka（转 C 编译）或不打包。
 
 **打包暴露的三个真问题**（都是「只在打包版 / 中文 cmd 上炸」的，详见 §8 坑 20~23）：
 
@@ -1651,7 +1693,7 @@ dist\batbar.exe
 | 1 | 检出代码 | `actions/checkout@v4` |
 | 2-4 | 装 Python + 缓存 pip + 装依赖 | `pip install -e ".[agent,dev]" pyinstaller`（**pyinstaller 不进 pyproject**：只有打包用得到） |
 | 5 | 读版本号 | 推 tag 用 tag 名，否则用 `pyproject.toml` 的 `version`；写进 `GITHUB_ENV` |
-| 6 | **跑单元测试** | 507 项。这道闸门是白送的 —— batbar 的测试**不需要任何 HID 硬件**（纯逻辑与 I/O 严格分离，见 §4） |
+| 6 | **跑单元测试** | 518 项。这道闸门是白送的 —— batbar 的测试**不需要任何 HID 硬件**（纯逻辑与 I/O 严格分离，见 §4） |
 | 7 | 构建 exe | `python -m PyInstaller --noconfirm --clean batbar.spec` |
 | 8 | 组装发布目录 | `package/` = `batbar.exe` + `LICENSE` + `使用说明.txt` |
 | 9 | 冒烟检查 | 体积区间 / **`FileVersion` 与 pyproject 一致** / 许可与说明齐全 / 无运行期产物混入 / **真跑一次 `--help` 要求 rc=0** / 不留常驻进程 |
@@ -1715,7 +1757,7 @@ runner 的用户名是 `runneradmin`（>8 字符）⇒ 系统给 `%TEMP%` 生成
 `RUNNER~1`；而用例把 `pid_path()` 的**原始串**去比 `Path(...).resolve()` 的**长名**。
 `pid_path()` 是纯路径拼接、不做规范化，而 `resolve()` 在 Windows 上会调
 `GetFinalPathNameByHandle` 把短名展开 —— 两边**永远不可能相等**。本机用户名
-`xin` 短、没有短名别名，所以本地 507 项一直全绿。
+`xin` 短、没有短名别名，所以本地 518 项一直全绿。
 
 修法是**两边都 `resolve()`**（断言的是「PID 跟着日志目录搬家」这个语义，
 不是字符串形态）。已单独验证 `resolve()` 对**尚不存在的尾段**也会规范化
@@ -1956,12 +1998,12 @@ subscribe 通知（`command==0x0a && type==0x05` → batteryLevel），主动查
 
 | 部分 | 状态 |
 |---|---|
-| HID++ 协议编解码、会话编排、状态机 | ✅ **已实测**：**507 单测**在 Python 3.13 全绿 |
+| HID++ 协议编解码、会话编排、状态机 | ✅ **已实测**：**518 单测**在 Python 3.13 全绿 |
 | **真实启动链（process→托盘 NIM_ADD）** | ✅ **已实测**：`tests/smoke_launch.py` 黑盒冒烟，真起 agent 验启动链（§6-F） |
 | **RAWINPUT 鼠标唤醒** | ✅ **已实测**（2026-10-13）：隐藏窗口 + `RIDEV_INPUTSINK` 真机收 971 条输入 100% 解码正确、去抖成 11 次事件；`MOUSE_FRESH` 门控验证通过（§6-G） |
 | **全屏/游戏感知** | ✅ **已实测**（2026-10-13）：造真全屏窗口 → 6s 进入静音（QUNS=BUSY）、关窗 10s 恢复；`BATBAR_FULLSCREEN` 三种模式均验证（§6-H） |
 | **启动锚定工作目录** | ✅ **已实测**（2026-10-13）：子进程 cwd 强制设 System32 → 锚定后切到 Python 安装根；全仓审计确认**当前零相对路径**（§6-I） |
-| **打包成单文件 exe** | ✅ **已实测**（2026-10-13）：`dist\batbar.exe` **16.28 MB** 双击起托盘，`NIM_ADD` 内容 `'鼠标 罗技 G304: 90%'`；`--scan` rc=0 读到真机 90%；cwd 锚定落在 exe 目录（§6-K） |
+| **打包成单文件 exe** | ✅ **已实测**（2026-10-13）：`dist\batbar.exe` **9.19 MB**（v0.1.7 起）双击起托盘，`NIM_ADD` 内容 `'鼠标 罗技 G304: 90%'`；`--scan` rc=0 读到真机 90%；cwd 锚定落在 exe 目录（§6-K） |
 | **CI 自动构建（GitHub Actions）** | ✅ **已实测**（2026-10-13）：推 `main` 触发 `windows-latest` 全流程（测试→打包→冒烟→zip）产出 artifact；推 tag 走 Release（§6-L）。**推之前已按 workflow 的真实 `run` 块本地预演过**（当场的三处问题都在预演里修掉，没让 CI 去发现） |
 | **从 Release zip 解压即用** | ✅ **已实测**（2026-10-13）：解压出的 `batbar.exe` 与构建产物 **md5 逐字节一致**，且从解压目录启动能真读到 `鼠标 罗技 G304: 90%` 并贴进托盘 |
 | **2.4G 键盘通道（LEOBOG / 迈从 K87）** | ✅ **已实测**：被动推送 + 主动轮询 + 有线兜底三路均已真机验证（§3.4、§6-E、④ 系列） |
@@ -2111,7 +2153,7 @@ subscribe 通知（`command==0x0a && type==0x05` → batteryLevel），主动查
       业务模块里**绝不许**再写 `xxx.argtypes = [...]`。
     - **复核手段**：`probes/verify_argtypes_shared.py` 直接读 `windll` 上的
       `argtypes`，断言「含 `POINTER(_私有类型)` 的签名数 = 0」，再交叉真调四个模块
-      入口确认无 `TypeError`。**光靠单测查不出来**——507 项 mock 测试全绿时这个
+      入口确认无 `TypeError`。**光靠单测查不出来**——518 项 mock 测试全绿时这个
       bug 还在（mock 从不真调 Win32）。
 
 13. **★ RAWINPUT 的按键位在 `ulButtons`，不在 `usFlags`**（2026-10-13 鼠标唤醒踩的）：

@@ -73,6 +73,32 @@ class Setup(unittest.TestCase):
         self._flush()
         self.assertTrue(Path(str(p) + ".1").exists(), "超过 max_bytes 应产生 .1")
 
+    def test_rotation_backup_chain(self):
+        """backups=2 ⇒ 只保留 .1 / .2，不该出现 .3（自写 handler 的改名逻辑要对齐标准库）。"""
+        p = applog.setup("ut", log_dir=self.dir, max_bytes=200, backups=2)
+        assert p is not None
+        lg = logging.getLogger("batbar.ut-chain")
+        for i in range(60):
+            lg.info("y" * 40 + f" {i}")
+        self._flush()
+        self.assertTrue(Path(str(p) + ".1").exists())
+        self.assertTrue(Path(str(p) + ".2").exists())
+        self.assertFalse(Path(str(p) + ".3").exists(), "超出 backup_count 的那份必须丢掉")
+
+    def test_rotation_keeps_writable_and_newest_first(self):
+        """滚动之后：主文件继续可写，且装的是**最新**那几条。"""
+        p = applog.setup("ut", log_dir=self.dir, max_bytes=200, backups=1)
+        assert p is not None
+        lg = logging.getLogger("batbar.ut-newest")
+        for i in range(30):
+            lg.info(f"old-{i}")
+        self._flush()
+        lg.info("marker-newest")
+        self._flush()
+        text = Path(p).read_text(encoding="utf-8")
+        self.assertIn("marker-newest", text, "滚动后主文件必须继续可写")
+        self.assertNotIn("old-0", text, "最老的内容应该已经被滚到 .1 里了")
+
     def test_unwritable_dir_returns_none(self):
         # 用一个「已存在的普通文件」当目录 → mkdir 必失败，但 setup 不能抛
         blocker = self.dir / "iam-a-file"
