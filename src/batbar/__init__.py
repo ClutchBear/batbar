@@ -19,4 +19,4 @@
 监听过任何端口。别把守卫指向错的地方（判据见 tests/test_no_listener.py）。
 """
 
-__version__ = "0.1.5"
+__version__ = "0.1.6"
