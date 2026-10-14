@@ -1227,17 +1227,6 @@ class Agent:
         def on_refresh(_icon, _item):
             threading.Thread(target=self._manual_refresh, daemon=True).start()
 
-        def on_open_log(_icon, _item):
-            # 静默启动（无控制台）时这是查看运行状况的唯一入口
-            try:
-                import os
-                from . import applog
-                p = applog.current_path()
-                if p is not None and p.exists():
-                    os.startfile(str(p))
-            except Exception as exc:      # noqa: BLE001 - 打不开日志不影响托盘
-                log.debug("open log failed: %s", exc)
-
         def _make_switch(key: str, snap: dict):
             # 不能用 lambda _i, k=key：pystray 以 (icon, item) 两个位置参调用
             # 回调，第二个实参会覆盖 k 的默认值，把 MenuItem 对象当设备名传进
@@ -1268,12 +1257,6 @@ class Agent:
                 pystray.Menu.SEPARATOR,
                 pystray.MenuItem("立即刷新", on_refresh, default=True),
             ]
-            try:
-                from . import applog
-                if applog.current_path() is not None:
-                    items.append(pystray.MenuItem("打开日志", on_open_log))
-            except Exception:              # noqa: BLE001
-                pass
             items.append(pystray.MenuItem("退出", on_quit))
             return items
 
@@ -1348,13 +1331,6 @@ class Agent:
                 pystray.Menu.SEPARATOR,
                 pystray.MenuItem("立即刷新", on_refresh, default=True),
             ]
-            # 只有日志确实落盘了才给入口，否则点了没反应更困惑
-            try:
-                from . import applog
-                if applog.current_path() is not None:
-                    items.append(pystray.MenuItem("打开日志", on_open_log))
-            except Exception:              # noqa: BLE001
-                pass
             items.append(pystray.MenuItem("退出", on_quit))
             return items
 

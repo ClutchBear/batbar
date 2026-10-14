@@ -94,7 +94,7 @@ jobs:
 
       - name: 跑单元测试
         # 这道闸门很关键：batbar 的测试是「纯逻辑与 I/O 严格分离」的，
-        # 503 项不需要任何 HID 硬件，在 runner 上能全跑。测试挂了就别发版。
+        # 502 项不需要任何 HID 硬件，在 runner 上能全跑。测试挂了就别发版。
         run: python -m pytest
 
       - name: 构建 exe

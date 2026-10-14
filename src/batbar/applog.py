@@ -114,11 +114,3 @@ def setup(name: str = "agent", verbose: bool = False, *,
         root.addHandler(sh)
 
     return path
-
-
-def current_path() -> Path | None:
-    """当前 root logger 上本模块装的日志文件路径；没落盘则返回 None。"""
-    for h in logging.getLogger().handlers:
-        if getattr(h, _MARK, False) and hasattr(h, "baseFilename"):
-            return Path(h.baseFilename)
-    return None

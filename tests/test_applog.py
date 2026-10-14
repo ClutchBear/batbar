@@ -64,10 +64,6 @@ class Setup(unittest.TestCase):
         n2 = len(_marked(logging.getLogger().handlers))
         self.assertEqual(n1, n2, "重复 setup 会叠加 handler，导致日志每行重复")
 
-    def test_current_path(self):
-        p = applog.setup("ut", log_dir=self.dir)
-        self.assertEqual(applog.current_path(), p)
-
     def test_rotation(self):
         p = applog.setup("ut", log_dir=self.dir, max_bytes=400, backups=1)
         assert p is not None
