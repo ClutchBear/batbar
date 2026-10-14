@@ -44,14 +44,13 @@ class TestState(unittest.TestCase):
         p.poll_response(self._info())            # 一次正常读数
         p.take_icon_update()
         clock[0] += 61
-        self.assertTrue(p.request_due())
-        p.mark_request_sent()
+        self.assertTrue(p.due())
         p.poll_response(None, sleeping=True)     # 失败且 agent 判定睡眠
         self.assertTrue(p.state.sleeping)
         clock[0] += 61
-        self.assertFalse(p.request_due())        # 睡眠期 5min 才试一次
+        self.assertFalse(p.due())                # 睡眠期 5min 才试一次
         clock[0] += 240
-        self.assertTrue(p.request_due())
+        self.assertTrue(p.due())
 
     def test_wake_restores_active_interval(self):
         clock = [0.0]
@@ -59,11 +58,10 @@ class TestState(unittest.TestCase):
         p.poll_response(None, sleeping=True)
         self.assertTrue(p.state.sleeping)
         clock[0] += 301
-        p.mark_request_sent()
-        p.poll_response(self._info())
+        p.poll_response(self._info())            # 醒来后的成功读数
         self.assertFalse(p.state.sleeping)
         clock[0] += 61
-        self.assertTrue(p.request_due())
+        self.assertTrue(p.due())
 
     def test_notification_always_accepted(self):
         clock = [0.0]
@@ -74,44 +72,32 @@ class TestState(unittest.TestCase):
         self.assertIsNotNone(p.take_icon_update())
         self.assertEqual(p.state.percent, 33)
 
-    def test_request_inflight_blocks_due(self):
-        p = BatteryPoller()
-        self.assertTrue(p.request_due())
-        p.mark_request_sent()
-        self.assertFalse(p.request_due())
-        p.note_timeout()
-        # mark_request_sent 已把 last_poll_ts 推到当下 ⇒ 不立刻风暴重试
-        self.assertFalse(p.request_due())
-
-    def test_no_response_flood(self):
-        """防请求风暴：在途不发第二条；持续无响应 ⇒ 状态机转入睡眠退避（300s）。"""
-        clock = [0.0]
-        p = BatteryPoller(now=lambda: clock[0])
-        clock[0] = 60.0                       # 首次到期
-        self.assertTrue(p.request_due())
-        p.mark_request_sent()                 # 发出，进入在途
-        clock[0] += 5
-        self.assertFalse(p.request_due())     # 在途：绝不发第二条
-        p.note_timeout()                      # agent 没回，超时
-        self.assertFalse(p.request_due())     # 超时把 last_poll_ts 推到当下 ⇒ 不立刻重试
-        # 从未成功过 + 读失败 ⇒ poller 判定休眠，退避到 300s 周期
-        clock[0] += 61
-        self.assertFalse(p.request_due())
-        clock[0] += 300
-        self.assertTrue(p.request_due())      # 睡眠周期到，再给设备一次机会
-
     def test_hidpp_device_present_backoff_is_active(self):
+        """有过成功读数后，单次读失败**不**判定睡眠 —— 设备在线标记保持，
+        仍走 60s 活跃节奏（而不是掉进 5min 退避）。"""
         clock = [0.0]
         p = BatteryPoller(now=lambda: clock[0])
         clock[0] = 60.0
-        p.mark_request_sent()
         p.poll_response(self._info())         # 有过成功读数
         clock[0] += 5
-        p.mark_request_sent()
-        p.note_timeout()                      # 单次超时
+        p.poll_response(None)                 # 单次读失败（agent 未断言睡眠）
         self.assertFalse(p.state.sleeping)    # 设备在线标记保持
         clock[0] += 61
-        self.assertTrue(p.request_due())      # 正常 60s 节奏继续
+        self.assertTrue(p.due())              # 正常 60s 节奏继续
+
+    def test_never_succeeded_failure_means_sleep(self):
+        """反面：从未成功读过 + 本次读失败 ⇒ 判定睡眠退避到 5min。
+
+        与上面那条成对，覆盖 `poll_response` 里「`info is None` 才置 sleeping」的分支。
+        """
+        clock = [0.0]
+        p = BatteryPoller(now=lambda: clock[0])
+        p.poll_response(None)                 # 首次就读失败，agent 未断言睡眠
+        self.assertTrue(p.state.sleeping)
+        clock[0] += 61
+        self.assertFalse(p.due())             # 已退避到 5min
+        clock[0] += 240
+        self.assertTrue(p.due())
 
     def test_bt_fallback_only_when_hidpp_dead(self):
         p = BatteryPoller()
@@ -124,6 +110,18 @@ class TestState(unittest.TestCase):
         p2.on_bt_battery(40)
         self.assertEqual(p2.state.percent, 40)
         self.assertEqual(p2.state.info.source, "bluetooth")
+
+    def test_async_rpc_mode_stays_deleted(self):
+        """异步 RPC 三件套不许复活（可从 git 历史里捞回，故需守门）。
+
+        `request_due()` / `mark_request_sent()` / `note_timeout()` 与在途标记
+        `_awaiting` 是给旧 controller 异步回灌用的。v0.1.4 删掉桥接后，主路径
+        `agent.py` 走的是同步 `due()` + `poll_once()` —— 三件套回来就是
+        「只剩定义、唯一调用方是单测」的死代码，且会被自己的测试保护住。
+        """
+        for name in ("request_due", "mark_request_sent", "note_timeout", "_awaiting"):
+            self.assertFalse(hasattr(BatteryPoller, name),
+                             "BatteryPoller.%s 又回来了 —— 异步 RPC 模式已随旧桥接删除" % name)
 
     def test_tooltip_contains_percent(self):
         p = BatteryPoller()

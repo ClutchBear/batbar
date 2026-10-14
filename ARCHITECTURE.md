@@ -51,7 +51,7 @@
 |---|---:|---|---|
 | `hidpp.py` | 293 | HID++ 2.0 **帧编解码**：帧前缀、特性号常量、错误帧、电压→百分比插值 | 布局以 Solaar 源码为准，注释标行号；纯 bytes，无 I/O |
 | `session.py` | 226 | `HidppSession`：对**单个**设备的协议编排（find_feature / read_battery / 消化通知帧） | transport-agnostic，USB 读写由注入的 transport 完成 |
-| `state.py` | 178 | `BatteryPoller`：轮询节奏（正常 60s / 睡眠退避 5min）、变化检测、**多源仲裁** | session 当鸭子类型注入；纯标准库 |
+| `state.py` | 161 | `BatteryPoller`：轮询节奏（正常 60s / 睡眠退避 5min）、变化检测、**多源仲裁** | session 当鸭子类型注入；纯标准库；**同步**模式（异步 RPC 三件套已随桥接删除） |
 | `lastknown.py` | 107 | **最后已知电量**持久化 `{设备名: (pct, ts)}` | 蓝牙 NULL 回落时兜底；I/O 失败静默降级；`BATBAR_LASTKNOWN` 可重定向 |
 | `lowbattery.py` | 230 | 低电量提醒**状态机**：连续 3 次去抖 + 迟滞 + 充电/有线豁免 | `feed()` 纯判定可脱机测，副作用 `_deliver` 只在 agent 接线里调 |
 | `winevents.py` | 257 | **事件去抖器 + WM_* 分类 + RAWINPUT 纯逻辑解码** | 纯逻辑零 ctypes（窗口/`SetTimer` 在 agent）；`due()` 带 `1e-9` 容差；`decode_rawinput` **按键位在 `ulButtons` 不在 `usFlags`** |

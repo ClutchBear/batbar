@@ -54,14 +54,15 @@ class BatteryState:
 
 
 class BatteryPoller:
-    """轮询调度核心。
+    """轮询调度核心 —— 同步 session 模式（Windows 直跑）。
 
-    两种驱动方式：
-      A. 同步 session（Windows 直跑模式）：传 session=read_battery()/ping() 对象，poll_once() 直接用
-      B. 异步 RPC（旧桥接模式，已非主路径）：session=None，外部自己发请求，
-         收到回包后调 poll_response(info, sleeping=...) 回灌；due()/note_* 照常
-
+    session：带 `read_battery()` 的对象（鸭子类型），`poll_once()` 同步读一步。
     bt_provider: () -> (percent, charging) | None，蓝牙兜底（Windows 侧 PowerShell）。
+
+    旧桥接时代的**异步 RPC 模式**已于 v0.1.4 随桥接一起删除：`request_due()` /
+    `mark_request_sent()` / `note_timeout()` 三件套与在途标记 `_awaiting`。
+    controller 没了 ⇒ 没人会异步回灌 ⇒ 它们只剩定义、唯一调用方是单测
+    （正是那种"被自己的测试保护着"的死代码）。不要从 git 历史里捞回来。
     """
 
     def __init__(self, session=None, bt_provider=None, now=time.monotonic):
@@ -70,7 +71,6 @@ class BatteryPoller:
         self._now = now
         self.state = BatteryState()
         self._last_bt_ts = 0.0
-        self._awaiting = False   # 异步模式：是否有一条请求在途
 
     # ---- 外部事件 ----
     def on_notification(self, info: H.BatteryInfo) -> None:
@@ -101,9 +101,9 @@ class BatteryPoller:
         return t - self.state.last_poll_ts >= interval
 
     def poll_once(self) -> None:
-        """同步 session 的轮询一步。异步模式请用 request_due()+poll_response()。"""
+        """同步读一步：记下轮询时刻 → 读 → 回灌状态机。"""
         if self._s is None:
-            raise RuntimeError("async mode: use request_due()/poll_response()")
+            raise RuntimeError("BatteryPoller 需要 session（异步模式已随旧桥接删除）")
         self.state.last_poll_ts = self._now()
         try:
             info = self._s.read_battery()
@@ -113,13 +113,12 @@ class BatteryPoller:
         self.poll_response(info)
 
     def poll_response(self, info: H.BatteryInfo | None, sleeping: bool | None = None) -> None:
-        """异步回灌 / 同步收尾：把一次读的结果写进状态机。
+        """把一次读的结果写进状态机（同步模式的收尾，也被通知/蓝牙路径复用）。
 
         Args:
             info: 电量读数；None 表示本次没读到
             sleeping: 仅当 info=None 时有意义——agent 已替我们判过睡眠
         """
-        self._awaiting = False
         self.state.last_poll_ts = self._now()
         if info is not None:
             self.state.info = info
@@ -135,22 +134,6 @@ class BatteryPoller:
         if self.state.info is None:
             self.state.sleeping = True
         self._maybe_bt()
-
-    # ---- 异步模式（旧桥接，已非主路径） ----
-    def request_due(self) -> bool:
-        """异步模式：现在该发一次读请求吗？"""
-        if self._awaiting:
-            return False
-        return self.due()
-
-    def mark_request_sent(self) -> None:
-        self._awaiting = True
-        self.state.last_poll_ts = self._now()  # 超时也刷新周期，防止请求风暴
-
-    def note_timeout(self) -> None:
-        """在途请求超时（调用方计时），等同一次失败回灌。"""
-        if self._awaiting:
-            self.poll_response(None, sleeping=None)
 
     def _maybe_bt(self) -> None:
         """设备睡眠/读不到时，若配置了蓝牙兜底且到期，则拉一次。"""
