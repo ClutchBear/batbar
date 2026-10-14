@@ -193,13 +193,13 @@
 | **启动链断了 / import 炸 / venv 缺依赖** | `tests/smoke_launch.py` | 真起 agent 读日志；单测查不出这类问题（§6-F） |
 | **开机自启 / 常驻无控制台运行** | `scripts/register_autostart.ps1` + `scripts/agent-hidden.vbs` | 计划任务 + VBS 静默启动，无需管理员；任务名 `batbar-agent`。**exe 部署**则把计划任务的「操作」改指向 `dist\batbar.exe` |
 | **打包成 exe / 改 exe 图标 / 版本信息** | `batbar.spec` + `build-exe.bat` + `assets/batbar.ico` + `scripts/version_info.txt` | 图标由 `tools/make_icon.py` 生成；改完重跑 `build-exe.bat`。spec 里的 `hiddenimports` 是**硬需求**（铁律 18） |
-| **改 CI / 发新版本 / 自动出 Release** | `.github/workflows/build-exe.yml` + `.github/release-notes.md` + `.github/dist-extra/` | 推 tag 出 Release、推 `main` 出 artifact。**改 workflow 前先在本地按真实 `run` 块预演**（README §6-L）；脚本正文纯 ASCII，中文只进 YAML 注释。打包进 zip 的中文名文件放 `dist-extra/` 整目录复制 |
+| **改 CI / 发新版本 / 自动出 Release** | `.github/workflows/build-exe.yml` + `.github/release-notes.md` + `.github/dist-extra/` | 推 tag 出 Release、推 `main` 出 artifact。**改 workflow 前先在本地按真实 `run` 块预演**（更新记录.md §6-L）；脚本正文纯 ASCII，中文只进 YAML 注释。打包进 zip 的中文名文件放 `dist-extra/` 整目录复制 |
 | **核验 CI/Release 产出的那份 exe** | `tools/verify_exe.py <exe 路径>` | 同一套验收标准套在「从 zip 解压出来的那份」上，不必改脚本 |
 | **打包版跑 `--scan` 看不到输出 / 双击没反应** | `agent.attach_parent_console()` + `agent.install_crash_log()` | 双击没有控制台 ⇒ 请**从 cmd 里跑**；异常现在会落日志 `<数据目录>\logs\agent.log` |
 | **`print` 在中文 cmd 上崩掉或乱码** | `agent.make_console_safe()` + `tests/test_menu_boot.py::ConsoleEncoding` | 只用 GBK 能编码的字符；单测会拦下（铁律 17） |
 | **进程工作目录（cwd）/ 相对路径诡异行为** | `agent.anchor_cwd()` | 在 `main()` 里先于 argparse 调用；源码运行锚 `sys.base_prefix`，**打包后改锚 exe 所在目录**（`_MEIPASS` 绝不能锚，见铁律 18）；失败静默放弃（绝不让进程起不来） |
 | **托盘程序运行时冒出黑色控制台窗口** | `winproc.run_hidden()` | spawn shell 一律走它；**禁止直接 `subprocess.run/Popen`**（铁律 21） |
-| **改名/改位置后日志与电量表不见了** | `migrate.py` | 把历史位置（`logi-tray` → `batbar`）的数据**复制**进当前数据目录；只复制不删源、目标已有不覆盖、不搬 PID（README §6-J）；调用点须**晚于 `parse_args()`、早于 `applog.setup()`**（铁律 16，否则 `--help` 也会有落盘副作用） |
+| **改名/改位置后日志与电量表不见了** | `migrate.py` | 把历史位置（`logi-tray` → `batbar`）的数据**复制**进当前数据目录；只复制不删源、目标已有不覆盖、不搬 PID（更新记录.md §6-J）；调用点须**晚于 `parse_args()`、早于 `applog.setup()`**（铁律 16，否则 `--help` 也会有落盘副作用） |
 | **日志级别/落点/滚动** | `applog.py` | `BATBAR_DEBUG=1` 或 `--verbose` 开 DEBUG；落点见下一行 |
 | **数据/日志/PID 到底写在哪儿** | `paths.py` + `tools/verify_green_mode.py` | 打包后 = **exe 同目录**（绿色模式）；exe 目录不可写自动回退 `%LOCALAPPDATA%\batbar`；**每次启动日志里有一行 `数据目录 = …`**。两个真机验收脚本：`verify_green_mode.py`（拷到干净目录跑，验数据确实落在旁边）与 `verify_green_fallback.py`（`icacls /deny` 造只读目录，验回退） |
 | **日志路径（排障第一现场）** | `<数据目录>\logs\agent.log` | 打包后即 `batbar.exe` 旁边的 `logs\agent.log`（铁律 22） |
@@ -385,7 +385,7 @@
 | ~~鼠标硬件唤醒检测~~ | ✅ **已完成**（2026-10-13，`winevents.py` + `agent.py`） | `RAWINPUT` + `RIDEV_INPUTSINK`（后台无焦点也收）→ **唤醒即刷新**：鼠标一有活动就催一次 HID++ 探测（去抖 250ms，`MOUSE_FRESH` 门控，不碰退避） | 鼠标开机后条目**秒回**，不再等 9s 轮询（退避时最多省 30s）。真机实测 971 条输入 100% 解码正确、去抖成 11 次事件 |
 | ~~全屏/游戏感知~~ | ✅ **已完成**（2026-10-13，`fullscreen.py` + `agent.py`） | `SHQueryUserNotificationState`（QUNS）采样 → 迟滞门 → **静音提醒 + 暂停后台轮询**；`BATBAR_FULLSCREEN=auto\|off\|on` 可覆盖 | 全屏/游戏中不弹 toast、不周期读硬件；真机实测造全屏窗口 6s 进入静音、关窗 10s 恢复。★ 实测无边框全屏返回 `QUNS_BUSY` 而非 `D3D_FULL_SCREEN` |
 | ~~启动锚定工作目录~~ | ✅ **已完成**（2026-10-13，`agent.anchor_cwd()`） | `os.chdir(sys.base_prefix)` 防 cwd 漂移，在 `main()` 里**先于 argparse** 调用 | 开机自启/计划任务/`restart-diag.bat` 的 cwd 不再停在 System32；真机实测 `System32 → ...\cpython-3.12-...`。**当前代码零相对路径，属防御性保险**（挡「将来有人写相对路径」那类只在用户机上炸的 bug） |
-| ~~项目改名 + 数据目录迁移~~ | ✅ **已完成**（2026-10-13，`logi-tray` → `batbar`，`migrate.py`） | 进程级常量全量替换（包名/logger/`BATBAR_*`/互斥量/窗口类/线程名/临时前缀/计划任务/entry point）+ 旧 `%LOCALAPPDATA%` 数据一次性搬迁 | 名字不再绑罗技品牌（现覆盖鼠标/耳机/机械键盘三类）；旧日志与电量表无缝续用。⚠️ venv 的 `.pth`/`dist-info`/console script 带旧绝对路径，**改名后必须重装可编辑包**（README §6-J.4） |
+| ~~项目改名 + 数据目录迁移~~ | ✅ **已完成**（2026-10-13，`logi-tray` → `batbar`，`migrate.py`） | 进程级常量全量替换（包名/logger/`BATBAR_*`/互斥量/窗口类/线程名/临时前缀/计划任务/entry point）+ 旧 `%LOCALAPPDATA%` 数据一次性搬迁 | 名字不再绑罗技品牌（现覆盖鼠标/耳机/机械键盘三类）；旧日志与电量表无缝续用。⚠️ venv 的 `.pth`/`dist-info`/console script 带旧绝对路径，**改名后必须重装可编辑包**（更新记录.md §6-J.4） |
 | ~~打包成单文件 exe~~ | ✅ **已完成**（2026-10-13，`batbar.spec` + `build-exe.bat`） | PyInstaller onefile + `console=False`；`hiddenimports` 点名 `pystray._win32` / `hid`，`excludes` 掉 `tkinter`（Pillow 的 hook 会拉 tcl/tk ~12 MB） | **9,634,327 B ≈ 9.19 MB**（v0.1.7 瘦身前 16.28 MB），双击即用、目标机零 Python 依赖；托盘首帧 **+0.99s**。⚠️ 顺带挖出「cp936 下 `print` emoji 直接杀进程」这个真 bug（README §8 坑 20 / 铁律 17） |
 | ~~CI 自动构建 + Release~~ | ✅ **已完成**（2026-10-13，`.github/workflows/build-exe.yml`） | `windows-latest` 上：setup-python → 装依赖 → **pytest 当闸门** → PyInstaller → 组装 `package/` → 冒烟（含真跑 `--help`）→ 手写 zip → 核对 → artifact；tag 触发则 `gh release create` | 白送了「干净 runner 上跑 518 项测试」这道闸门 —— batbar 的测试不需要 HID 硬件，所以 CI 能真跑而不是走个形式。发布目录刻意叫 `package/`（`dist/` 是 PyInstaller 的输出，重名会删掉刚编出来的 exe） |
 

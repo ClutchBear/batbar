@@ -1,7 +1,7 @@
 """Feature-report 通道（2026-10-12 实测驱动的新模块）。
 
 背景：迈从 K87 的 2.4G 接收器（05AC:024F）在 0xFF02 厂商口上「不推不答」
-（四轮 probe_query 实测证否，见 README §6-G④），但 `--collections` 全接口
+（四轮 probe_query 实测证否，见 更新记录.md §6-E/④ 系列），但 `--collections` 全接口
 扫描发现另一个 collection（0xFF04/0x0002）有 Feature Report 0x06，纯拉取式
 （主机 HidD_GetFeature 同步读，设备不推）：
 
@@ -12,7 +12,7 @@
 回显为 0x87/0x4A 且能保持、`64 64 64 65` 纹丝不动 —— 证明这块 feature 是
 **主机可读写、设备不主动刷新**的静态配置 buffer，**不是**实时电量传感器。
 Hub 的 90% 来自 0xFF02 口对 `13 4a 01 00`（reportID 0x13，2.4G 默认）的
-**input 应答帧**（见 README ④-quin/quinn）。本模块现阶段的定位只剩
+**input 应答帧**（见 更新记录.md ④-quinn）。本模块现阶段的定位只剩
 「枚举 + 采样留证」（`samples()` 供取证分析），电量语义请走 0xFF02 input
 通道，勿在此解码。decode_guess 永久返回 None。
 
