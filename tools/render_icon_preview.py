@@ -8,7 +8,11 @@
     assets/tray-icons-light.png   浅色任务栏底色
     assets/tray-icons-warning.png 低电量警告红
 
-每张图 = 一排「真实 16px 显示」+ 下方一行对应放大图，外加电量刻度标注。
+清晰度策略（2026-10-15 信哥定稿：上一版「16px 放大 8 倍」又糊又块，废弃）：
+  - 大图 = **原生大画布渲染**（icons.py 本身按 spec.size 等比缩放，size=128
+    直接得到清晰边缘，零缩放损耗）
+  - 小图 = 32px 画布 LANCZOS 降到 16px 后 **1:1 原大贴图**（托盘里的真实样子，
+    无任何放大，自然不糊）
 ⚠️ 图标改版后请重跑本脚本刷新 README 配图，别手改 PNG。
 """
 from __future__ import annotations
@@ -23,10 +27,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 from batbar.icons import IconSpec, render_icon  # noqa: E402
 
 OUT_DIR = os.path.join(os.path.dirname(__file__), "..", "assets")
-CANVAS = 32          # 图标画布（同运行时）
-SHOW = 16            # 托盘真实显示尺寸
-ZOOM = 8             # 放大倍数
-CELL_PAD = 10
+CANVAS = 32     # 图标画布（同运行时）
+SHOW = 16       # 托盘真实显示尺寸（1:1 原大展示）
+BIG = 128       # 大图原生渲染画布（不是放大，是直接画这么大）
+CELL_PAD = 14
+ROW_GAP = 8
 
 # (percent, warning, 刻度说明)
 CASES = [
@@ -52,40 +57,37 @@ def _cjk_font(size: int = 14):
     return ImageFont.load_default()
 
 
-def icon(percent, warning, light):
+def icon(percent, warning, light, size=CANVAS):
     return Image.open(io.BytesIO(render_icon(IconSpec(
-        percent, False, CANVAS, light_taskbar=light, warning=warning,
+        percent, False, size, light_taskbar=light, warning=warning,
     )))).convert("RGBA")
 
 
 def strip(bg: tuple[int, int, int], light: bool, warning_all: bool,
-          path: str, label_h: int = 22, cases=None) -> None:
+          path: str, cases=None) -> None:
     cases = cases or CASES
-    cell_w = SHOW + CELL_PAD * 2
-    zoom_w = ZOOM * SHOW
-    W = len(cases) * max(cell_w, zoom_w + CELL_PAD)
-    H = label_h + SHOW + 6 + zoom_w + label_h + 8
+    cell = BIG + CELL_PAD * 2
+    W = len(cases) * cell
+    label_h = 20
+    H = SHOW + ROW_GAP + BIG + label_h + 6
     im = Image.new("RGB", (W, H), bg)
     d = ImageDraw.Draw(im)
-    fg = (30, 30, 30) if light else (225, 225, 225)
+    fg = (60, 60, 60) if light else (170, 170, 170)
     font = _cjk_font()
 
     for i, (pct, warn, caption) in enumerate(cases):
         w = warning_all or warn
-        ic = icon(pct, w, light)
-        s16 = ic.resize((SHOW, SHOW), Image.LANCZOS)
-        x = i * max(cell_w, zoom_w + CELL_PAD)
-
-        # 放大图（主体，居中）
-        big = s16.resize((zoom_w, zoom_w), Image.NEAREST)
-        im.paste(big, (x + (max(cell_w, zoom_w + CELL_PAD) - zoom_w) // 2,
-                       label_h + SHOW + 6), big)
-        # 真实 16px（贴在放大图上方居中）
-        im.paste(s16, (x + (max(cell_w, zoom_w + CELL_PAD) - SHOW) // 2, label_h), s16)
+        x0 = i * cell
+        # 上排：托盘真实大小（32→16 LANCZOS，1:1 贴图，无放大）
+        s16 = icon(pct, w, light).resize((SHOW, SHOW), Image.LANCZOS)
+        im.paste(s16, (x0 + (cell - SHOW) // 2, 0), s16)
+        # 主图：原生大画布渲染（清晰边缘，零缩放）
+        big = icon(pct, w, light, size=BIG)
+        im.paste(big, (x0 + CELL_PAD, SHOW + ROW_GAP), big)
         # 刻度说明
         tw = d.textlength(caption, font=font)
-        d.text((x + (max(cell_w, zoom_w + CELL_PAD) - tw) / 2,
-                label_h + SHOW + 6 + zoom_w + 4), caption, fill=fg, font=font)
+        d.text((x0 + (cell - tw) / 2, SHOW + ROW_GAP + BIG + 4),
+               caption, fill=fg, font=font)
 
     os.makedirs(OUT_DIR, exist_ok=True)
     im.save(path)

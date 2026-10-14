@@ -13,9 +13,9 @@
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?style=flat-square)
 ![Tests](https://img.shields.io/badge/tests-518%20passed-brightgreen?style=flat-square)
 
-<img src="assets/tray-icons-dark.png" width="640" alt="托盘图标预览"/>
+<img src="assets/tray-icons-dark.png" width="720" alt="托盘图标预览"/>
 
-*图标由程序实时渲染：电量百分比 · 低电变红 · 无设备显示 `--`（上排 = 真实 16px，下排 = 放大）*
+*图标由程序实时渲染（大图 = 128px 原生渲染，小图 = 托盘真实 16px 1:1）：电量百分比 · 低电变红 · 无设备显示 `--`*
 
 </div>
 
