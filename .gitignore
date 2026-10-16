@@ -73,3 +73,6 @@ desktop.ini
 /last-known.json
 /agent.pid
 /batbar.exe
+
+# 本地编辑器/插件开关（.codebuddy 是会话级配置，不该进仓库）
+.codebuddy/
