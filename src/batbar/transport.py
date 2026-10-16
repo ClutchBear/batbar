@@ -126,16 +126,17 @@ class HidapiTransport(Transport):
             time.sleep(0.02)
 
     def close(self) -> None:
+        """关闭句柄：primary + 全部兄弟 collection。
+
+        ⚠️ 2026-10-16 修 bug：本方法**曾经被下面一个同名定义静默覆盖**
+        （Python 后定义胜出），那份只关 `self._dev`，于是 `_readers` 里的兄弟
+        collection 句柄**永远不会被关闭** —— 每次 `_drop_device()` 都漏一批，
+        Windows 上会一直占着设备。现在只剩这一份（覆盖 primary 是因为
+        `_readers[0] is self._dev`），**不要再新增同名方法**。
+        """
         self._closed = True
         for r in self._readers:
             try:
                 r.close()
             except Exception:  # noqa: BLE001 - 关闭失败无所谓
                 pass
-
-    def close(self) -> None:
-        self._closed = True
-        try:
-            self._dev.close()
-        except Exception:  # noqa: BLE001 - 关闭失败无所谓
-            pass
