@@ -10,7 +10,7 @@
 
 ★ 为什么它能活到今天
 --------------------
-518 个用例里没有一条碰过 `HidapiTransport.close`：`tests/test_mouse_probe.py`
+既有用例里没有一条碰过 `HidapiTransport.close`：`tests/test_mouse_probe.py`
 把整个类 patch 掉了（那里要测的是槽位发现，不是句柄生命周期）。也就是说
 **全覆盖的测试数骗人** —— 被 mock 掉的那条路径恰恰是唯一会漏资源的路径。
 

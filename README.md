@@ -11,7 +11,7 @@
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-0078D6?style=flat-square)
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?style=flat-square)
-![Tests](https://img.shields.io/badge/tests-518%20passed-brightgreen?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-532%20passed-brightgreen?style=flat-square)
 
 <img src="assets/tray-icons-dark.png" width="720" alt="托盘图标预览"/>
 
@@ -31,7 +31,7 @@
 - 🖱️ **RAWINPUT 鼠标唤醒**：纯点击（光标不动）也能唤醒电量读取；设备睡眠自动退避、唤醒后补读
 - 🎮 **全屏 / 游戏感知**：进全屏自动暂停轮询，退出约 10 秒恢复，不抢游戏资源
 - 📦 **绿色单 exe**：约 9 MB 双击即用，数据落在 exe 旁边，零安装、零外部服务、零驱动
-- 🧪 **518 项单元测试**：协议编解码 / 状态机 / 启动链黑盒冒烟全绿（任意机器可跑，无需硬件）
+- 🧪 **532 项单元测试**：协议编解码 / 状态机 / 启动链黑盒冒烟全绿（任意机器可跑，无需硬件）
 
 > 🏷️ **名字来历**：原名 `logi-tray`，因管的其实是**三类**设备（含迈从、LEOBOG 等非罗技品牌），
 > 2026-10-13 改名 **batbar**（**bat**tery + task**bar**）。改名波及面与数据迁移全程见 **[更新记录.md](更新记录.md)**。
@@ -893,7 +893,7 @@ COL03 系统控制器 / COL04 键盘 / COL05 鼠标 / COL06 供应商定义，�
 
 **分层原则（仍然保留，是单测可跑的前提）**：纯逻辑与 I/O 严格分离 ——
 `hidpp/session/state/lowbattery/lastknown/winevents/fullscreen` 零第三方依赖，
-`transport.py` 是唯一 `import hid` 的文件。这样 518 项单测**无需任何硬件**就能全绿。
+`transport.py` 是唯一 `import hid` 的文件。这样 532 项单测**无需任何硬件**就能全绿。
 
 ### 4.1 所需依赖
 
@@ -977,7 +977,7 @@ batbar/
 │   ├── probe_query.py          # 主动查询实验探针：写候选命令帧→收回帧（跑前须退托盘）
 │   ├── feature_watch.py        # feature 样本采集器：跨电量多拉几组，解译电压/百分比语义
 │   └── make_icon.py            # 程序化绘制 assets/batbar.ico（逐尺寸渲染 7 档）
-└── tests/                      # 518 项单测 + 1 个黑盒冒烟，全 stdlib，无需硬件
+└── tests/                      # 532 项单测 + 1 个黑盒冒烟，全 stdlib，无需硬件
     ├── smoke_launch.py         #   ★黑盒冒烟：真 spawn agent，读真实日志验启动链（见 [更新记录](更新记录.md) §6-F）
     ├── test_hidpp.py           #   帧编码/解析、错误帧、通知判据、电压插值
     ├── test_session.py         #   特性发现、读电池、通知回显、transport 失效传播
@@ -1001,7 +1001,7 @@ batbar/
     └── test_no_listener.py     #   源码扫描守门：不许 .bind(/listen(、不许 wire/net/controller 复活
 ```
 
-★ = 纯标准库层，任意 Python 3.11+ 直接可测（本项目已用 Python 3.13 实测 518 项全绿）。
+★ = 纯标准库层，任意 Python 3.11+ 直接可测（本项目已用 Python 3.13 实测 532 项全绿）。
 
 ---
 
@@ -1062,7 +1062,7 @@ smoke-test.bat                          rem 双击即跑，完整冒烟
 tests\smoke_launch.py --quick           rem 只验「进程能起来 + 构造函数不炸」
 ```
 
-区别：上面 518 项单测**全在测试进程内 mock**，从不真起托盘；冒烟测试真 spawn
+区别：上面 532 项单测**全在测试进程内 mock**，从不真起托盘；冒烟测试真 spawn
 子进程 + 读真实日志。两者互补，**改设备枚举路径（receiver24/wired24/dongle/
 feature24/win32ctypes）后两者都要跑**。详见 [更新记录](更新记录.md) §6-F。
 
@@ -1118,7 +1118,7 @@ python tools\keybeat.py --at 0 15 40 75        rem 自定义时刻
 
 | 部分 | 状态 |
 |---|---|
-| HID++ 协议编解码、会话编排、状态机 | ✅ **已实测**：**518 单测**在 Python 3.13 全绿 |
+| HID++ 协议编解码、会话编排、状态机 | ✅ **已实测**：**532 单测**在 Python 3.13 全绿 |
 | **真实启动链（process→托盘 NIM_ADD）** | ✅ **已实测**：`tests/smoke_launch.py` 黑盒冒烟，真起 agent 验启动链（[更新记录](更新记录.md) §6-F） |
 | **RAWINPUT 鼠标唤醒** | ✅ **已实测**（2026-10-13）：隐藏窗口 + `RIDEV_INPUTSINK` 真机收 971 条输入 100% 解码正确、去抖成 11 次事件；`MOUSE_FRESH` 门控验证通过（[更新记录](更新记录.md) §6-G） |
 | **全屏/游戏感知** | ✅ **已实测**（2026-10-13）：造真全屏窗口 → 6s 进入静音（QUNS=BUSY）、关窗 10s 恢复；`BATBAR_FULLSCREEN` 三种模式均验证（[更新记录](更新记录.md) §6-H） |
@@ -1273,7 +1273,7 @@ python tools\keybeat.py --at 0 15 40 75        rem 自定义时刻
       业务模块里**绝不许**再写 `xxx.argtypes = [...]`。
     - **复核手段**：`probes/verify_argtypes_shared.py` 直接读 `windll` 上的
       `argtypes`，断言「含 `POINTER(_私有类型)` 的签名数 = 0」，再交叉真调四个模块
-      入口确认无 `TypeError`。**光靠单测查不出来**——518 项 mock 测试全绿时这个
+      入口确认无 `TypeError`。**光靠单测查不出来**——532 项 mock 测试全绿时这个
       bug 还在（mock 从不真调 Win32）。
 
 13. **★ RAWINPUT 的按键位在 `ulButtons`，不在 `usFlags`**（2026-10-13 鼠标唤醒踩的）：
