@@ -85,11 +85,11 @@ def anchor_cwd(target: str | None = None) -> str:
     try:
         if want and os.path.isdir(want):
             os.chdir(want)
-    except Exception as exc:      # noqa: BLE001 —— 锚定失败不是致命错误
+    except Exception as exc:  # noqa: BLE001 —— 锚定失败不是致命错误
         log.debug("cwd 锚定失败（忽略）：%s", exc)
     try:
         return os.getcwd()
-    except Exception:             # noqa: BLE001
+    except Exception:  # noqa: BLE001
         return want or ""
 
 
@@ -113,14 +113,14 @@ def attach_parent_console(attach: object = None) -> bool:
     """
     import sys
     if sys.stdout is not None:
-        return True                  # 源码运行 / console 版 exe：本来就有
+        return True  # 源码运行 / console 版 exe：本来就有
     ok = False
     if attach is None:
         try:
             import ctypes
             # ATTACH_PARENT_PROCESS = -1
             ok = bool(ctypes.windll.kernel32.AttachConsole(-1))
-        except Exception:            # noqa: BLE001
+        except Exception:  # noqa: BLE001
             ok = False
     else:
         ok = bool(attach)
@@ -131,7 +131,7 @@ def attach_parent_console(attach: object = None) -> bool:
                           errors="replace", buffering=1)
         sys.stderr = open("CONOUT$", "w", encoding="utf-8",
                           errors="replace", buffering=1)
-    except Exception:                # noqa: BLE001 —— 接不上就退化成"只有日志"
+    except Exception:  # noqa: BLE001 —— 接不上就退化成"只有日志"
         return False
     return True
 
@@ -154,8 +154,8 @@ def make_console_safe() -> None:
         if stream is None:
             continue
         try:
-            stream.reconfigure(errors="replace")   # Python 3.7+ TextIOWrapper
-        except Exception:            # noqa: BLE001 —— 换不了就算了，别因此起不来
+            stream.reconfigure(errors="replace")  # Python 3.7+ TextIOWrapper
+        except Exception:  # noqa: BLE001 —— 换不了就算了，别因此起不来
             pass
 
 
@@ -176,20 +176,20 @@ def install_crash_log() -> None:
         try:
             log.error("未捕获异常，进程即将退出：\n%s",
                       "".join(traceback.format_exception(exc_type, exc, tb)))
-        except Exception:            # noqa: BLE001
+        except Exception:  # noqa: BLE001
             pass
         sys.__excepthook__(exc_type, exc, tb)
 
     sys.excepthook = _hook
 
 
-READ_TTL = 25.0         # 电量缓存：轮询间隔内不重复戳硬件
-MOUSE_FRESH = 8.0       # 罗技读数保鲜期（秒）——超过这么久没新读数，后台探测
-                        # 主动重读一次，读不到就清掉条目。
-                        # 2026-10-13 从 20s 收到 8s：实测（probes/probe_sleep_deep.py）
-                        # 空闲 40s 的鼠标依然 0.20s 内应答 ⇒ 探测很便宜、也不会把
-                        # 鼠标「戳醒」影响续航；而窗口越短，**关机后条目消失越快**
-                        # （窗口 = 关机到下一次探测之间的最大延迟）。
+READ_TTL = 25.0  # 电量缓存：轮询间隔内不重复戳硬件
+MOUSE_FRESH = 8.0  # 罗技读数保鲜期（秒）——超过这么久没新读数，后台探测
+# 主动重读一次，读不到就清掉条目。
+# 2026-10-13 从 20s 收到 8s：实测（probes/probe_sleep_deep.py）
+# 空闲 40s 的鼠标依然 0.20s 内应答 ⇒ 探测很便宜、也不会把
+# 鼠标「戳醒」影响续航；而窗口越短，**关机后条目消失越快**
+# （窗口 = 关机到下一次探测之间的最大延迟）。
 # 启动时「等首帧内容就绪再注册托盘图标」的上限（秒）。见 `run()` 里的说明：
 # shell 在 add 之后的一段时间里收下 NIM_MODIFY 却不重绘，而 add 那一帧必然
 # 被渲染 —— 所以把真读数赶在 add 之前。鼠标在睡/没设备时最多等这么久。
@@ -293,7 +293,7 @@ def _install_menu_refresh(icon, items_factory) -> None:
                 # 见上面 docstring：自己求值一次，交给 pystray 具体 tuple。
                 # `Icon.menu` 的 setter 内部会 update_menu()，别再手动调一次。
                 self.menu = pystray.Menu(*items_factory())
-            except Exception:         # noqa: BLE001 - 重建失败就用旧的，别影响弹出
+            except Exception:  # noqa: BLE001 - 重建失败就用旧的，别影响弹出
                 log.debug("menu refresh before popup failed", exc_info=True)
         return orig(self, wparam, lparam)
 
@@ -310,14 +310,14 @@ class Agent:
         self._hint = device_hint
         self._session: HidppSession | None = None
         self._icon = None
-        self._lock = threading.Lock()          # 护 _session
+        self._lock = threading.Lock()  # 护 _session
         self._last_info: H.BatteryInfo | None = None
         self._last_read_ts = 0.0
-        self._last_devnum: int | None = None       # 上次扫中的对码槽位（重开时快路径）
-        self._last_icon = None                   # 最近一次 IconSpec（换色重绘用）
+        self._last_devnum: int | None = None  # 上次扫中的对码槽位（重开时快路径）
+        self._last_icon = None  # 最近一次 IconSpec（换色重绘用）
         self._last_tooltip = "Logitech"
-        self._last_painted: tuple[bytes, str] | None = None   # 最近真正写进托盘的
-                                                 # (png, tooltip)：内容没变就不打扰 shell
+        self._last_painted: tuple[bytes, str] | None = None  # 最近真正写进托盘的
+        # (png, tooltip)：内容没变就不打扰 shell
         self._running = True
         # 是否已拿到过真实读数（2026-10-13 用户需求：启动后立刻有图标，没数据
         # 就画 "--" 而不是先空白几秒、再画 "?"）。置位点见 _apply_icon（快照里
@@ -333,27 +333,27 @@ class Agent:
         # _menu_items → _apply_icon → _set_icon 是同线程的一条链）
         self._icon_lock = threading.RLock()
         # ---- 多设备（罗技 HID++ + 蓝牙键盘/耳机）----
-        self._bt = None                          # bt_battery.BluetoothBattery（懒建）
-        self._tracked = "hidpp"                  # 当前跟踪源："hidpp" 或 "BT:<名>"
-        self._tracked_pct: int | None = None     # BT 源的最近读数（standalone 渲染用）
+        self._bt = None  # bt_battery.BluetoothBattery（懒建）
+        self._tracked = "hidpp"  # 当前跟踪源："hidpp" 或 "BT:<名>"
+        self._tracked_pct: int | None = None  # BT 源的最近读数（standalone 渲染用）
         self._tracked_chg = False
-        self._bt_misses = 0                      # BT 源连续读不到计数（自适应回通用）
-        self._sleep_until = 0.0                  # HID++ 读失败后的退避截止（防 0.5s 循环狂戳硬件）
-        self._last_dongle_refresh = 0.0          # 2.4G 帧回调触发的 UI 刷新节流
-        self._lowbat = None                      # 低电量提醒状态机（run() 里建，懒加载）
-        self._last_warn: tuple[str, int, bool] | None = None   # 图标选源缓存（变了才重绘）
-        self._last_raw = (None, False)           # 非警告态的原始读数（换主题重绘用）
-        self._manual_name: str | None = None     # 手动切换的显示设备（临时抢图标）
-        self._manual_until = 0.0                 # 手动显示截止（到时自动回退低电设备）
-        self._ticks = 0                          # 后台轮询计数（每 4 轮无条件重绘图标）
-        self._warned: dict[str, float] = {}      # 节流告警时间戳（同一错误源 30s 一次）
+        self._bt_misses = 0  # BT 源连续读不到计数（自适应回通用）
+        self._sleep_until = 0.0  # HID++ 读失败后的退避截止（防 0.5s 循环狂戳硬件）
+        self._last_dongle_refresh = 0.0  # 2.4G 帧回调触发的 UI 刷新节流
+        self._lowbat = None  # 低电量提醒状态机（run() 里建，懒加载）
+        self._last_warn: tuple[str, int, bool] | None = None  # 图标选源缓存（变了才重绘）
+        self._last_raw = (None, False)  # 非警告态的原始读数（换主题重绘用）
+        self._manual_name: str | None = None  # 手动切换的显示设备（临时抢图标）
+        self._manual_until = 0.0  # 手动显示截止（到时自动回退低电设备）
+        self._ticks = 0  # 后台轮询计数（每 4 轮无条件重绘图标）
+        self._warned: dict[str, float] = {}  # 节流告警时间戳（同一错误源 30s 一次）
         # 全屏/游戏感知（2026-10-13）：QUNS 采样 → 迟滞门 → 静音 toast + 暂停轮询
-        self._fs_gate = FS.FullscreenGate()      # 纯逻辑，环境变量可锁死
-        self._fs_skip_toast = 0                  # 因全屏而抑制的提醒计数（只统计）
-        _theme_listeners.append(self._on_sys_theme)   # 任务栏换深浅 → 图标重绘
-        _device_listeners.append(self._on_device_change)   # 设备插拔 → 立即重扫
+        self._fs_gate = FS.FullscreenGate()  # 纯逻辑，环境变量可锁死
+        self._fs_skip_toast = 0  # 因全屏而抑制的提醒计数（只统计）
+        _theme_listeners.append(self._on_sys_theme)  # 任务栏换深浅 → 图标重绘
+        _device_listeners.append(self._on_device_change)  # 设备插拔 → 立即重扫
         _taskbar_listeners.append(self._on_taskbar_recreated)  # explorer 重启 → 重注册
-        _mouse_listeners.append(self._on_mouse_activity)   # 鼠标有活动 → 催一次探测
+        _mouse_listeners.append(self._on_mouse_activity)  # 鼠标有活动 → 催一次探测
 
     # ---------- 设备 ----------
     def _ensure_device(self) -> HidppSession | None:
@@ -520,13 +520,13 @@ class Agent:
         """
         now = time.monotonic()
         if now < self._sleep_until:
-            return                                   # 退避期内不重复戳
+            return  # 退避期内不重复戳
         if (self._last_info is not None
                 and now - self._last_read_ts <= MOUSE_FRESH):
-            return                                   # 读数还新鲜，免探
+            return  # 读数还新鲜，免探
         try:
             sess = self._ensure_device()
-            if sess is None:             # 枚举不到 = 接收器已拔/驱动节点消失
+            if sess is None:  # 枚举不到 = 接收器已拔/驱动节点消失
                 self._last_info = None
                 self._sleep_until = now + 30.0
                 return
@@ -536,7 +536,7 @@ class Agent:
             self._last_info = None
             self._sleep_until = now + 30.0
             return
-        except Exception as exc:         # noqa: BLE001 - 探测失败按不应答处理
+        except Exception as exc:  # noqa: BLE001 - 探测失败按不应答处理
             log.debug("mouse probe: %s", exc)
             self._last_info = None
             self._sleep_until = now + 30.0
@@ -611,7 +611,7 @@ class Agent:
             from . import receiver24 as R
             from . import wired24
             base = R.base_name(name)
-            wired = base in R.wired_bases()   # 吃缓存
+            wired = base in R.wired_bases()  # 吃缓存
             # 插线充电 = 安全态：有线通道的充电标志也喂进去，免得插着线报低电
             if wired and wired24.charging(base):
                 charging = True
@@ -816,7 +816,7 @@ class Agent:
         def _run() -> None:
             time.sleep(max(0.2, deadline - time.monotonic()) + 0.3)
             if time.monotonic() < self._manual_until:
-                return                      # 期间又切过，交给新的计时线程
+                return  # 期间又切过，交给新的计时线程
             self._manual_name = None
             log.debug("manual icon window over -> back to auto")
             try:
@@ -843,7 +843,7 @@ class Agent:
         if pct is not None and not self._ready and not self._manual_name:
             try:
                 snap = {self._tracked_name(): pct}
-            except Exception:                # noqa: BLE001 - 算不出名字就走常规路径
+            except Exception:  # noqa: BLE001 - 算不出名字就走常规路径
                 snap = None
         return self._apply_icon(pct, chg, snap)
 
@@ -980,7 +980,7 @@ class Agent:
                 warn = False
             else:
                 warn = True
-            for n in snap:                       # 还原完整显示名（tooltip 用）
+            for n in snap:  # 还原完整显示名（tooltip 用）
                 if bases[n] == hit[0]:
                     return (n, hit[1], warn)
             return (hit[0], hit[1], warn)
@@ -1064,7 +1064,7 @@ class Agent:
                 tip = self._tip_for(p0, False, name=name0)
             png = I.render_icon(spec)
             ok = self._set_icon(png, tip)
-            if ok:                       # 只在真画上去后才更新缓存
+            if ok:  # 只在真画上去后才更新缓存
                 self._last_icon = spec
                 self._last_tooltip = tip
             return ok
@@ -1092,11 +1092,13 @@ class Agent:
         不能阻塞消息循环线程（否则托盘菜单会卡）。线程内兜底异常，避免
         "USB 忙"这类瞬时错误冒到 threading 默认 hook 打脏日志。
         """
+
         def _run() -> None:
             try:
                 self._refresh_from_tracked()
             except Exception as exc:  # noqa: BLE001
                 log.debug("device-change refresh failed: %s", exc)
+
         threading.Thread(target=_run, daemon=True).start()
 
     def _on_taskbar_recreated(self) -> None:
@@ -1111,14 +1113,16 @@ class Agent:
         icon = self._icon
         if icon is None:
             return
+
         def _reid() -> None:
             try:
                 icon.visible = False
-                time.sleep(0.2)   # 给 shell 一点时间处理 NIM_DELETE
+                time.sleep(0.2)  # 给 shell 一点时间处理 NIM_DELETE
                 icon.visible = True
                 log.info("托盘图标已在新任务栏重建（NIM_ADD）")
             except Exception as exc:  # noqa: BLE001
                 log.warning("taskbar icon rebuild failed: %s", exc)
+
         threading.Thread(target=_reid, daemon=True).start()
 
     def _on_mouse_activity(self) -> None:
@@ -1153,6 +1157,7 @@ class Agent:
                 self._probe_mouse()
             except Exception as exc:  # noqa: BLE001 - 探测失败不该冒到线程 hook
                 log.debug("mouse-activity probe failed: %s", exc)
+
         threading.Thread(target=_run, daemon=True).start()
 
     # ---------- 全屏/游戏感知（2026-10-13）----------
@@ -1261,6 +1266,7 @@ class Agent:
             # 显示 99」——菜单行是旧快照、点击又读新快照，ADC ±2 抖动跨帧）。
             def cb(_icon, _item):
                 self._set_tracked(key, snap=snap)
+
             return cb
 
         def _static_items():
@@ -1309,6 +1315,7 @@ class Agent:
             # 的现场** —— 记一份快照进日志，才能分清是「快照真空」还是「菜单
             # 读了另一份」。只在用户点菜单时打一行，不刷屏。
             log.info("菜单快照：%s", snap or "（空）")
+
             # 显示优先级（用户决策 2026-10-12）：耳机 > 鼠标 > 键盘。
             # 耳机用排除法判 —— 名字五花八门（WH-1000XM4 / AirPods…），没法规律。
             def _prio(name: str) -> int:
@@ -1318,6 +1325,7 @@ class Agent:
                 if "鼠标" in name or "mouse" in n:
                     return 1
                 return 0
+
             items = []
             # 对勾 = 图标此刻显示的那台（用户需求 2026-10-12：对勾跟托盘要匹配）。
             # 点击某台 → 图标切到它并**粘住**（默认不回退，2026-10-12 22:32 用户
@@ -1345,7 +1353,7 @@ class Agent:
                 key = self._key_for_name(name)
                 # 读不出电量也用 "--"（2026-10-13 用户定稿：任何时候不显示问号）
                 label = f"{name} {pct if pct is not None else '--'}%"
-                if self._is_charging(name):        # 插线充电中 → 加 ⚡（有线/2.4G/蓝牙都适用）
+                if self._is_charging(name):  # 插线充电中 → 加 ⚡（有线/2.4G/蓝牙都适用）
                     label += " ⚡"
                 items.append(pystray.MenuItem(
                     label, _make_switch(key, snap),
@@ -1407,7 +1415,7 @@ class Agent:
             if ok:
                 self._last_icon, self._last_tooltip = spec, "启动中…"
             return ok
-        except Exception as exc:      # noqa: BLE001 - 首帧画不出就等后台那一枪
+        except Exception as exc:  # noqa: BLE001 - 首帧画不出就等后台那一枪
             log.debug("boot icon: %s", exc)
             return False
 
@@ -1467,27 +1475,27 @@ class Agent:
         产品决策不变（2026-10-12）：2.4G 休眠与关机同权——扫描判不在，
         条目隐藏。"""
         self._push_fresh_read()
-        self._repaint()                       # 鼠标结论先画上（~0.5s 内）
+        self._repaint()  # 鼠标结论先画上（~0.5s 内）
 
         def _bt_step() -> None:
             try:
                 # 双向快判（bug 15）：一次 WinRT 查询同时摘离线 + 加上线，
                 # 对称且不退化（分开调会各 spawn 一次 ~0.6s，下线时延翻倍）。
                 self._bt_battery().sync_now()
-            except Exception as exc:          # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001
                 log.debug("manual refresh bt sync failed: %s", exc)
-            self._repaint()                   # 加/摘完立刻画（~0.6s 处）
+            self._repaint()  # 加/摘完立刻画（~0.6s 处）
             try:
                 self._bt_battery().force_refresh(quick=True)
-            except Exception as exc:          # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001
                 log.debug("manual refresh bt refresh failed: %s", exc)
-            self._repaint()                   # 电量值/新设备刷新完再画
+            self._repaint()  # 电量值/新设备刷新完再画
 
         def _g24_step() -> None:
             try:
                 from . import poll24
-                poll24.scan_now()             # 2.4G：当场扫一遍拿最新结论
-            except Exception as exc:          # noqa: BLE001
+                poll24.scan_now()  # 2.4G：当场扫一遍拿最新结论
+            except Exception as exc:  # noqa: BLE001
                 log.debug("manual refresh 24g scan failed: %s", exc)
             self._repaint()
 
@@ -1497,7 +1505,7 @@ class Agent:
         t_g24.start()
         t_bt.join()
         t_g24.join()
-        self._repaint()                       # 全路收尾，保证最终一致
+        self._repaint()  # 全路收尾，保证最终一致
 
     def _repaint(self) -> None:
         """按当前缓存全量重算图标+重选源（不读硬件，~ms 级）。
@@ -1508,7 +1516,7 @@ class Agent:
         反馈到托盘，而不是等全部查询结束才换图（bug 13）。"""
         try:
             self._apply_icon(None, False)
-        except Exception as exc:              # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
             log.debug("repaint: %s", exc)
 
     def _set_icon(self, png: bytes, tooltip: str) -> bool:
@@ -1530,14 +1538,14 @@ class Agent:
 
         from PIL import Image
         if not self._icon:
-            return False          # 托盘还没建好：调用方要据此重试，别写缓存
+            return False  # 托盘还没建好：调用方要据此重试，别写缓存
         # getattr 兜底：测试里用 object.__new__ 造的 Agent 没有这把锁
         lock = getattr(self, "_icon_lock", None) or nullcontext()
         try:
             with lock:
                 changed = ((png, tooltip) != getattr(self, "_last_painted", None))
                 img = Image.open(io.BytesIO(png))
-                self._icon.icon = _IcoBmpImage(img)   # pystray 热替换图标
+                self._icon.icon = _IcoBmpImage(img)  # pystray 热替换图标
                 self._icon.title = tooltip or "Logitech"
                 # ★ 内容变了要**重新注册**一次（NIM_DELETE + NIM_ADD），不能只靠
                 #   `icon = ...` 那条 NIM_MODIFY：2026-10-13 实测（probes/
@@ -1574,7 +1582,9 @@ class Agent:
         from .state import BatteryPoller
 
         class _Adapter:
-            def __init__(self, agent): self.a = agent
+            def __init__(self, agent):
+                self.a = agent
+
             def read_battery(self):
                 pct, chg, st = self.a._tracked_read()
                 if st == "error":
@@ -1583,6 +1593,7 @@ class Agent:
                     return None
                 return H.BatteryInfo(pct, None, chg, None,
                                      "hidpp" if self.a._tracked == "hidpp" else self.a._tracked)
+
             def ping(self):
                 # 睡眠判定：_tracked_read 的 sleeping 态即"对端不应"
                 _pct, _chg, st = self.a._tracked_read()
@@ -1802,11 +1813,13 @@ def _probe(a: Agent) -> int:
             p = sess.ping()
         except TransportClosed:
             p = None
-        print(f"读不到电量。ping={'通(协议OK,电池特性未命中——加 -v 看特性发现日志)' if p else '不通(设备休眠/未配对——动一下鼠标重试)'}")
+        print(
+            f"读不到电量。ping={'通(协议OK,电池特性未命中——加 -v 看特性发现日志)' if p else '不通(设备休眠/未配对——动一下鼠标重试)'}")
         a._drop_device()
         return 3
     a._drop_device()
-    print(f"电量 {info.percent}%  charging={info.charging}  特性={info.source}  电压={info.voltage_mv}  档位={info.approx}")
+    print(
+        f"电量 {info.percent}%  charging={info.charging}  特性={info.source}  电压={info.voltage_mv}  档位={info.approx}")
     return 0
 
 
@@ -1882,7 +1895,7 @@ def _scan(a: Agent) -> int:
 
     print("\n== 写入自检（Windows 要求写长度精确匹配 output report 大小）==")
     writable = []
-    listeners = []   # 写失败但保持打开：可能专职回帧（个别 Bolt 固件 TX/RX 分 collection）
+    listeners = []  # 写失败但保持打开：可能专职回帧（个别 Bolt 固件 TX/RX 分 collection）
     for d in cands:
         try:
             dev = T.open_path(d["path"])
@@ -1968,7 +1981,7 @@ def _enable_dpi_awareness() -> None:
     import ctypes
     try:
         user32 = ctypes.windll.user32
-    except AttributeError:      # 非 Windows（单测环境）
+    except AttributeError:  # 非 Windows（单测环境）
         return
     ok = False
     if mode in ("system", "sys"):
@@ -2002,7 +2015,7 @@ def _enable_dpi_awareness() -> None:
 # uxtheme 序号 API（_enable_dark_menus 成功时置位），供启动后主题切换复用
 _set_preferred_app_mode = None
 _flush_menu_themes = None
-_theme_listeners: list = []   # 主题切换回调（Agent 注册图标重绘）
+_theme_listeners: list = []  # 主题切换回调（Agent 注册图标重绘）
 # 设备树变化回调（2026-10-13）：WM_DEVICECHANGE 去抖后触发，Agent 注册"立即刷新"。
 # 与 _theme_listeners 分开，因为触发语义不同（主题=重绘图标；设备=重扫数据源）。
 _device_listeners: list = []
@@ -2035,7 +2048,7 @@ def _detect_sys_dark() -> bool:
                 v, _ = winreg.QueryValueEx(k, name)
                 return int(v) == 0
             except OSError:
-                continue       # 该键不存在，试下一个
+                continue  # 该键不存在，试下一个
         return False
     finally:
         winreg.CloseKey(k)
@@ -2085,7 +2098,7 @@ def _start_theme_watch() -> None:
                     ("lpszClassName", wintypes.LPCWSTR)]
 
     state = {"dark": _detect_sys_dark()}
-    keeping = []   # 持 WNDPROC 强引用防 GC（回调悬垂会崩进程）
+    keeping = []  # 持 WNDPROC 强引用防 GC（回调悬垂会崩进程）
 
     # ── 设备事件去抖（2026-10-13）──
     # 实测一次插拔会连发 10+ 条 DBT_DEVNODES_CHANGED（见 winevents 模块头），
@@ -2146,7 +2159,7 @@ def _start_theme_watch() -> None:
             if new != state["dark"]:
                 state["dark"] = new
                 _apply_menu_dark(new)
-                for cb in list(_theme_listeners):   # 图标重绘等订阅者
+                for cb in list(_theme_listeners):  # 图标重绘等订阅者
                     try:
                         cb(new)
                     except Exception:  # noqa: BLE001
@@ -2307,7 +2320,7 @@ def _register_usb_notify(user32, hwnd) -> None:
     _usb_notify_keep.append(dbi)
 
 
-_usb_notify_keep: list = []   # DEV_BROADCAST_DEVICEINTERFACE 强引用防 GC
+_usb_notify_keep: list = []  # DEV_BROADCAST_DEVICEINTERFACE 强引用防 GC
 
 
 def _register_raw_mouse(user32, hwnd) -> None:
@@ -2356,7 +2369,7 @@ def _register_raw_mouse(user32, hwnd) -> None:
     _raw_input_keep.append(rid)
 
 
-_raw_input_keep: list = []    # RAWINPUTDEVICE 强引用防 GC
+_raw_input_keep: list = []  # RAWINPUTDEVICE 强引用防 GC
 
 
 def _query_quns() -> int | None:
@@ -2381,7 +2394,7 @@ def _query_quns() -> int | None:
         f.argtypes = (ctypes.POINTER(ctypes.c_int),)
         state = ctypes.c_int(-1)
         hr = f(ctypes.byref(state))
-        if hr != 0:                      # S_OK == 0
+        if hr != 0:  # S_OK == 0
             log.debug("SHQueryUserNotificationState hr=%s", hr)
             return None
         return int(state.value)
@@ -2414,7 +2427,7 @@ def _enable_dark_menus() -> None:
     from ctypes import wintypes
     try:
         kernel32 = ctypes.windll.kernel32
-    except AttributeError:      # 非 Windows（单测环境）
+    except AttributeError:  # 非 Windows（单测环境）
         return
 
     # --- 1) activation context：临时 manifest 声明依赖 Common-Controls v6 ---
@@ -2496,7 +2509,7 @@ def _enable_dark_menus() -> None:
 
 
 def main():
-    _enable_dpi_awareness()   # 必须最先：建托盘窗口/菜单之前
+    _enable_dpi_awareness()  # 必须最先：建托盘窗口/菜单之前
     # ★ 打包版（windowed exe）没有控制台：`sys.stdout` 是 None，而 CPython 的
     #   print 对 None 是**静默 no-op** ⇒ `batbar.exe --scan` 会一个字都不打印。
     #   这里把调用方的控制台接回来。必须早于 applog.setup() —— 后者靠「stdout
