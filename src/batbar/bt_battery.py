@@ -182,6 +182,12 @@ EMPTY_GRACE = 180.0
 # 分支摘除并清保护标记（不会被 _accept 复活）。
 _FAST_ADD_PROTECT = 25.0
 
+# 首次调用 `cached_devices()` 时，等预热线程的**上限**（秒）。
+# 2026-10-16 修：原先是固定 `for _ in range(50): sleep(0.1)`（= 最多 5s），
+# 而调用方是 pystray **同步**建的右键菜单 ⇒ 启动后第一次点开菜单被冻住 5 秒，
+# 等满了若仍无结果照样返回空表（蓝牙条目整批消失）。改成 2s + last-known 兜底。
+_WAIT_FIRST = 2.0
+
 
 def connected_macs(macs: list[str], *, force: bool = False) -> dict[str, bool]:
     """{MAC: 是否已连接}；查不到返回 {}（调用方按「未知」处理，即不过滤）。
@@ -628,19 +634,42 @@ class BluetoothBattery:
     def cached_devices(self) -> dict[str, int | None]:
         """不阻塞版：直接给缓存值，并顺手触发后台预热。
 
-        第一次调用（从未取过）例外，必须同步等一次，否则调用方拿到空表。
+        ⚠️ 2026-10-16 修（"第一次调用必须同步等一次"这条例外被取消）：
+        本方法的调用方是 `agent.devices_snapshot()`，而它被 pystray 的菜单
+        工厂**同步**调用；CIM 全量查询实测 ~4s，预热线程在跑时又要空转最多
+        5s —— 合起来就是「启动后第一次点开托盘菜单卡住 4~5 秒」，卡完若还没
+        结果照样返回空表（蓝牙条目整批消失，要等下一轮预热才补回来）。
+        现在首次也交给后台预热，最多等 `_WAIT_FIRST` 秒，超时用 last-known
+        里最后读到的值顶上（宁可旧值也别闪空 —— 与 `EMPTY_GRACE`、闪回保护
+        是同一套产品取向）。
         """
-        first = self._ts == 0.0
-        if first:
-            # 从没取过：必须拿到一次数据，否则调用方看到空表。若预热线程
-            # 正在跑同一件事，等它（最多 5s）而不是自己再起一个 PowerShell。
+        if self._ts == 0.0:
             if self._refreshing:
-                for _ in range(50):
-                    if self._ts != 0.0:
-                        break
-                    time.sleep(0.1)
+                self._await_first()  # 已经有人在查了：等它，别再起一个 PS
             else:
-                self._refresh()
+                self.prewarm()  # 没人查：后台起一个，本轮不吃这 4s
+            if not self._devices:  # 还没结果 → 用上次读到的值先顶上
+                return self._lastknown_snapshot()
         else:
             self.prewarm()
         return dict(self._devices)
+
+    def _await_first(self) -> None:
+        """等预热线程出结果（上限 `_WAIT_FIRST` 秒，50ms 粒度）。"""
+        deadline = time.monotonic() + _WAIT_FIRST
+        while time.monotonic() < deadline:
+            if self._ts != 0.0:
+                return
+            time.sleep(0.05)
+
+    def _lastknown_snapshot(self) -> dict[str, int | None]:
+        """冷启动兜底：{友好名: 上次读到的电量}。
+
+        值可能旧（甚至设备已经离线），但比返回空表好：空表会让托盘直接跳到
+        「未发现设备」，而这几秒后真查询的结果就会覆盖它。
+        """
+        try:
+            return {n: pct for n, (pct, _ts) in lastknown.all_records().items()}
+        except Exception as exc:  # noqa: BLE001 - 兜底失败就当没兜底
+            log.debug("last-known fallback failed: %s", exc)
+            return {}

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import unittest
+from unittest import mock
 
 from batbar import bt_battery as B
 
@@ -596,6 +597,66 @@ class PreserveFastAdds(unittest.TestCase):
         b._fast_add_protect = {}
         devs = {"耳机 QCY Era 7": 100}
         self.assertIs(b._preserve_fast_adds(devs), devs)       # 同一对象，未拷贝
+
+
+class CachedDevicesFirstCall(unittest.TestCase):
+    """`cached_devices()` 是"不阻塞版"，**任何**调用都不能把菜单线程拖住。
+
+    2026-10-16 修的 bug：首次调用（冷缓存）会同步跑一次 ~4s 的 CIM 查询，
+    或在 `_refreshing` 时空转最多 5s —— 而调用方
+    `agent.devices_snapshot()` 是被 pystray 菜单工厂**同步**调的，等于启动后
+    第一次点开托盘菜单卡 4~5 秒；卡完仍无结果就返回空表（蓝牙条目整批消失）。
+    """
+    WAIT = 0.15          # 把 _WAIT_FIRST 压到 0.15s，测试不用真等 2s
+
+    def _fresh(self) -> B.BluetoothBattery:
+        b = B.BluetoothBattery()
+        b._ts = 0.0  # 冷缓存 = 从未取过
+        return b
+
+    def test_does_not_run_query_inline(self):
+        """冷缓存 + 没人预热 → 只触发后台预热，绝不在调用方线程跑查询。"""
+        b = self._fresh()
+        calls = []
+        with mock.patch.object(b, "prewarm", lambda: calls.append("prewarm")), \
+             mock.patch.object(b, "_refresh",
+                                    lambda: self.fail("首次调用不该同步跑 _refresh")), \
+             mock.patch.object(B, "_WAIT_FIRST", self.WAIT):
+            self.assertEqual({}, b.cached_devices())
+        self.assertEqual(["prewarm"], calls)
+
+    def test_waits_for_inflight_prewarm_but_bounded(self):
+        """预热线程已在跑 → 等它，但**必须**在 _WAIT_FIRST 内返回。"""
+        import time
+        b = self._fresh()
+        b._refreshing = True  # 假装有人在查（且一直查不出来）
+        t0 = time.monotonic()
+        with mock.patch.object(B, "_WAIT_FIRST", self.WAIT):
+            self.assertEqual({}, b.cached_devices())
+        elapsed = time.monotonic() - t0
+        self.assertLess(elapsed, self.WAIT + 0.5,
+                        f"等了 {elapsed:.2f}s，超过上限 —— 菜单又会被冻住")
+
+    def test_falls_back_to_lastknown_instead_of_empty(self):
+        """超时仍无结果 → 用 last-known 顶上，别让蓝牙条目整批消失。"""
+        from batbar import lastknown
+        lastknown.put("耳机 QCY Era 7", 82)
+        lastknown.put("键盘 LEOBOG Hi98C Pro", 55)
+        b = self._fresh()
+        b._refreshing = True
+        with mock.patch.object(B, "_WAIT_FIRST", self.WAIT):
+            got = b.cached_devices()
+        self.assertEqual({"耳机 QCY Era 7": 82, "键盘 LEOBOG Hi98C Pro": 55}, got)
+
+    def test_no_fallback_when_real_data_exists(self):
+        """已经有真数据 → 直接吃缓存，不掺 last-known（旧值不能盖真值）。"""
+        from batbar import lastknown
+        lastknown.put("耳机 QCY Era 7", 82)
+        b = self._fresh()
+        b._devices = {"耳机 QCY Era 7": 10}
+        b._ts = 1.0
+        with mock.patch.object(b, "prewarm", lambda: None):
+            self.assertEqual({"耳机 QCY Era 7": 10}, b.cached_devices())
 
 
 if __name__ == "__main__":
