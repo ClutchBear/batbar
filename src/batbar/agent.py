@@ -61,7 +61,6 @@ def anchor_cwd(target: str | None = None) -> str:
     但只要将来有人写了 `open("config.json")` 这类相对路径，本机开发测试永远正常
     （cwd = 项目根），却只在用户开机自启时炸 —— 属于最难排查的一类故障。这一句
     就是廉价的保险。
-
     锚点选 `sys.base_prefix`（Python 安装根，如 `C:\\Python312`）而不是
     `os.getcwd()`：前者永远存在且绝不是 System32；`sys.base_prefix` 而非
     `sys.prefix`，因为在 venv 里 prefix 会指向 `.venv`（同样存在，但语义上
@@ -86,6 +85,7 @@ def anchor_cwd(target: str | None = None) -> str:
     try:
         if want and os.path.isdir(want):
             os.chdir(want)
+
     except Exception as exc:  # noqa: BLE001 —— 锚定失败不是致命错误
         log.debug("cwd 锚定失败（忽略）：%s", exc)
     try:
@@ -225,7 +225,7 @@ class _IcoBmpImage:
     def __init__(self, img):
         self._img = img
 
-    def save(self, f, format=None, **params):  # noqa: A002
+    def save(self, f, format=None, **params):
         if format and format.upper() == "ICO":
             params.setdefault("bitmap_format", "bmp")
         return self._img.save(f, format=format, **params)
@@ -295,7 +295,7 @@ def _install_menu_refresh(icon, items_factory) -> None:
                 # 见上面 docstring：自己求值一次，交给 pystray 具体 tuple。
                 # `Icon.menu` 的 setter 内部会 update_menu()，别再手动调一次。
                 self.menu = pystray.Menu(*items_factory())
-            except Exception:  # noqa: BLE001 - 重建失败就用旧的，别影响弹出
+            except Exception:
                 log.debug("menu refresh before popup failed", exc_info=True)
         return orig(self, wparam, lparam)
 
@@ -901,7 +901,6 @@ class Agent:
         try:
             from . import dongle, lastknown
             from . import receiver24 as R
-            from . import wired24
 
             base = R.base_name(name)
             # 凡带 2.4G/有线后缀的条目都可能吃存档值，判定按「后缀」不按
@@ -1897,8 +1896,9 @@ def _scan(a: Agent) -> int:
     做 ping 与电池特性探测，打印命中项。用于定位你的设备该走哪个 collection、
     哪个 device_index——接收器把鼠标藏在槽位 1-7，不是 0xFF。"""
     import hid as _hid
-    from .session import HidppSession
+
     from . import transport as T
+    from .session import HidppSession
 
     print("== 本机所有 046D（罗技）HID collection ==")
     cands = []
@@ -2157,7 +2157,7 @@ def _start_theme_watch() -> None:
         """设备事件已静默 → 通知所有订阅者（各自重扫自己的数据源）。"""
         ev_state["fired"] += 1
         log.info("设备树变化（%s）→ 触发即时刷新（第 %d 次）", kind, ev_state["fired"])
-        for cb in list(_device_listeners):
+        for cb in _device_listeners:
             try:
                 cb()
             except Exception as exc:  # noqa: BLE001 - 单个订阅者失败不拖累其余
@@ -2168,7 +2168,7 @@ def _start_theme_watch() -> None:
         # DEBUG 级心跳：排障时能一眼看出 RAWINPUT 是不是真在工作
         # （seen=收到多少条 WM_INPUT，active=其中判定为"真实活动"的条数）。
         log.debug("鼠标活动去抖到点（seen=%d active=%d）→ 催探测", raw_stat["seen"], raw_stat["active"])
-        for cb in list(_mouse_listeners):
+        for cb in _mouse_listeners:
             try:
                 cb()
             except Exception as exc:  # noqa: BLE001
@@ -2193,7 +2193,7 @@ def _start_theme_watch() -> None:
             if new != state["dark"]:
                 state["dark"] = new
                 _apply_menu_dark(new)
-                for cb in list(_theme_listeners):  # 图标重绘等订阅者
+                for cb in _theme_listeners:  # 图标重绘等订阅者
                     try:
                         cb(new)
                     except Exception:  # noqa: BLE001
@@ -2241,7 +2241,7 @@ def _start_theme_watch() -> None:
         elif msg == WM_TASKBARCREATED:
             # explorer 崩溃/重启后任务栏重建 —— 图标已随旧任务栏消失，必须重注册
             log.info("任务栏已重建（explorer 重启）→ 重建托盘图标")
-            for cb in list(_taskbar_listeners):
+            for cb in _taskbar_listeners:
                 try:
                     cb()
                 except Exception as exc:  # noqa: BLE001
@@ -2609,7 +2609,7 @@ def main():
     from . import migrate
 
     _migrated, _migrate_why = migrate.migrate()
-    from . import applog, singleinstance, paths
+    from . import applog, paths, singleinstance
 
     path = applog.setup("agent", verbose=args.verbose)
     if path is not None:
