@@ -37,8 +37,24 @@ set BATBAR_DPI=%1
 start "" ".venv\Scripts\python.exe" -m batbar.agent --standalone
 echo [t] agent launched    %TIME%
 
+
+
+
+
+
+
+
+
+
+
 echo.
 echo Done. Icon should appear within ~1s - see "boot: icon registered" in the log.
 echo.
 pause
 endlocal
+
+
+
+
+
+

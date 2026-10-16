@@ -15,9 +15,11 @@
 得来，X3e 就是逐字节求和的校验函数。
 
 ── 设计（2026-10-12 21:00 改为**扫描制**，用户拍板） ──
-- **扫描 = 在/离线判据**：逐个目标发官方查询帧，等 `SETTLE`(1.5s) 看有没有
-  应答 —— 应答帧由 dongle 监听线程解析入库（frame_ts 更新），所以「扫完
-  看 frame_ts 是否前进」就是设备是否在线的硬证据。**取消观察窗口**。
+- **扫描 = 在/离线判据**：给每个目标发官方查询帧，等一个 `SETTLE`(1.5s)
+  窗口看有没有应答 —— 应答帧由 dongle 监听线程解析入库（frame_ts 更新），
+  所以「扫完看每台自己的 frame_ts 是否前进」就是该台是否在线的硬证据。
+  **取消观察窗口**；所有目标**共享同一个等待窗口**（2026-10-16 改，详见
+  `scan()` 的注释：靠"每台发帧前先取基准"保证重叠不互相污染）。
 - **节奏**：启动扫一遍 → 之后每 `SCAN_INTERVAL`(60s) 一遍 →
   托盘菜单「立即刷新」再扫一遍（`scan_now()`）。想调快慢用
   `BATBAR_SCAN_24G`（秒）。
@@ -37,14 +39,15 @@ import time
 from ctypes import wintypes
 
 from . import dongle
+from . import win32ctypes as w32
 
 log = logging.getLogger("batbar.poll24")
 
 SCAN_INTERVAL = 60.0          # 扫描间隔：60s（BATBAR_SCAN_24G 可覆盖）。
                               # bug 13（2026-10-13）：原 300s 让 2.4G 键盘关机
                               # 后自动消失要等 5 分钟；用户要求「一分钟左右」，
-                              # 扫描本身是 HID 帧查询（~1.5s/设备），60s 节奏
-                              # 无 CPU/硬件压力。
+                              # 扫描本身是 HID 帧查询（一轮 ~1.5s，各设备共享
+                              # 同一个等待窗口），60s 节奏无 CPU/硬件压力。
 SETTLE = 1.5                  # 发查询后等应答的窗口（秒）
 
 # 官方 getBattery 无线查询帧（含 sum8 校验尾，共 20B = 0xFF02 的
@@ -109,13 +112,15 @@ def poll_once(name: str) -> bool:
     if not path:
         return False
     k32 = ctypes.windll.kernel32              # type: ignore[attr-defined]
-    k32.CreateFileW.restype = ctypes.c_void_p
-    k32.CreateFileW.argtypes = [ctypes.c_wchar_p, wintypes.DWORD, wintypes.DWORD,
-                                ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD,
-                                ctypes.c_void_p]
-    k32.WriteFile.argtypes = [ctypes.c_void_p, ctypes.c_char_p, wintypes.DWORD,
-                              ctypes.POINTER(wintypes.DWORD), ctypes.c_void_p]
-    k32.CloseHandle.argtypes = [ctypes.c_void_p]
+    # ★ 签名一律走共享模块（幂等）—— 2026-10-16 审查：这里原本自己写了 6 行
+    #   `xxx.argtypes = [...]`（CreateFileW/WriteFile/CloseHandle），而
+    #   `win32ctypes.ensure_argtypes()` 是**一次性**的（`_argtypes_done` 后就
+    #   直接 return），本函数却是**每台设备每轮扫描都跑一次** ⇒ poll24 恒为
+    #   "最后写入者"，会把共享声明静默盖掉 —— 这正是 win32ctypes 模块头注里
+    #   明令禁止、且 2026-10-13 已经用黑盒冒烟抓到过一次的那类 bug。
+    #   今天两者类型恰好等价（HANDLE/LPCWSTR 就是 c_void_p/c_wchar_p）所以没炸，
+    #   但只要谁去动 win32ctypes，这里就会每 60s 抹一次。改回收敛写法。
+    w32.ensure_argtypes()
     h = k32.CreateFileW(path, GENERIC_WRITE, FILE_SHARE_RW, None,
                         OPEN_EXISTING, 0, 0)
     if not h or h == ctypes.c_void_p(-1).value:
@@ -145,12 +150,22 @@ def polled_age(name: str) -> float | None:
 
 
 def scan(names: list[str] | None = None) -> dict[str, bool]:
-    """扫描一轮：逐个目标发查询帧、等应答，返回 {名: 是否在线}。
+    """扫描一轮：给所有目标发查询帧、等应答，返回 {名: 是否在线}。
 
     在线判据 = **本轮扫描窗口内该设备的 frame_ts 有前进**（应答帧或推送帧
     都算，`dongle.last_frame_ts`）。用「时间戳有没有变」而不是「age 多小」，
-    是因为串行扫描下前一台的等待窗口会被后一台的旧帧污染 —— 时间戳前进是
-    每台各自的硬证据，互不干扰。**没有观察窗口**：扫完立即下结论。
+    是因为不同设备的帧会互相穿插 —— 时间戳前进是**每台各自**的硬证据。
+
+    ── 等待窗口**重叠**（2026-10-16 改，原来是每台各等一次）──
+    旧写法是「发 A → 等 1.5s → 发 B → 等 1.5s …」，一轮要 1.5s × 台数
+    （3 台 = 4.5s），而**耗时全在等应答上**，发帧本身是毫秒级。改成
+    「先给每台记基准 → 逐台发帧 → **统一等一个窗口** → 逐台比对」。
+
+    ⚠️ 重叠之所以安全，靠的是**每台自己的基准 ts 在本轮发帧之前就取好**：
+    `before[name]` 早于它的帧一律不算，所以 B 的旧帧再怎么穿插也污染不到 A
+    的结论（这正是旧写法不敢重叠的原因，它只在一个窗口里看"有没有新帧"）。
+    代价：A 在 [取基准, 发它自己的帧] 之间**主动推**来的帧也算活证据 ——
+    本来就是活证据，无所谓。
 
     未传 names 时扫 dongle 当前登记的全部目标。
 
@@ -160,14 +175,19 @@ def scan(names: list[str] | None = None) -> dict[str, bool]:
         {名: 在线}（未登记路径的目标也会给结论：不在线）。
     """
     targets = list(names) if names is not None else list(dongle.seen_paths())
+    # ① 基准：本轮起点各台的帧时刻（None = 这台还没来过帧）
+    before = {name: dongle.last_frame_ts(name) for name in targets}
+    # ② 逐台发查询帧（毫秒级；发不出去也照样等窗口：设备自己推来的帧同样是活证据）
+    for name in targets:
+        poll_once(name)
+    # ③ 统一等一个 SETTLE 窗口（旧写法在这里是每台各睡一次）
+    time.sleep(SETTLE)
+    # ④ 逐台比对：只有该台自己的 frame_ts 前进才算数，互不干扰
     out: dict[str, bool] = {}
     for name in targets:
-        before = dongle.last_frame_ts(name)     # 本轮起点的帧时刻（None = 还没有过帧）
-        poll_once(name)                         # 发不出去（句柄故障）也照样等窗口：
-        time.sleep(SETTLE)                      # 设备自己推来的帧同样是活证据
         after = dongle.last_frame_ts(name)
         # frame_ts 前进 = 本窗口内确实收到过新帧（应答或推送）= 在线
-        out[name] = after is not None and after > (before or 0)
+        out[name] = after is not None and after > (before[name] or 0)
     with _lock:
         _online.update(out)
         now = time.time()
@@ -178,7 +198,8 @@ def scan(names: list[str] | None = None) -> dict[str, bool]:
 
 
 def scan_now(names: list[str] | None = None) -> dict[str, bool]:
-    """同步扫一轮（「立即刷新」用；调用方需自带线程，约 1.5s/设备）。"""
+    """同步扫一轮（「立即刷新」用；调用方需自带线程，一轮约 `SETTLE` 秒 ——
+    所有设备共享同一个等待窗口，与设备台数无关）。"""
     return scan(names)
 
 

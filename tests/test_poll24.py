@@ -146,6 +146,54 @@ class Scan(unittest.TestCase):
         self.assertTrue(poll24.scanned(self.NAME))
 
 
+class WindowOverlap(unittest.TestCase):
+    """等待窗口必须**所有设备共享一个**（2026-10-16 改）。
+
+    旧写法是「发 A → 等 1.5s → 发 B → 等 1.5s …」，一轮 1.5s × 台数；耗时全在
+    等应答上，发帧本身毫秒级，重叠起来毫无副作用 —— 前提见 `scan()` 注释：
+    每台**发帧之前**先取自己的基准 ts，别台的帧污染不到本台的结论。
+
+    这两条钉住两件事：等待次数与台数无关；重叠后判据仍然是"每台各自"的。
+    """
+    NAMES = ("键盘 迈从 K87", "鼠标 迈从 A5", "键盘 LEOBOG Hi98C Pro")
+
+    def setUp(self):
+        dongle._stats.clear()
+        poll24.reset()
+        self._old_settle = poll24.SETTLE
+        poll24.SETTLE = 0.01
+
+    def tearDown(self):
+        dongle._stats.clear()
+        poll24.reset()
+        poll24.SETTLE = self._old_settle
+
+    def test_one_wait_window_regardless_of_device_count(self):
+        waits = []
+        with mock.patch.object(poll24, "poll_once", lambda n: True), \
+             mock.patch.object(poll24.time, "sleep", lambda s: waits.append(s)):
+            poll24.scan(self.NAMES)
+        self.assertEqual([poll24.SETTLE], waits,
+                         f"等待窗口退化成每台一个了：{waits}")
+
+    def test_per_device_verdict_still_independent(self):
+        """只有**自己**回了帧的那台判在线，别台的帧不能把它带成在线。"""
+        responding = {self.NAMES[1]}          # 只让第二台应答
+
+        def fake_poll(name):
+            if name in responding:
+                dongle._stats.setdefault(name, dongle._new_stat())
+                dongle._stats[name]["frame_ts"] = time.time()
+            return True
+
+        with mock.patch.object(poll24, "poll_once", fake_poll):
+            out = poll24.scan(self.NAMES)
+
+        self.assertEqual({self.NAMES[0]: False,
+                          self.NAMES[1]: True,
+                          self.NAMES[2]: False}, out)
+
+
 class SkipWhenGate(unittest.TestCase):
     """全屏/游戏时跳过扫描的判据注入（2026-10-13）。"""
 
