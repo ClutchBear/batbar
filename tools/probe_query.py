@@ -34,6 +34,7 @@ collection 只有一条输入队列，两个句柄会互相抢帧；而且写句
 ⚠️ 写命令的风险：候选帧来自同源项目的公开逆向，对自家固件是常规查询；
    但毕竟是往设备写未知字节。单次实验、随时 Ctrl+C，不要挂机循环。
 """
+
 from __future__ import annotations
 
 import argparse
@@ -53,13 +54,21 @@ setupapi = WinDLL("setupapi")
 
 
 class GUID(ctypes.Structure):
-    _fields_ = [("Data1", wintypes.DWORD), ("Data2", ctypes.c_ushort),
-                ("Data3", ctypes.c_ushort), ("Data4", ctypes.c_ubyte * 8)]
+    _fields_ = [
+        ("Data1", wintypes.DWORD),
+        ("Data2", ctypes.c_ushort),
+        ("Data3", ctypes.c_ushort),
+        ("Data4", ctypes.c_ubyte * 8),
+    ]
 
 
 class IFD(ctypes.Structure):
-    _fields_ = [("cbSize", wintypes.DWORD), ("InterfaceClassGuid", GUID),
-                ("Flags", wintypes.DWORD), ("Reserved", ctypes.c_ulonglong)]
+    _fields_ = [
+        ("cbSize", wintypes.DWORD),
+        ("InterfaceClassGuid", GUID),
+        ("Flags", wintypes.DWORD),
+        ("Reserved", ctypes.c_ulonglong),
+    ]
 
 
 class DETAIL(ctypes.Structure):
@@ -67,27 +76,34 @@ class DETAIL(ctypes.Structure):
 
 
 class CAPS(ctypes.Structure):
-    _fields_ = [("Usage", ctypes.c_ushort), ("UsagePage", ctypes.c_ushort),
-                ("InputReportByteLength", ctypes.c_ushort),
-                ("OutputReportByteLength", ctypes.c_ushort),
-                ("FeatureReportByteLength", ctypes.c_ushort),
-                ("Reserved", ctypes.c_ushort * 17),
-                ("NumberLinkCollectionNodes", ctypes.c_ushort),
-                ("NumberInputButtonCaps", ctypes.c_ushort),
-                ("NumberInputValueCaps", ctypes.c_ushort),
-                ("NumberInputDataIndices", ctypes.c_ushort),
-                ("NumberOutputButtonCaps", ctypes.c_ushort),
-                ("NumberOutputValueCaps", ctypes.c_ushort),
-                ("NumberOutputDataIndices", ctypes.c_ushort),
-                ("NumberFeatureButtonCaps", ctypes.c_ushort),
-                ("NumberFeatureValueCaps", ctypes.c_ushort),
-                ("NumberFeatureDataIndices", ctypes.c_ushort)]
+    _fields_ = [
+        ("Usage", ctypes.c_ushort),
+        ("UsagePage", ctypes.c_ushort),
+        ("InputReportByteLength", ctypes.c_ushort),
+        ("OutputReportByteLength", ctypes.c_ushort),
+        ("FeatureReportByteLength", ctypes.c_ushort),
+        ("Reserved", ctypes.c_ushort * 17),
+        ("NumberLinkCollectionNodes", ctypes.c_ushort),
+        ("NumberInputButtonCaps", ctypes.c_ushort),
+        ("NumberInputValueCaps", ctypes.c_ushort),
+        ("NumberInputDataIndices", ctypes.c_ushort),
+        ("NumberOutputButtonCaps", ctypes.c_ushort),
+        ("NumberOutputValueCaps", ctypes.c_ushort),
+        ("NumberOutputDataIndices", ctypes.c_ushort),
+        ("NumberFeatureButtonCaps", ctypes.c_ushort),
+        ("NumberFeatureValueCaps", ctypes.c_ushort),
+        ("NumberFeatureDataIndices", ctypes.c_ushort),
+    ]
 
 
 class OVERLAPPED(ctypes.Structure):
-    _fields_ = [("Internal", ctypes.c_size_t), ("InternalHigh", ctypes.c_size_t),
-                ("Offset", wintypes.DWORD), ("OffsetHigh", wintypes.DWORD),
-                ("hEvent", wintypes.HANDLE)]
+    _fields_ = [
+        ("Internal", ctypes.c_size_t),
+        ("InternalHigh", ctypes.c_size_t),
+        ("Offset", wintypes.DWORD),
+        ("OffsetHigh", wintypes.DWORD),
+        ("hEvent", wintypes.HANDLE),
+    ]
 
 
 INVALID = ctypes.c_void_p(-1).value
@@ -98,18 +114,38 @@ OPEN_EXISTING = 3
 FILE_FLAG_OVERLAPPED = 0x40000000
 
 k32.CreateFileW.restype = wintypes.HANDLE
-k32.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
-                            ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD,
-                            wintypes.HANDLE]
+k32.CreateFileW.argtypes = [
+    wintypes.LPCWSTR,
+    wintypes.DWORD,
+    wintypes.DWORD,
+    ctypes.c_void_p,
+    wintypes.DWORD,
+    wintypes.DWORD,
+    wintypes.HANDLE,
+]
 k32.ReadFile.restype = wintypes.BOOL
-k32.ReadFile.argtypes = [wintypes.HANDLE, ctypes.c_void_p, wintypes.DWORD,
-                         POINTER(wintypes.DWORD), POINTER(OVERLAPPED)]
+k32.ReadFile.argtypes = [
+    wintypes.HANDLE,
+    ctypes.c_void_p,
+    wintypes.DWORD,
+    POINTER(wintypes.DWORD),
+    POINTER(OVERLAPPED),
+]
 k32.WriteFile.restype = wintypes.BOOL
-k32.WriteFile.argtypes = [wintypes.HANDLE, ctypes.c_void_p, wintypes.DWORD,
-                          POINTER(wintypes.DWORD), POINTER(OVERLAPPED)]
+k32.WriteFile.argtypes = [
+    wintypes.HANDLE,
+    ctypes.c_void_p,
+    wintypes.DWORD,
+    POINTER(wintypes.DWORD),
+    POINTER(OVERLAPPED),
+]
 k32.GetOverlappedResult.restype = wintypes.BOOL
-k32.GetOverlappedResult.argtypes = [wintypes.HANDLE, POINTER(OVERLAPPED),
-                                    POINTER(wintypes.DWORD), wintypes.BOOL]
+k32.GetOverlappedResult.argtypes = [
+    wintypes.HANDLE,
+    POINTER(OVERLAPPED),
+    POINTER(wintypes.DWORD),
+    wintypes.BOOL,
+]
 k32.CancelIoEx.restype = wintypes.BOOL
 k32.CancelIoEx.argtypes = [wintypes.HANDLE, POINTER(OVERLAPPED)]
 k32.CloseHandle.argtypes = [wintypes.HANDLE]
@@ -124,16 +160,24 @@ hid.HidD_GetFeature.argtypes = [wintypes.HANDLE, ctypes.c_void_p, wintypes.DWORD
 hid.HidD_SetFeature.restype = wintypes.BOOLEAN
 hid.HidD_SetFeature.argtypes = [wintypes.HANDLE, ctypes.c_void_p, wintypes.DWORD]
 setupapi.SetupDiGetClassDevsW.restype = wintypes.HANDLE
-setupapi.SetupDiGetClassDevsW.argtypes = [POINTER(GUID), wintypes.LPCWSTR,
-                                          wintypes.HWND, wintypes.DWORD]
+setupapi.SetupDiGetClassDevsW.argtypes = [POINTER(GUID), wintypes.LPCWSTR, wintypes.HWND, wintypes.DWORD]
 setupapi.SetupDiEnumDeviceInterfaces.restype = wintypes.BOOL
 setupapi.SetupDiEnumDeviceInterfaces.argtypes = [
-    wintypes.HANDLE, ctypes.c_void_p, POINTER(GUID), wintypes.DWORD,
-    POINTER(IFD)]
+    wintypes.HANDLE,
+    ctypes.c_void_p,
+    POINTER(GUID),
+    wintypes.DWORD,
+    POINTER(IFD),
+]
 setupapi.SetupDiGetDeviceInterfaceDetailW.restype = wintypes.BOOL
 setupapi.SetupDiGetDeviceInterfaceDetailW.argtypes = [
-    wintypes.HANDLE, POINTER(IFD), POINTER(DETAIL), wintypes.DWORD,
-    POINTER(wintypes.DWORD), ctypes.c_void_p]
+    wintypes.HANDLE,
+    POINTER(IFD),
+    POINTER(DETAIL),
+    wintypes.DWORD,
+    POINTER(wintypes.DWORD),
+    ctypes.c_void_p,
+]
 setupapi.SetupDiDestroyDeviceInfoList.argtypes = [wintypes.HANDLE]
 
 
@@ -157,15 +201,15 @@ def find_target_path(want: tuple[int, int] | None = None):
         while True:
             ifd = IFD()
             ifd.cbSize = ctypes.sizeof(IFD)
-            if not setupapi.SetupDiEnumDeviceInterfaces(hdev, None, byref(g),
-                                                        i, byref(ifd)):
+            if not setupapi.SetupDiEnumDeviceInterfaces(hdev, None, byref(g), i, byref(ifd)):
                 break
             i += 1
             det = DETAIL()
             det.cbSize = 8
             size = wintypes.DWORD(ctypes.sizeof(DETAIL))
             if not setupapi.SetupDiGetDeviceInterfaceDetailW(
-                    hdev, byref(ifd), byref(det), size, byref(size), None):
+                hdev, byref(ifd), byref(det), size, byref(size), None
+            ):
                 continue
             up = det.DevicePath.upper()
             hit = None
@@ -178,8 +222,7 @@ def find_target_path(want: tuple[int, int] | None = None):
             if not hit:
                 continue
             name, _key = hit
-            h = k32.CreateFileW(det.DevicePath, 0, FILE_SHARE_RW, None,
-                                OPEN_EXISTING, 0, 0)
+            h = k32.CreateFileW(det.DevicePath, 0, FILE_SHARE_RW, None, OPEN_EXISTING, 0, 0)
             if not h or h == INVALID:
                 continue
             try:
@@ -190,10 +233,14 @@ def find_target_path(want: tuple[int, int] | None = None):
                 hid.HidP_GetCaps(pp, byref(caps))
                 hid.HidD_FreePreparsedData(pp)
                 if caps.UsagePage == 0xFF02 and caps.InputReportByteLength >= FRAME_LEN:
-                    return (det.DevicePath, caps.OutputReportByteLength, name,
-                            caps.InputReportByteLength,
-                            caps.FeatureReportByteLength,
-                            caps.NumberFeatureDataIndices)
+                    return (
+                        det.DevicePath,
+                        caps.OutputReportByteLength,
+                        name,
+                        caps.InputReportByteLength,
+                        caps.FeatureReportByteLength,
+                        caps.NumberFeatureDataIndices,
+                    )
             finally:
                 k32.CloseHandle(h)
         return None, None, None, None, None, None
@@ -210,8 +257,9 @@ def open_rw(path: str):
     注意 GENERIC_WRITE 与 FILE_FLAG_OVERLAPPED 数值同为 0x40000000 但分属
     不同参数（dwDesiredAccess / dwFlagsAndAttributes），互不冲突。
     """
-    return k32.CreateFileW(path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_RW,
-                           None, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, 0)
+    return k32.CreateFileW(
+        path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_RW, None, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, 0
+    )
 
 
 class Reader:
@@ -241,7 +289,7 @@ class Reader:
         # InputReportByteLength 截断，比信 GetOverlappedResult 的字节数出参
         # 可靠（事件模式下该出参是垃圾，见 read/write 注释）。0 = 未知，退回 n。
         self.report_len = report_len
-        self.ev = k32.CreateEventW(None, False, False, None)   # 自动重置事件
+        self.ev = k32.CreateEventW(None, False, False, None)  # 自动重置事件
         self.last_err = 0
         k32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
         k32.WaitForSingleObject.restype = wintypes.DWORD
@@ -259,8 +307,8 @@ class Reader:
         report_len 截断，绝不信出参。
         """
         if self.report_len:
-            return bytes(self.buf[:self.report_len])
-        return bytes(self.buf[:self.n.value]) if self.n.value else None
+            return bytes(self.buf[: self.report_len])
+        return bytes(self.buf[: self.n.value]) if self.n.value else None
 
     def read(self, timeout_ms: int) -> bytes | None:
         """最多等 timeout_ms 毫秒；没帧返回 None（不抛、不挂）。"""
@@ -268,14 +316,14 @@ class Reader:
         ov.hEvent = self.ev
         ctypes.set_last_error(0)
         ok = k32.ReadFile(self.h, self.buf, 512, byref(self.n), byref(ov))
-        if ok:                                # 队列里已有帧，同步直接完成
+        if ok:  # 队列里已有帧，同步直接完成
             return self._take()
         err = ctypes.get_last_error()
         if err != self.ERROR_IO_PENDING:
             self.last_err = err
             return None
         if k32.WaitForSingleObject(self.ev, timeout_ms) == self.WAIT_TIMEOUT:
-            self._cancel_wait(ov)             # 超时：取消这次 IO，否则句柄状态脏
+            self._cancel_wait(ov)  # 超时：取消这次 IO，否则句柄状态脏
             return None
         ctypes.set_last_error(0)
         got = k32.GetOverlappedResult(self.h, byref(ov), byref(self.n), False)
@@ -304,7 +352,7 @@ class Reader:
             return err
         if k32.WaitForSingleObject(self.ev, timeout_ms) == self.WAIT_TIMEOUT:
             self._cancel_wait(ov)
-            return -1                          # -1 = 超时未确认
+            return -1  # -1 = 超时未确认
         ctypes.set_last_error(0)
         if k32.GetOverlappedResult(self.h, byref(ov), byref(nw), False):
             return len(payload)
@@ -329,6 +377,7 @@ def build_candidates(out_len: int) -> list[tuple[str, bytes]]:
     返回的每条已经是**可直接 WriteFile 的报告缓冲区**：首字节 = reportID，
     其后数据补齐到 out_len（OutputReportByteLength）。
     """
+
     def pack(payload: bytes) -> bytes:
         """payload 含 reportID 首字节，补齐/裁剪到 out_len。"""
         return payload.ljust(out_len, b"\x00")[:out_len]
@@ -365,7 +414,7 @@ def build_candidates(out_len: int) -> list[tuple[str, bytes]]:
     # 4) 自研同族镜像：把推送帧的 type=05 反过来当查询发（问「报一下电量」）。
     #    reportID 可能要求 0x00 或 0x13，两种都试；sum8 校验照抄推送帧算法。
     for rid in (0x00, 0x13):
-        f = bytearray([rid, 0x13, 0x0a, 0x01, 0x00, 0x04, 0x05, 0x00])
+        f = bytearray([rid, 0x13, 0x0A, 0x01, 0x00, 0x04, 0x05, 0x00])
         f += b"\x00" * (out_len - len(f) - 1)
         f.append(sum(f[1:9]) & 0xFF)
         cands.append((f"自研镜像 0x{rid:02x}:…04 05（sum8）", pack(bytes(f))))
@@ -393,21 +442,20 @@ def enumerate_collections(want: tuple[int, int]):
         while True:
             ifd = IFD()
             ifd.cbSize = ctypes.sizeof(IFD)
-            if not setupapi.SetupDiEnumDeviceInterfaces(hdev, None, byref(g),
-                                                        i, byref(ifd)):
+            if not setupapi.SetupDiEnumDeviceInterfaces(hdev, None, byref(g), i, byref(ifd)):
                 break
             i += 1
             det = DETAIL()
             det.cbSize = 8
             size = wintypes.DWORD(ctypes.sizeof(DETAIL))
             if not setupapi.SetupDiGetDeviceInterfaceDetailW(
-                    hdev, byref(ifd), byref(det), size, byref(size), None):
+                hdev, byref(ifd), byref(det), size, byref(size), None
+            ):
                 continue
             up = det.DevicePath.upper()
             if vidtag not in up or pidtag not in up:
                 continue
-            h = k32.CreateFileW(det.DevicePath, 0, FILE_SHARE_RW, None,
-                                OPEN_EXISTING, 0, 0)
+            h = k32.CreateFileW(det.DevicePath, 0, FILE_SHARE_RW, None, OPEN_EXISTING, 0, 0)
             if not h or h == INVALID:
                 continue
             try:
@@ -417,9 +465,15 @@ def enumerate_collections(want: tuple[int, int]):
                 caps = CAPS()
                 hid.HidP_GetCaps(pp, byref(caps))
                 hid.HidD_FreePreparsedData(pp)
-                out.append((det.DevicePath, caps.UsagePage, caps.Usage,
-                            caps.InputReportByteLength,
-                            caps.FeatureReportByteLength))
+                out.append(
+                    (
+                        det.DevicePath,
+                        caps.UsagePage,
+                        caps.Usage,
+                        caps.InputReportByteLength,
+                        caps.FeatureReportByteLength,
+                    )
+                )
             finally:
                 k32.CloseHandle(h)
         return out
@@ -427,8 +481,7 @@ def enumerate_collections(want: tuple[int, int]):
         setupapi.SetupDiDestroyDeviceInfoList(hdev)
 
 
-def probe_collections(want, seconds: float, w, cmds: list[bytes] | None = None,
-                      out_len: int = 20) -> None:
+def probe_collections(want, seconds: float, w, cmds: list[bytes] | None = None, out_len: int = 20) -> None:
     """--collections 主体：同时只读打开目标的全部 collection，轮询监听
     seconds 秒（期间敲键），随后对声明了 feature 的接口逐个穷举读取。
 
@@ -445,11 +498,10 @@ def probe_collections(want, seconds: float, w, cmds: list[bytes] | None = None,
         w(f"[collections] 没枚举到 {want[0]:04X}:{want[1]:04X} 的任何接口")
         return
     w(f"[collections] {len(cols)} 个接口，监听 {seconds:.0f}s（请持续敲键盘）：")
-    w("  ⚠️ 含键盘/鼠标标准口 —— 监听期间该键盘的按键可能被探针读走导致"
-      "偶尔丢键，属预期，扫完即恢复。")
+    w("  ⚠️ 含键盘/鼠标标准口 —— 监听期间该键盘的按键可能被探针读走导致偶尔丢键，属预期，扫完即恢复。")
     opened = []
     try:
-        for (p, upage, usage, inlen, featlen) in cols:
+        for p, upage, usage, inlen, featlen in cols:
             tail = p.split("#")[-1][:12]
             label = f"up=0x{upage:04X}/us=0x{usage:04X} in={inlen} ft={featlen} {tail}"
             # 读写双权限：--collections 若带官方查询帧需要 WriteFile 投递。
@@ -457,11 +509,13 @@ def probe_collections(want, seconds: float, w, cmds: list[bytes] | None = None,
             # GENERIC_WRITE 直接 err=5（2026-10-12 16:03 实测：同步只开
             # GENERIC_READ 就能 OPEN）—— 电量应答帧很可能就从这些口的
             # input 推出来，必须带只读回退，否则永远漏听。
-            h = k32.CreateFileW(p, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_RW,
-                                None, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, 0)
+            h = k32.CreateFileW(
+                p, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_RW, None, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, 0
+            )
             if not h or h == INVALID:
-                h = k32.CreateFileW(p, GENERIC_READ, FILE_SHARE_RW,
-                                    None, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, 0)
+                h = k32.CreateFileW(
+                    p, GENERIC_READ, FILE_SHARE_RW, None, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, 0
+                )
             if not h or h == INVALID:
                 w(f"  [x] 打不开 {label} err={ctypes.get_last_error()}")
                 continue
@@ -482,8 +536,10 @@ def probe_collections(want, seconds: float, w, cmds: list[bytes] | None = None,
                     res[lab] = hits
                     for rid, data in sorted(hits.items()):
                         pf = parse_frame(data)
-                        w(f"  [{tag}][feature {lab}] rid=0x{rid:02x} "
-                          f"{data.hex(' ')}" + (f"  {pf}" if pf else ""))
+                        w(
+                            f"  [{tag}][feature {lab}] rid=0x{rid:02x} "
+                            f"{data.hex(' ')}" + (f"  {pf}" if pf else "")
+                        )
             return res
 
         # 基线：写命令前先拉一遍 feature —— 若官方查询的「应答」表现为
@@ -509,8 +565,7 @@ def probe_collections(want, seconds: float, w, cmds: list[bytes] | None = None,
                     pf = parse_frame(d)
                     # 键盘口（us=0x06）敲键必刷屏，只打前 3 帧；其余口全打
                     if counts[lab] <= 3 or "0xFF02" in lab:
-                        w(f"  <- [{lab}] {d.hex(' ')}"
-                          + (f"   {pf}" if pf else ""))
+                        w(f"  <- [{lab}] {d.hex(' ')}" + (f"   {pf}" if pf else ""))
         w("  帧计数：" + "; ".join(f"{lab}={n}" for lab, n in counts.items()))
         # feature 穷举（收尾）：与基线对比，值变了 = 官方查询刷新了 feature
         if cmds:
@@ -519,10 +574,8 @@ def probe_collections(want, seconds: float, w, cmds: list[bytes] | None = None,
                 for rid, data in hits.items():
                     old = base.get(lab, {}).get(rid)
                     if old is not None and old != data:
-                        w(f"  ★★ FEATURE 被刷新 [{lab}] rid=0x{rid:02x}: "
-                          f"{old.hex(' ')} -> {data.hex(' ')}")
-                        w("     ⇒ 官方查询命令有效！应答机制=刷新 feature，"
-                          "托盘可在刷新前先发命令再拉取")
+                        w(f"  ★★ FEATURE 被刷新 [{lab}] rid=0x{rid:02x}: {old.hex(' ')} -> {data.hex(' ')}")
+                        w("     ⇒ 官方查询命令有效！应答机制=刷新 feature，托盘可在刷新前先发命令再拉取")
             # gx87-studio 姿势：input 投递之外，再试 feature 通道内的
             # SetFeature 查询 → GetFeature 拉回（同协议族真机实锤的应答机制）
             w("  [roundtrip] gx87-studio 姿势：SetFeature 查询帧 → GetFeature：")
@@ -559,8 +612,9 @@ def feature_roundtrip(path: str, featlen: int, w, label: str) -> None:
     """
     if not featlen or featlen < 2:
         return
-    h = k32.CreateFileW(path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_RW,
-                        None, OPEN_EXISTING, 0, 0)  # 同步句柄，与 feature_hits 同姿势
+    h = k32.CreateFileW(
+        path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_RW, None, OPEN_EXISTING, 0, 0
+    )  # 同步句柄，与 feature_hits 同姿势
     if not h or h == INVALID:
         w(f"  [rt] {label} 句柄打不开 err={ctypes.get_last_error()}")
         return
@@ -581,8 +635,7 @@ def feature_roundtrip(path: str, featlen: int, w, label: str) -> None:
             buf[0] = bytes([rid])
             ctypes.set_last_error(0)
             if not hid.HidD_GetFeature(h, buf, featlen):
-                w(f"  [rt] {label} [{note}] 预拉取 rid=0x{rid:02x} 失败 "
-                  f"err={ctypes.get_last_error()}")
+                w(f"  [rt] {label} [{note}] 预拉取 rid=0x{rid:02x} 失败 err={ctypes.get_last_error()}")
                 continue
             before = bytes(buf.raw[:featlen])
             ctypes.set_last_error(0)
@@ -595,31 +648,41 @@ def feature_roundtrip(path: str, featlen: int, w, label: str) -> None:
             ctypes.set_last_error(0)
             ok_get = hid.HidD_GetFeature(h, buf2, featlen)
             after = bytes(buf2.raw[:featlen]) if ok_get else b""
-            w(f"  [rt] {label} [{note}] 查询帧 {q.hex(' ')} "
-              f"set={'OK' if ok_set else f'FAIL({serr})'} "
-              f"get={'OK' if ok_get else 'FAIL'}")
+            w(
+                f"  [rt] {label} [{note}] 查询帧 {q.hex(' ')} "
+                f"set={'OK' if ok_set else f'FAIL({serr})'} "
+                f"get={'OK' if ok_get else 'FAIL'}"
+            )
             if not ok_get:
                 continue
             # 关键判据（2026-10-12 15:38 实测修正）：设备可能只把**我们写进去的
             # opcode 字节回显**（byte[1]: 00→87/4a），其余保持原值 —— 那不是刷新。
             # 真·刷新 = 存在某字节 after[i] 既不等于旧值 before[i]、也不等于我们
             # 写的 q[i]（即设备自己产出的新值，典型是电量应答落进 payload）。
-            dev_changed = [i for i in range(min(len(after), len(before), len(q)))
-                           if after[i] != before[i] and after[i] != q[i]]
-            echo_only = [i for i in range(min(len(after), len(before), len(q)))
-                         if after[i] != before[i] and after[i] == q[i]]
+            dev_changed = [
+                i
+                for i in range(min(len(after), len(before), len(q)))
+                if after[i] != before[i] and after[i] != q[i]
+            ]
+            echo_only = [
+                i
+                for i in range(min(len(after), len(before), len(q)))
+                if after[i] != before[i] and after[i] == q[i]
+            ]
             if dev_changed:
                 pf = parse_frame(after)
-                w(f"  ★★ FEATURE 被查询帧刷新 [{label}] rid=0x{rid:02x}: "
-                  f"{before.hex(' ')} -> {after.hex(' ')}"
-                  f"（设备改写字节 {[hex(i) for i in dev_changed]}）"
-                  + (f"  {pf}" if pf else ""))
-                w("     ⇒ gx87-studio 姿势在本机成立！刷新链路 = "
-                  "SetFeature 查询 → GetFeature 拉回")
+                w(
+                    f"  ★★ FEATURE 被查询帧刷新 [{label}] rid=0x{rid:02x}: "
+                    f"{before.hex(' ')} -> {after.hex(' ')}"
+                    f"（设备改写字节 {[hex(i) for i in dev_changed]}）" + (f"  {pf}" if pf else "")
+                )
+                w("     ⇒ gx87-studio 姿势在本机成立！刷新链路 = SetFeature 查询 → GetFeature 拉回")
             elif echo_only:
-                w(f"     （仅回显：设备只写回了我们投递的 opcode 字节 "
-                  f"{[hex(i) for i in echo_only]}，payload 未变 ⇒ 非电量应答，"
-                  "本 feature 是主机可写暂存区）")
+                w(
+                    f"     （仅回显：设备只写回了我们投递的 opcode 字节 "
+                    f"{[hex(i) for i in echo_only]}，payload 未变 ⇒ 非电量应答，"
+                    "本 feature 是主机可写暂存区）"
+                )
     finally:
         k32.CloseHandle(h)
 
@@ -633,8 +696,7 @@ def feature_hits(path: str, featlen: int) -> dict[int, bytes]:
     res: dict[int, bytes] = {}
     if not featlen:
         return res
-    h = k32.CreateFileW(path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_RW,
-                        None, OPEN_EXISTING, 0, 0)
+    h = k32.CreateFileW(path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_RW, None, OPEN_EXISTING, 0, 0)
     if not h or h == INVALID:
         return res
     try:
@@ -669,8 +731,10 @@ def probe_feature(hd, featlen: int, w) -> None:
     无副作用，所以可以安全穷举。
     """
     if not featlen:
-        w("[feature] FeatureReportByteLength=0 且 NumberFeatureDataIndices=0"
-          " —— 该 collection 未声明任何 feature report，跳过穷举。")
+        w(
+            "[feature] FeatureReportByteLength=0 且 NumberFeatureDataIndices=0"
+            " —— 该 collection 未声明任何 feature report，跳过穷举。"
+        )
         return
     w(f"[feature] 穷举 reportID 0x00-0x1F（缓冲区 {featlen}B）：")
     hits = 0
@@ -685,12 +749,10 @@ def probe_feature(hd, featlen: int, w) -> None:
             pf = parse_frame(data)
             w(f"  ★ ID=0x{rid:02x}  {data.hex(' ')}" + (f"   <- {pf}" if pf else ""))
     if not hits:
-        w("  全部失败（该 collection 无可读 feature report）"
-          f"，最后 err={ctypes.get_last_error()}")
+        w(f"  全部失败（该 collection 无可读 feature report），最后 err={ctypes.get_last_error()}")
 
 
-def send_and_watch(rd: Reader, payload: bytes, wait_s: float,
-                   logf, *, set_out: bool = False) -> list[bytes]:
+def send_and_watch(rd: Reader, payload: bytes, wait_s: float, logf, *, set_out: bool = False) -> list[bytes]:
     """写一帧报告（payload 已含 reportID 且补齐长度），随后收集 wait_s 秒内
     的所有回帧。写失败也如实记录。
 
@@ -706,7 +768,7 @@ def send_and_watch(rd: Reader, payload: bytes, wait_s: float,
     else:
         res = rd.write(payload)
         status = f"OK {res}B" if res and res > 0 else f"FAIL code={res}"
-    line = (f"[{time.strftime('%H:%M:%S')}] WRITE {payload.hex(' ')} -> {status}\n")
+    line = f"[{time.strftime('%H:%M:%S')}] WRITE {payload.hex(' ')} -> {status}\n"
     print("   " + line.rstrip(), flush=True)
     logf.write(line)
     replies = []
@@ -739,37 +801,62 @@ def main() -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(description="0xFF02 主动查询探针")
-    ap.add_argument("--listen", type=float, default=0, metavar="SEC",
-                    help="只做被动监听 N 秒（验证单读者 / 看当前自发帧）")
-    ap.add_argument("--cmd", action="append", default=[], metavar="HEX",
-                    help="额外手动帧（空格分隔 hex，可多次）")
+    ap.add_argument(
+        "--listen",
+        type=float,
+        default=0,
+        metavar="SEC",
+        help="只做被动监听 N 秒（验证单读者 / 看当前自发帧）",
+    )
+    ap.add_argument(
+        "--cmd", action="append", default=[], metavar="HEX", help="额外手动帧（空格分隔 hex，可多次）"
+    )
     ap.add_argument("--repeat", type=int, default=1, help="整套候选打几遍")
-    ap.add_argument("--wait", type=float, default=2.5, metavar="SEC",
-                    help="每发命令后的回帧观察窗（默认 2.5s）")
+    ap.add_argument(
+        "--wait", type=float, default=2.5, metavar="SEC", help="每发命令后的回帧观察窗（默认 2.5s）"
+    )
     ap.add_argument("--out", default="_tmp", help="日志目录")
-    ap.add_argument("--force", action="store_true",
-                    help="即使检测到托盘在跑也继续（风险自担）")
-    ap.add_argument("--set-out", action="store_true",
-                    help="用 HidD_SetOutputReport(IOCTL) 投递而非 WriteFile；"
-                         "WriteFile 全零回帧时换这条通道再证一次")
-    ap.add_argument("--post-listen", type=float, default=0, metavar="SEC",
-                    help="扫完候选后再纯被动听 N 秒 —— 抓「唤醒瞬间推送帧」"
-                         "（唤醒常发生在扫描结束后几秒，旧版会整段漏掉）")
-    ap.add_argument("--target", metavar="VID:PID|名称",
-                    help="指定扫哪个接收器（如 05AC:024F 或 迈从键盘）；"
-                         "默认第一个枚举到的。多接收器时用于分别实验")
-    ap.add_argument("--feature", action="store_true",
-                    help="穷举 HidD_GetFeature（reportID 0x00-0x1F）——"
-                         "input/output 两通道都零帧时试最后一条标准 HID 通道")
-    ap.add_argument("--collections", type=float, default=0, metavar="SEC",
-                    help="全接口扫描：同时监听目标接收器的**所有** collection "
-                         "SEC 秒 + 对声明 feature 的接口穷举（0xFF02 口已证伪后"
-                         "的最后系统性排查）；需配 --target")
-    ap.add_argument("--official", action="store_true",
-                    help="配合 --collections/--feature：投递 Hub 官方 getBattery"
-                         " 无线帧 13 4a 01 00… 并做 PRE/POST 对比；同时按 "
-                         "gx87-studio 姿势试 SetFeature(06 87/4A…)→GetFeature "
-                         "查询帧往返（同协议族真机实锤的应答机制）")
+    ap.add_argument("--force", action="store_true", help="即使检测到托盘在跑也继续（风险自担）")
+    ap.add_argument(
+        "--set-out",
+        action="store_true",
+        help="用 HidD_SetOutputReport(IOCTL) 投递而非 WriteFile；WriteFile 全零回帧时换这条通道再证一次",
+    )
+    ap.add_argument(
+        "--post-listen",
+        type=float,
+        default=0,
+        metavar="SEC",
+        help="扫完候选后再纯被动听 N 秒 —— 抓「唤醒瞬间推送帧」"
+        "（唤醒常发生在扫描结束后几秒，旧版会整段漏掉）",
+    )
+    ap.add_argument(
+        "--target",
+        metavar="VID:PID|名称",
+        help="指定扫哪个接收器（如 05AC:024F 或 迈从键盘）；默认第一个枚举到的。多接收器时用于分别实验",
+    )
+    ap.add_argument(
+        "--feature",
+        action="store_true",
+        help="穷举 HidD_GetFeature（reportID 0x00-0x1F）——input/output 两通道都零帧时试最后一条标准 HID 通道",
+    )
+    ap.add_argument(
+        "--collections",
+        type=float,
+        default=0,
+        metavar="SEC",
+        help="全接口扫描：同时监听目标接收器的**所有** collection "
+        "SEC 秒 + 对声明 feature 的接口穷举（0xFF02 口已证伪后"
+        "的最后系统性排查）；需配 --target",
+    )
+    ap.add_argument(
+        "--official",
+        action="store_true",
+        help="配合 --collections/--feature：投递 Hub 官方 getBattery"
+        " 无线帧 13 4a 01 00… 并做 PRE/POST 对比；同时按 "
+        "gx87-studio 姿势试 SetFeature(06 87/4A…)→GetFeature "
+        "查询帧往返（同协议族真机实锤的应答机制）",
+    )
     args = ap.parse_args()
 
     want = None
@@ -784,9 +871,9 @@ def main() -> int:
         low = raw.lower()
         for key, name in TARGETS.items():
             aliases = _ALIASES.get(key, ())
-            if (raw in (name, f"{key[0]:04X}:{key[1]:04X}",
-                        f"{key[0]:04x}:{key[1]:04x}")
-                    or any(a in low for a in aliases)):
+            if raw in (name, f"{key[0]:04X}:{key[1]:04X}", f"{key[0]:04x}:{key[1]:04x}") or any(
+                a in low for a in aliases
+            ):
                 want = key
                 break
         if want is None:
@@ -794,8 +881,7 @@ def main() -> int:
                 v, p = raw.replace("-", ":").split(":")
                 want = (int(v, 16), int(p, 16))
             except ValueError:
-                w(f"[x] --target 无法解析：{raw}"
-                  "（用 05AC:024F / 3554:FA09 或 迈从/leobog）")
+                w(f"[x] --target 无法解析：{raw}（用 05AC:024F / 3554:FA09 或 迈从/leobog）")
                 return 1
 
     out = Path(args.out)
@@ -814,6 +900,7 @@ def main() -> int:
     if not args.force:
         try:
             from batbar import singleinstance
+
             if singleinstance.already_running():
                 w("\n[!] 检测到 batbar 托盘实例正在运行 —— 它会与本探针抢帧。")
                 w("    请先右键托盘「退出」（或任务管理器结束），再跑本工具。")
@@ -837,12 +924,11 @@ def main() -> int:
             # 凑满 0xFF02 的 OutputReportByteLength=20，与官方逐字节对齐：
             # [0x13(reportID), 0x4a, 0x01] + 16×0x00 + [校验和]  = 20 字节。
             body = bytearray([0x13, 0x4A, 0x01] + [0x00] * 16)  # 19 字节
-            chk = sum(body) & 0xFF                              # 0x13+0x4a+0x01=0x5e
-            cmd = bytes(body) + bytes([chk])                    # 20 字节
+            chk = sum(body) & 0xFF  # 0x13+0x4a+0x01=0x5e
+            cmd = bytes(body) + bytes([chk])  # 20 字节
             cmds = [cmd] if args.official else None
             if args.official:
-                w(f"[official] getBattery 帧（含校验和 0x{chk:02x}）: "
-                  f"{cmds[0].hex(' ')}")
+                w(f"[official] getBattery 帧（含校验和 0x{chk:02x}）: {cmds[0].hex(' ')}")
             probe_collections(want, args.collections, w, cmds=cmds)
         finally:
             w(f"\n日志：{logp.resolve()}")
@@ -852,15 +938,18 @@ def main() -> int:
     path, outlen, tname, inlen, featlen, featn = find_target_path(want)
     if not path:
         if want is not None:
-            w(f"[x] 没找到 {want[0]:04X}:{want[1]:04X} 的 0xFF02 collection。"
-              f"确认该接收器插着、键盘处于 2.4G 模式。")
+            w(
+                f"[x] 没找到 {want[0]:04X}:{want[1]:04X} 的 0xFF02 collection。"
+                f"确认该接收器插着、键盘处于 2.4G 模式。"
+            )
         else:
-            w("[x] 没找到任何已知接收器的 0xFF02 collection。"
-              "确认接收器插着、键盘 2.4G 模式。")
+            w("[x] 没找到任何已知接收器的 0xFF02 collection。确认接收器插着、键盘 2.4G 模式。")
         return 1
-    w(f"[ok] 目标接口: {tname} {path[-60:]}（OutputReportByteLength={outlen}"
-      f"，InputReportByteLength={inlen}，FeatureReportByteLength={featlen}"
-      f"，NumberFeatureDataIndices={featn}）")
+    w(
+        f"[ok] 目标接口: {tname} {path[-60:]}（OutputReportByteLength={outlen}"
+        f"，InputReportByteLength={inlen}，FeatureReportByteLength={featlen}"
+        f"，NumberFeatureDataIndices={featn}）"
+    )
     out_len = outlen if outlen and outlen >= 1 else FRAME_LEN
 
     hd = open_rw(path)
@@ -875,12 +964,10 @@ def main() -> int:
         try:
             hits = feature_hits(path, featlen)
             if not hits:
-                w(f"[feature] 穷举 0x00-0x1F 全部失败（featlen={featlen}；"
-                  "0 表示该口未声明 feature）")
+                w(f"[feature] 穷举 0x00-0x1F 全部失败（featlen={featlen}；0 表示该口未声明 feature）")
             for rid, data in sorted(hits.items()):
                 pf = parse_frame(data)
-                w(f"  ★ ID=0x{rid:02x}  {data.hex(' ')}"
-                  + (f"   <- {pf}" if pf else ""))
+                w(f"  ★ ID=0x{rid:02x}  {data.hex(' ')}" + (f"   <- {pf}" if pf else ""))
             if args.official:
                 w("[feature+official] gx87-studio 姿势查询帧往返：")
                 feature_roundtrip(path, featlen, w, tname)
@@ -908,14 +995,12 @@ def main() -> int:
             cands.append((f"manual-{i}", payload))
 
         old = drain(rd)
-        w(f"[drain] 排干旧帧 {len(old)} 条"
-          + ("：" + "; ".join(d.hex(" ") for d in old[:4]) if old else ""))
+        w(f"[drain] 排干旧帧 {len(old)} 条" + ("：" + "; ".join(d.hex(" ") for d in old[:4]) if old else ""))
 
         for rnd in range(args.repeat):
             for name, payload in cands:
                 w(f"\n## 候选 {name}  (第 {rnd + 1} 遍{'，SetOutputReport' if args.set_out else ''})")
-                replies = send_and_watch(rd, payload, args.wait, logf,
-                                         set_out=args.set_out)
+                replies = send_and_watch(rd, payload, args.wait, logf, set_out=args.set_out)
                 bat = [parse_frame(d) for d in replies if parse_frame(d)]
                 bats = [b for b in bat if b and b[0] == "battery"]
                 if bats:
@@ -926,11 +1011,10 @@ def main() -> int:
                     w(f"  ? 回了 {len(replies)} 帧但都解析不了（素材已全量落盘）")
                 else:
                     w("  - 无回帧")
-                drain(rd)     # 回帧可能有延迟，收尾再排一次防串台
+                drain(rd)  # 回帧可能有延迟，收尾再排一次防串台
 
         if args.post_listen > 0:
-            w(f"\n[post-listen] 扫完后再被动听 {args.post_listen:.0f}s"
-              "（此刻敲一下键盘 —— 唤醒帧会推上来）：")
+            w(f"\n[post-listen] 扫完后再被动听 {args.post_listen:.0f}s（此刻敲一下键盘 —— 唤醒帧会推上来）：")
             end = time.time() + args.post_listen
             while time.time() < end:
                 d = rd.read(300)
@@ -943,7 +1027,7 @@ def main() -> int:
         except Exception:  # noqa: BLE001
             pass
         k32.CloseHandle(hd)
-        w(f"\n日志：{logp.resolve()}")   # ★ 必须在 logf.close() 之前写
+        w(f"\n日志：{logp.resolve()}")  # ★ 必须在 logf.close() 之前写
         logf.close()
     return 0
 

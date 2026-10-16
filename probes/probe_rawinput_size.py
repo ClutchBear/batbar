@@ -9,6 +9,7 @@
 用法：
     .venv\\Scripts\\python.exe -X utf8 probes\\probe_rawinput_size.py
 """
+
 from __future__ import annotations
 
 import ctypes
@@ -29,46 +30,60 @@ WM_DESTROY = 2
 
 
 class RAWINPUTDEVICE(ctypes.Structure):
-    _fields_ = [("usUsagePage", ctypes.c_ushort), ("usUsage", ctypes.c_ushort),
-                ("dwFlags", wintypes.DWORD), ("hwndTarget", wintypes.HWND)]
+    _fields_ = [
+        ("usUsagePage", ctypes.c_ushort),
+        ("usUsage", ctypes.c_ushort),
+        ("dwFlags", wintypes.DWORD),
+        ("hwndTarget", wintypes.HWND),
+    ]
 
 
 class RAWINPUTHEADER(ctypes.Structure):
-    _fields_ = [("dwType", wintypes.DWORD), ("dwSize", wintypes.DWORD),
-                ("hDevice", wintypes.HANDLE), ("wParam", wintypes.WPARAM)]
+    _fields_ = [
+        ("dwType", wintypes.DWORD),
+        ("dwSize", wintypes.DWORD),
+        ("hDevice", wintypes.HANDLE),
+        ("wParam", wintypes.WPARAM),
+    ]
 
 
 class RAWMOUSE(ctypes.Structure):
     """官方 RAWMOUSE：usFlags(2) + (ulButtons(4) | ulRawButtons(4) 联合)
     + lLastX(4) + lLastY(4) + ulExtraInformation(4) —— 去 padding 后 24 字节。"""
-    _fields_ = [("usFlags", ctypes.c_ushort),
-                ("_pad", ctypes.c_ushort),          # 对齐到 4
-                ("ulButtons", wintypes.ULONG),
-                ("ulRawButtons", wintypes.ULONG),
-                ("lLastX", wintypes.LONG),
-                ("lLastY", wintypes.LONG),
-                ("ulExtraInformation", wintypes.ULONG)]
+
+    _fields_ = [
+        ("usFlags", ctypes.c_ushort),
+        ("_pad", ctypes.c_ushort),  # 对齐到 4
+        ("ulButtons", wintypes.ULONG),
+        ("ulRawButtons", wintypes.ULONG),
+        ("lLastX", wintypes.LONG),
+        ("lLastY", wintypes.LONG),
+        ("ulExtraInformation", wintypes.ULONG),
+    ]
 
 
-WNDPROC = ctypes.WINFUNCTYPE(ctypes.c_ssize_t, wintypes.HWND, ctypes.c_uint,
-                             wintypes.WPARAM, wintypes.LPARAM)
+WNDPROC = ctypes.WINFUNCTYPE(ctypes.c_ssize_t, wintypes.HWND, ctypes.c_uint, wintypes.WPARAM, wintypes.LPARAM)
 
 
 class WNDCLASS(ctypes.Structure):
-    _fields_ = [("style", ctypes.c_uint), ("lpfnWndProc", WNDPROC),
-                ("cbClsExtra", ctypes.c_int), ("cbWndExtra", ctypes.c_int),
-                ("hInstance", wintypes.HINSTANCE), ("hIcon", wintypes.HICON),
-                ("hCursor", wintypes.HANDLE),
-                ("hbrBackground", wintypes.HBRUSH),
-                ("lpszMenuName", wintypes.LPCWSTR),
-                ("lpszClassName", wintypes.LPCWSTR)]
+    _fields_ = [
+        ("style", ctypes.c_uint),
+        ("lpfnWndProc", WNDPROC),
+        ("cbClsExtra", ctypes.c_int),
+        ("cbWndExtra", ctypes.c_int),
+        ("hInstance", wintypes.HINSTANCE),
+        ("hIcon", wintypes.HICON),
+        ("hCursor", wintypes.HANDLE),
+        ("hbrBackground", wintypes.HBRUSH),
+        ("lpszMenuName", wintypes.LPCWSTR),
+        ("lpszClassName", wintypes.LPCWSTR),
+    ]
 
 
 def main() -> int:
     print(f"sizeof(RAWINPUTHEADER) = {ctypes.sizeof(RAWINPUTHEADER)}")
     print(f"sizeof(RAWMOUSE)       = {ctypes.sizeof(RAWMOUSE)}")
-    print(f"预期 raw mouse 整条     = "
-          f"{ctypes.sizeof(RAWINPUTHEADER) + ctypes.sizeof(RAWMOUSE)}")
+    print(f"预期 raw mouse 整条     = {ctypes.sizeof(RAWINPUTHEADER) + ctypes.sizeof(RAWMOUSE)}")
     print()
 
     # 关键：GetRawInputData 的 pcbSize 语义 = **cbSizeHeader 之外的数据大小**
@@ -76,10 +91,13 @@ def main() -> int:
     #                                PUINT pcbSize, UINT cbSizeHeader);
     # 当 pData=NULL 时，*pcbSize 被写成「整条 RAWINPUT（含 header）的大小」。
     user32.GetRawInputData.restype = wintypes.UINT
-    user32.GetRawInputData.argtypes = (wintypes.HANDLE, wintypes.UINT,
-                                       wintypes.LPVOID,
-                                       ctypes.POINTER(wintypes.UINT),
-                                       wintypes.UINT)
+    user32.GetRawInputData.argtypes = (
+        wintypes.HANDLE,
+        wintypes.UINT,
+        wintypes.LPVOID,
+        ctypes.POINTER(wintypes.UINT),
+        wintypes.UINT,
+    )
 
     seen = {"n": 0, "sizes": set(), "detail": []}
     keep = []
@@ -88,9 +106,9 @@ def main() -> int:
         if msg == WM_INPUT:
             size = wintypes.UINT(0)
             # 第一次：只要大小（pData=NULL）
-            n1 = user32.GetRawInputData(wintypes.HANDLE(lparam), RID_INPUT,
-                                        None, ctypes.byref(size),
-                                        ctypes.sizeof(RAWINPUTHEADER))
+            n1 = user32.GetRawInputData(
+                wintypes.HANDLE(lparam), RID_INPUT, None, ctypes.byref(size), ctypes.sizeof(RAWINPUTHEADER)
+            )
             if n1 != 0 or size.value == 0:
                 return user32.DefWindowProcW(hwnd, msg, wparam, lparam)
             seen["sizes"].add(size.value)
@@ -98,14 +116,15 @@ def main() -> int:
             # ★ 关键修正：pcbSize 传入**当前缓冲大小**（size.value），
             #   而不是别的值 —— 否则函数认为缓冲不够、返回 -1。
             cap = wintypes.UINT(size.value)
-            n2 = user32.GetRawInputData(wintypes.HANDLE(lparam), RID_INPUT,
-                                        buf, ctypes.byref(cap),
-                                        ctypes.sizeof(RAWINPUTHEADER))
+            n2 = user32.GetRawInputData(
+                wintypes.HANDLE(lparam), RID_INPUT, buf, ctypes.byref(cap), ctypes.sizeof(RAWINPUTHEADER)
+            )
             seen["n"] += 1
             if seen["n"] <= 3:
                 seen["detail"].append(
                     f"  #{seen['n']} size(q)={size.value} ret={n2} "
-                    f"cap={cap.value} err={ctypes.GetLastError()}")
+                    f"cap={cap.value} err={ctypes.GetLastError()}"
+                )
             return 0
         if msg == WM_DESTROY:
             user32.PostQuitMessage(0)
@@ -118,12 +137,10 @@ def main() -> int:
     def _loop():
         dw = user32.DefWindowProcW
         dw.restype = ctypes.c_ssize_t
-        dw.argtypes = (wintypes.HWND, ctypes.c_uint, wintypes.WPARAM,
-                       wintypes.LPARAM)
+        dw.argtypes = (wintypes.HWND, ctypes.c_uint, wintypes.WPARAM, wintypes.LPARAM)
         gm = user32.GetMessageW
         gm.restype = ctypes.c_int
-        gm.argtypes = (ctypes.POINTER(wintypes.MSG), wintypes.HWND,
-                       ctypes.c_uint, ctypes.c_uint)
+        gm.argtypes = (ctypes.POINTER(wintypes.MSG), wintypes.HWND, ctypes.c_uint, ctypes.c_uint)
         user32.TranslateMessage.argtypes = (ctypes.POINTER(wintypes.MSG),)
         dm = user32.DispatchMessageW
         dm.restype = ctypes.c_ssize_t
@@ -133,27 +150,32 @@ def main() -> int:
         rc.argtypes = (ctypes.POINTER(WNDCLASS),)
         cw = user32.CreateWindowExW
         cw.restype = wintypes.HWND
-        cw.argtypes = (wintypes.DWORD, wintypes.LPCWSTR, wintypes.LPCWSTR,
-                       wintypes.DWORD, ctypes.c_int, ctypes.c_int,
-                       ctypes.c_int, ctypes.c_int, wintypes.HWND,
-                       wintypes.HMENU, wintypes.HINSTANCE, wintypes.LPVOID)
+        cw.argtypes = (
+            wintypes.DWORD,
+            wintypes.LPCWSTR,
+            wintypes.LPCWSTR,
+            wintypes.DWORD,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            wintypes.HWND,
+            wintypes.HMENU,
+            wintypes.HINSTANCE,
+            wintypes.LPVOID,
+        )
         rr = user32.RegisterRawInputDevices
         rr.restype = wintypes.BOOL
-        rr.argtypes = (ctypes.POINTER(RAWINPUTDEVICE), wintypes.UINT,
-                       wintypes.UINT)
+        rr.argtypes = (ctypes.POINTER(RAWINPUTDEVICE), wintypes.UINT, wintypes.UINT)
         kernel32.GetModuleHandleW.restype = wintypes.HINSTANCE
         hinst = kernel32.GetModuleHandleW(None)
         kernel32.GetModuleHandleW.restype = None
 
-        wc = WNDCLASS(style=0, lpfnWndProc=proc, hInstance=hinst,
-                      lpszClassName="LogiTrayRawSizeProbe")
+        wc = WNDCLASS(style=0, lpfnWndProc=proc, hInstance=hinst, lpszClassName="LogiTrayRawSizeProbe")
         user32.RegisterClassW(ctypes.byref(wc))
-        hwnd = user32.CreateWindowExW(0, "LogiTrayRawSizeProbe", "", 0,
-                                      0, 0, 0, 0, None, None, hinst, None)
-        rid = RAWINPUTDEVICE(usUsagePage=0x01, usUsage=0x02,
-                             dwFlags=RIDEV_INPUTSINK, hwndTarget=hwnd)
-        user32.RegisterRawInputDevices(ctypes.byref(rid), 1,
-                                       ctypes.sizeof(RAWINPUTDEVICE))
+        hwnd = user32.CreateWindowExW(0, "LogiTrayRawSizeProbe", "", 0, 0, 0, 0, 0, None, None, hinst, None)
+        rid = RAWINPUTDEVICE(usUsagePage=0x01, usUsage=0x02, dwFlags=RIDEV_INPUTSINK, hwndTarget=hwnd)
+        user32.RegisterRawInputDevices(ctypes.byref(rid), 1, ctypes.sizeof(RAWINPUTDEVICE))
         msg = wintypes.MSG()
         while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
             user32.TranslateMessage(ctypes.byref(msg))
@@ -162,8 +184,7 @@ def main() -> int:
     threading.Thread(target=_loop, name="rawsize", daemon=True).start()
     t0 = time.perf_counter()
     while time.perf_counter() - t0 < 8.0:
-        sys.stdout.write(f"\r  动动鼠标… 剩余 {8.0-(time.perf_counter()-t0):4.1f}s "
-                         f"收到={seen['n']}")
+        sys.stdout.write(f"\r  动动鼠标… 剩余 {8.0 - (time.perf_counter() - t0):4.1f}s 收到={seen['n']}")
         sys.stdout.flush()
         time.sleep(0.25)
     print("\n")

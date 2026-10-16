@@ -8,6 +8,7 @@
 这正是踩过的坑的形状：托盘 agent 常驻后台占着 HID 队列，探针脚本再来抢，
 表现为「收不到帧」而不是「打不开设备」，极难定位。
 """
+
 from __future__ import annotations
 
 import subprocess
@@ -38,8 +39,9 @@ def _spawn_holder(name: str, seconds: float = 5.0) -> subprocess.Popen:
         f"print('ok' if S.acquire({name!r}, notify=False) else 'busy', flush=True)\n"
         f"time.sleep({seconds})\n"
     )
-    p = subprocess.Popen([sys.executable, "-c", code],
-                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    p = subprocess.Popen(
+        [sys.executable, "-c", code], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+    )
     line = (p.stdout.readline() or "").strip()
     if line != "ok":
         err = p.stderr.read() if p.stderr else ""
@@ -53,14 +55,14 @@ def _stop(p: subprocess.Popen) -> None:
     try:
         p.kill()
         p.wait(timeout=10)
-    except Exception:      # noqa: BLE001
+    except Exception:  # noqa: BLE001
         pass
     finally:
         for s in (p.stdout, p.stderr):
             try:
                 if s:
                     s.close()
-            except Exception:      # noqa: BLE001
+            except Exception:  # noqa: BLE001
                 pass
 
 
@@ -107,4 +109,4 @@ class Portable(unittest.TestCase):
         self.assertEqual(singleinstance.ERROR_ALREADY_EXISTS, 183)
 
     def test_release_when_not_held(self):
-        singleinstance.release()   # 不能抛
+        singleinstance.release()  # 不能抛

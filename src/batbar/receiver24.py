@@ -24,6 +24,7 @@
      `dongle.is_offline()` 为真时**不再显示该条目**（旧实现只看「接收器插着」，
      那是个恒真条件，于是关机了菜单里还挂着读数 —— 用户报的 bug）。
 """
+
 from __future__ import annotations
 
 import ctypes
@@ -38,8 +39,8 @@ from . import winproc
 
 log = logging.getLogger("batbar.r24")
 
-SUFFIX = " (2.4G)"          # 菜单里区分连接方式的后缀
-WIRED_SUFFIX = " (有线)"     # 插线充电形态（device-battery-tray 借鉴，2026-10-12）
+SUFFIX = " (2.4G)"  # 菜单里区分连接方式的后缀
+WIRED_SUFFIX = " (有线)"  # 插线充电形态（device-battery-tray 借鉴，2026-10-12）
 
 DIGCF_PRESENT = 0x02
 DIGCF_DEVICEINTERFACE = 0x10
@@ -56,6 +57,7 @@ _wired_refreshing = False
 
 def _target_vendor_ids() -> set[int]:
     from .dongle import TARGETS
+
     return {vid for (vid, _pid) in TARGETS}
 
 
@@ -66,22 +68,22 @@ def _scan_wired() -> set[str]:
     """
     from .dongle import TARGETS, WIRED_TARGETS
     from . import wired24
+
     result: set[str] = set()
 
     # ① 有线 feature 通道（force 时当场重扫一次：低电告警前必须拿实时态）
     try:
         wired24.poll_once()
-        result |= {n for n in set(TARGETS.values()) | set(WIRED_TARGETS.values())
-                   if wired24.plugged(n)}
+        result |= {n for n in set(TARGETS.values()) | set(WIRED_TARGETS.values()) if wired24.plugged(n)}
     except Exception as exc:  # noqa: BLE001 - 有线通道失败不影响 USB 判据
         log.debug("wired24 detect: %s", exc)
 
     # ② USB 节点 + 产品串分类
-    vendor_ids = {vid for (vid, _pid) in TARGETS} | \
-        {vid for (vid, _pid) in WIRED_TARGETS}
+    vendor_ids = {vid for (vid, _pid) in TARGETS} | {vid for (vid, _pid) in WIRED_TARGETS}
     try:
         import re
         import shutil
+
         shell = shutil.which("pwsh") or shutil.which("powershell")
         if shell:
             q = (
@@ -91,11 +93,16 @@ def _scan_wired() -> set[str]:
                 "  $b = Get-PnpDeviceProperty -InstanceId $_.InstanceId "
                 "-KeyName 'DEVPKEY_Device_BusReportedDeviceDesc' "
                 "-ErrorAction SilentlyContinue;"
-                "  \"$($_.DeviceID)|$($b.Data)\" }"
+                '  "$($_.DeviceID)|$($b.Data)" }'
             )
-            r = winproc.run_hidden([shell, "-NoProfile", "-Command", q],
-                                   capture_output=True, text=True, timeout=15,
-                                   encoding="utf-8", errors="replace")
+            r = winproc.run_hidden(
+                [shell, "-NoProfile", "-Command", q],
+                capture_output=True,
+                text=True,
+                timeout=15,
+                encoding="utf-8",
+                errors="replace",
+            )
             for line in (r.stdout or "").splitlines():
                 dev_id, _, bus = line.strip().partition("|")
                 m = re.search(r"VID_([0-9A-F]{4})", dev_id.upper())
@@ -105,7 +112,7 @@ def _scan_wired() -> set[str]:
                 if vid not in vendor_ids:
                     continue
                 if any(h in bus.lower() for h in ("receiver", "dongle", "接收器")):
-                    continue                     # 这是接收器本体，不是键盘插线
+                    continue  # 这是接收器本体，不是键盘插线
                 for table in (TARGETS, WIRED_TARGETS):
                     for (v, _p), name in table.items():
                         if v == vid:
@@ -150,7 +157,7 @@ def wired_bases(*, force: bool = False) -> set[str]:
             global _wired_cache, _wired_refreshing
             try:
                 _wired_cache = (time.monotonic(), _scan_wired())
-            except Exception as exc:      # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001
                 log.debug("wired_bases bg: %s", exc)
             finally:
                 _wired_refreshing = False
@@ -169,11 +176,11 @@ def is_wired(name: str, *, force: bool = False) -> bool:
 
 
 def _setupapi():
-    return ctypes.windll.setupapi     # type: ignore[attr-defined]
+    return ctypes.windll.setupapi  # type: ignore[attr-defined]
 
 
 def _hid():
-    return ctypes.windll.hid          # type: ignore[attr-defined]
+    return ctypes.windll.hid  # type: ignore[attr-defined]
 
 
 # ★ 结构体与 Win32 签名统一在 win32ctypes.py（唯一真相源）—— 见该模块头注：
@@ -186,16 +193,15 @@ def enumerate_receivers() -> list[tuple[int, int, str]]:
     try:
         setupapi = _setupapi()
         hid = _hid()
-        kernel32 = ctypes.windll.kernel32      # type: ignore[attr-defined]
-    except AttributeError:      # 非 Windows（单测环境）
+        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+    except AttributeError:  # 非 Windows（单测环境）
         return []
 
     # ★ 签名与结构体一律走共享模块（见 win32ctypes 头注）—— 三模块共用同一套，
     #   杜绝 windll.setupapi 的全局 argtypes 被互相覆盖（2026-10-13 实锤 bug）。
     w32.ensure_argtypes()
     guid = w32.hid_guid()
-    hdev = setupapi.SetupDiGetClassDevsW(byref(guid), None, None,
-                                         DIGCF_PRESENT | DIGCF_DEVICEINTERFACE)
+    hdev = setupapi.SetupDiGetClassDevsW(byref(guid), None, None, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE)
     if not hdev or hdev == w32.invalid_handle():
         log.debug("SetupDiGetClassDevsW failed: %s", ctypes.get_last_error())
         return []
@@ -204,20 +210,20 @@ def enumerate_receivers() -> list[tuple[int, int, str]]:
     i = 0
     while True:
         ifd = w32.IFD()
-        ifd.cbSize = ctypes.sizeof(w32.IFD)   # 不设就第一条就失败 → 枚举出 0 个
-        if not setupapi.SetupDiEnumDeviceInterfaces(hdev, None, byref(guid), i,
-                                                    byref(ifd)):
+        ifd.cbSize = ctypes.sizeof(w32.IFD)  # 不设就第一条就失败 → 枚举出 0 个
+        if not setupapi.SetupDiEnumDeviceInterfaces(hdev, None, byref(guid), i, byref(ifd)):
             break
         i += 1
         det = w32.DETAIL()
-        det.cbSize = 8          # x64 对齐后 cbSize 必须是 8
+        det.cbSize = 8  # x64 对齐后 cbSize 必须是 8
         size = wintypes.DWORD(ctypes.sizeof(w32.DETAIL))
         if not setupapi.SetupDiGetDeviceInterfaceDetailW(
-                hdev, byref(ifd), byref(det), size, byref(size), None):
+            hdev, byref(ifd), byref(det), size, byref(size), None
+        ):
             continue
-        h = kernel32.CreateFileW(det.DevicePath, 0, w32.FILE_SHARE_READ
-                                 | w32.FILE_SHARE_WRITE, None, w32.OPEN_EXISTING,
-                                 0, 0)
+        h = kernel32.CreateFileW(
+            det.DevicePath, 0, w32.FILE_SHARE_READ | w32.FILE_SHARE_WRITE, None, w32.OPEN_EXISTING, 0, 0
+        )
         if not h or h == w32.invalid_handle():
             continue
         try:
@@ -256,7 +262,7 @@ def devices(bt_names: set[str] | frozenset[str] = frozenset()) -> dict[str, int 
         wired = False
         try:
             wired = wired24.plugged(base)
-        except Exception:      # noqa: BLE001 - 有线探测失败按未插线处理
+        except Exception:  # noqa: BLE001 - 有线探测失败按未插线处理
             pass
         if dongle.is_offline(base) and not wired:
             log.debug("2.4G %s 持续静默，判离线 -> 不显示", base)
@@ -271,9 +277,14 @@ def devices(bt_names: set[str] | frozenset[str] = frozenset()) -> dict[str, int 
         else:
             pct = (lastknown.get(base) or (None,))[0]
         out[base + SUFFIX] = pct
-        log.debug("2.4G receiver %04X:%04X (%s) -> %s%s", vid, pid, prod, pct,
-                  " [实时]" if live is not None else
-                  (" [有线]" if wired else " [存档]"))
+        log.debug(
+            "2.4G receiver %04X:%04X (%s) -> %s%s",
+            vid,
+            pid,
+            prod,
+            pct,
+            " [实时]" if live is not None else (" [有线]" if wired else " [存档]"),
+        )
     return out
 
 
@@ -303,6 +314,7 @@ def stale_age(name: str) -> float | None:
     if not is_stale_entry(name):
         return None
     from . import dongle, lastknown
+
     live = dongle.battery_age(base_name(name))
     return live if live is not None else lastknown.age(base_name(name))
 
@@ -312,6 +324,7 @@ def is_live(name: str) -> bool:
     if not is_stale_entry(name):
         return False
     from . import dongle
+
     return dongle.battery_age(base_name(name)) is not None
 
 
@@ -324,6 +337,7 @@ def is_sleeping(name: str) -> bool:
     if not is_stale_entry(name):
         return False
     from . import dongle
+
     return dongle.is_sleeping(base_name(name))
 
 
@@ -332,6 +346,7 @@ def sleep_age(name: str) -> float | None:
     if not is_stale_entry(name):
         return None
     from . import dongle
+
     return dongle.sleep_age(base_name(name))
 
 

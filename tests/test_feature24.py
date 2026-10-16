@@ -3,6 +3,7 @@
 feature 命中帧来自本机 05AC:024F 的 0xFF04/0x0002 collection 实测：
     06 00 02 64 64 64 65 92
 """
+
 from __future__ import annotations
 
 import unittest
@@ -38,9 +39,9 @@ class SampleBuffer(unittest.TestCase):
         for i in range(F.MAX_SAMPLES + 10):
             buf.append((float(i), REAL))
             if len(buf) > F.MAX_SAMPLES:
-                del buf[:len(buf) - F.MAX_SAMPLES]
+                del buf[: len(buf) - F.MAX_SAMPLES]
         self.assertEqual(len(buf), F.MAX_SAMPLES)
-        self.assertEqual(buf[-1][0], F.MAX_SAMPLES + 9)   # 最新在尾
+        self.assertEqual(buf[-1][0], F.MAX_SAMPLES + 9)  # 最新在尾
 
     def test_clear_cache_resets(self):
         F._found["迈从键盘"] = [("path", 8, 6)]
@@ -63,6 +64,7 @@ class NoAliveNote(unittest.TestCase):
         """转记活帧的能力已删除（避免有人再把它接回去）。"""
         from batbar import dongle
         from batbar import feature24 as F
+
         self.assertFalse(hasattr(F, "_note_alive"))
         self.assertFalse(hasattr(dongle, "note_frame"))
 
@@ -70,6 +72,7 @@ class NoAliveNote(unittest.TestCase):
         """poll_once 只存样本，绝不往 dongle 存活统计里写东西。"""
         from batbar import dongle
         from batbar import feature24 as F
+
         dongle._stats.pop("迈从键盘", None)
         F._found["迈从键盘"] = [("Z:\\no-such-path", 8, 6)]
         F.poll_once("迈从键盘")

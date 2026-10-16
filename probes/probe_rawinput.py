@@ -20,6 +20,7 @@ ARCHITECTURE §6 待办「鼠标硬件唤醒检测」打算用 `RAWINPUT + RIDEV
     .venv\\Scripts\\python.exe -X utf8 probes\\probe_rawinput.py            # 12s
     .venv\\Scripts\\python.exe -X utf8 probes\\probe_rawinput.py --seconds 20
 """
+
 from __future__ import annotations
 
 import argparse
@@ -33,7 +34,7 @@ user32 = ctypes.windll.user32
 kernel32 = ctypes.windll.kernel32
 
 # ── RAWINPUT 常量 ──
-RIDEV_INPUTSINK = 0x00000100   # ★ 关键：让无焦点/后台窗口也能收输入
+RIDEV_INPUTSINK = 0x00000100  # ★ 关键：让无焦点/后台窗口也能收输入
 RIDEV_REMOVE = 0x00000001
 RID_INPUT = 0x10000003
 RIM_TYPEMOUSE = 0
@@ -68,40 +69,50 @@ MOUSE_HWHEEL = 0x0800
 
 
 class RAWINPUTDEVICE(ctypes.Structure):
-    _fields_ = [("usUsagePage", ctypes.c_ushort),
-                ("usUsage", ctypes.c_ushort),
-                ("dwFlags", wintypes.DWORD),
-                ("hwndTarget", wintypes.HWND)]
+    _fields_ = [
+        ("usUsagePage", ctypes.c_ushort),
+        ("usUsage", ctypes.c_ushort),
+        ("dwFlags", wintypes.DWORD),
+        ("hwndTarget", wintypes.HWND),
+    ]
 
 
 class RAWINPUTHEADER(ctypes.Structure):
-    _fields_ = [("dwType", wintypes.DWORD),
-                ("dwSize", wintypes.DWORD),
-                ("hDevice", wintypes.HANDLE),
-                ("wParam", wintypes.WPARAM)]
+    _fields_ = [
+        ("dwType", wintypes.DWORD),
+        ("dwSize", wintypes.DWORD),
+        ("hDevice", wintypes.HANDLE),
+        ("wParam", wintypes.WPARAM),
+    ]
 
 
 class MOUSEINPUT(ctypes.Structure):
-    _fields_ = [("dx", wintypes.LONG),
-                ("dy", wintypes.LONG),
-                ("mouseData", wintypes.DWORD),
-                ("dwFlags", wintypes.DWORD),
-                ("time", wintypes.DWORD),
-                ("dwExtraInfo", ctypes.c_void_p)]
+    _fields_ = [
+        ("dx", wintypes.LONG),
+        ("dy", wintypes.LONG),
+        ("mouseData", wintypes.DWORD),
+        ("dwFlags", wintypes.DWORD),
+        ("time", wintypes.DWORD),
+        ("dwExtraInfo", ctypes.c_void_p),
+    ]
 
 
-WNDPROC = ctypes.WINFUNCTYPE(ctypes.c_ssize_t, wintypes.HWND, ctypes.c_uint,
-                             wintypes.WPARAM, wintypes.LPARAM)
+WNDPROC = ctypes.WINFUNCTYPE(ctypes.c_ssize_t, wintypes.HWND, ctypes.c_uint, wintypes.WPARAM, wintypes.LPARAM)
 
 
 class WNDCLASS(ctypes.Structure):
-    _fields_ = [("style", ctypes.c_uint), ("lpfnWndProc", WNDPROC),
-                ("cbClsExtra", ctypes.c_int), ("cbWndExtra", ctypes.c_int),
-                ("hInstance", wintypes.HINSTANCE), ("hIcon", wintypes.HICON),
-                ("hCursor", wintypes.HANDLE),
-                ("hbrBackground", wintypes.HBRUSH),
-                ("lpszMenuName", wintypes.LPCWSTR),
-                ("lpszClassName", wintypes.LPCWSTR)]
+    _fields_ = [
+        ("style", ctypes.c_uint),
+        ("lpfnWndProc", WNDPROC),
+        ("cbClsExtra", ctypes.c_int),
+        ("cbWndExtra", ctypes.c_int),
+        ("hInstance", wintypes.HINSTANCE),
+        ("hIcon", wintypes.HICON),
+        ("hCursor", wintypes.HANDLE),
+        ("hbrBackground", wintypes.HBRUSH),
+        ("lpszMenuName", wintypes.LPCWSTR),
+        ("lpszClassName", wintypes.LPCWSTR),
+    ]
 
 
 def _mouse_kind(flags: int) -> str:
@@ -111,19 +122,22 @@ def _mouse_kind(flags: int) -> str:
     if flags & MOUSE_HWHEEL:
         return "滚轮H"
     for i, (dn, up) in enumerate(
-            [(MOUSE_BUTTON_1_DOWN, MOUSE_BUTTON_1_UP),
-             (MOUSE_BUTTON_2_DOWN, MOUSE_BUTTON_2_UP),
-             (MOUSE_BUTTON_3_DOWN, MOUSE_BUTTON_3_UP),
-             (MOUSE_BUTTON_4_DOWN, MOUSE_BUTTON_4_UP),
-             (MOUSE_BUTTON_5_DOWN, MOUSE_BUTTON_5_UP)], start=1):
+        [
+            (MOUSE_BUTTON_1_DOWN, MOUSE_BUTTON_1_UP),
+            (MOUSE_BUTTON_2_DOWN, MOUSE_BUTTON_2_UP),
+            (MOUSE_BUTTON_3_DOWN, MOUSE_BUTTON_3_UP),
+            (MOUSE_BUTTON_4_DOWN, MOUSE_BUTTON_4_UP),
+            (MOUSE_BUTTON_5_DOWN, MOUSE_BUTTON_5_UP),
+        ],
+        start=1,
+    ):
         if flags & dn:
             return f"按键{i}↓"
         if flags & up:
             return f"按键{i}↑"
     if flags & MOUSE_ATTRIBUTES_CHANGED:
         return "属性变化"
-    return "移动" if (flags & 0x0F) in (MOUSE_MOVE_RELATIVE,
-                                      MOUSE_MOVE_ABSOLUTE) else f"移动"
+    return "移动" if (flags & 0x0F) in (MOUSE_MOVE_RELATIVE, MOUSE_MOVE_ABSOLUTE) else f"移动"
 
 
 def main() -> int:
@@ -132,43 +146,50 @@ def main() -> int:
     args = ap.parse_args()
 
     stats = {"count": 0, "by_kind": {}, "by_type": {}, "sink_ok": None}
-    ignoring = []             # 持 WNDPROC 强引用防 GC
+    ignoring = []  # 持 WNDPROC 强引用防 GC
     stop = threading.Event()
 
     # GetRawInputData 签名（64 位必须显式声明）
     user32.GetRawInputData.restype = wintypes.UINT
-    user32.GetRawInputData.argtypes = (wintypes.HANDLE, wintypes.UINT,
-                                       wintypes.LPVOID,
-                                       ctypes.POINTER(wintypes.UINT),
-                                       wintypes.UINT)
+    user32.GetRawInputData.argtypes = (
+        wintypes.HANDLE,
+        wintypes.UINT,
+        wintypes.LPVOID,
+        ctypes.POINTER(wintypes.UINT),
+        wintypes.UINT,
+    )
 
     def _wnd_proc(hwnd, msg, wparam, lparam):
         if msg == WM_INPUT:
             # 先问大小，再取数据（标准两步法）
             size = wintypes.UINT(0)
-            n = user32.GetRawInputData(wintypes.HANDLE(lparam), RID_INPUT,
-                                       None, ctypes.byref(size),
-                                       ctypes.sizeof(RAWINPUTHEADER))
+            n = user32.GetRawInputData(
+                wintypes.HANDLE(lparam), RID_INPUT, None, ctypes.byref(size), ctypes.sizeof(RAWINPUTHEADER)
+            )
             if n != 0 or size.value == 0:
                 return user32.DefWindowProcW(hwnd, msg, wparam, lparam)
             buf = ctypes.create_string_buffer(size.value)
-            n = user32.GetRawInputData(wintypes.HANDLE(lparam), RID_INPUT,
-                                       buf, ctypes.byref(size),
-                                       ctypes.sizeof(RAWINPUTHEADER))
+            n = user32.GetRawInputData(
+                wintypes.HANDLE(lparam), RID_INPUT, buf, ctypes.byref(size), ctypes.sizeof(RAWINPUTHEADER)
+            )
             if n == 0xFFFFFFFF:
                 return user32.DefWindowProcW(hwnd, msg, wparam, lparam)
-            hdr = RAWINPUTHEADER.from_buffer_copy(buf.raw[:ctypes.sizeof(RAWINPUTHEADER)])
+            hdr = RAWINPUTHEADER.from_buffer_copy(buf.raw[: ctypes.sizeof(RAWINPUTHEADER)])
             stats["count"] += 1
-            tname = {RIM_TYPEMOUSE: "mouse", RIM_TYPEKEYBOARD: "kbd",
-                     RIM_TYPEHID: "hid"}.get(hdr.dwType, f"type{hdr.dwType}")
+            tname = {RIM_TYPEMOUSE: "mouse", RIM_TYPEKEYBOARD: "kbd", RIM_TYPEHID: "hid"}.get(
+                hdr.dwType, f"type{hdr.dwType}"
+            )
             stats["by_type"][tname] = stats["by_type"].get(tname, 0) + 1
             if hdr.dwType == RIM_TYPEMOUSE:
                 mi = MOUSEINPUT.from_buffer_copy(
-                    buf.raw[ctypes.sizeof(RAWINPUTHEADER):
-                            ctypes.sizeof(RAWINPUTHEADER) + ctypes.sizeof(MOUSEINPUT)])
+                    buf.raw[
+                        ctypes.sizeof(RAWINPUTHEADER) : ctypes.sizeof(RAWINPUTHEADER)
+                        + ctypes.sizeof(MOUSEINPUT)
+                    ]
+                )
                 k = _mouse_kind(mi.dwFlags)
                 stats["by_kind"][k] = stats["by_kind"].get(k, 0) + 1
-            return 0            # WM_INPUT 必须返回 0（DefWindowProc 会做清理）
+            return 0  # WM_INPUT 必须返回 0（DefWindowProc 会做清理）
         if msg == WM_DESTROY:
             user32.PostQuitMessage(0)
             return 0
@@ -180,12 +201,10 @@ def main() -> int:
     def _loop():
         dw = user32.DefWindowProcW
         dw.restype = ctypes.c_ssize_t
-        dw.argtypes = (wintypes.HWND, ctypes.c_uint,
-                       wintypes.WPARAM, wintypes.LPARAM)
+        dw.argtypes = (wintypes.HWND, ctypes.c_uint, wintypes.WPARAM, wintypes.LPARAM)
         gm = user32.GetMessageW
         gm.restype = ctypes.c_int
-        gm.argtypes = (ctypes.POINTER(wintypes.MSG), wintypes.HWND,
-                       ctypes.c_uint, ctypes.c_uint)
+        gm.argtypes = (ctypes.POINTER(wintypes.MSG), wintypes.HWND, ctypes.c_uint, ctypes.c_uint)
         user32.TranslateMessage.argtypes = (ctypes.POINTER(wintypes.MSG),)
         dm = user32.DispatchMessageW
         dm.restype = ctypes.c_ssize_t
@@ -195,32 +214,39 @@ def main() -> int:
         rc.argtypes = (ctypes.POINTER(WNDCLASS),)
         cw = user32.CreateWindowExW
         cw.restype = wintypes.HWND
-        cw.argtypes = (wintypes.DWORD, wintypes.LPCWSTR, wintypes.LPCWSTR,
-                       wintypes.DWORD, ctypes.c_int, ctypes.c_int,
-                       ctypes.c_int, ctypes.c_int, wintypes.HWND,
-                       wintypes.HMENU, wintypes.HINSTANCE, wintypes.LPVOID)
+        cw.argtypes = (
+            wintypes.DWORD,
+            wintypes.LPCWSTR,
+            wintypes.LPCWSTR,
+            wintypes.DWORD,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            wintypes.HWND,
+            wintypes.HMENU,
+            wintypes.HINSTANCE,
+            wintypes.LPVOID,
+        )
         rr = user32.RegisterRawInputDevices
         rr.restype = wintypes.BOOL
-        rr.argtypes = (ctypes.POINTER(RAWINPUTDEVICE), wintypes.UINT,
-                       wintypes.UINT)
+        rr.argtypes = (ctypes.POINTER(RAWINPUTDEVICE), wintypes.UINT, wintypes.UINT)
 
         kernel32.GetModuleHandleW.restype = wintypes.HINSTANCE
         hinst = kernel32.GetModuleHandleW(None)
         kernel32.GetModuleHandleW.restype = None
 
-        wc = WNDCLASS(style=0, lpfnWndProc=proc, hInstance=hinst,
-                      lpszClassName="LogiTrayRawInputProbe")
+        wc = WNDCLASS(style=0, lpfnWndProc=proc, hInstance=hinst, lpszClassName="LogiTrayRawInputProbe")
         if not user32.RegisterClassW(ctypes.byref(wc)):
             err = ctypes.GetLastError()
-            if err != 1410:    # 1410 = 类已存在（重复跑）
+            if err != 1410:  # 1410 = 类已存在（重复跑）
                 print(f"[FAIL] RegisterClass rc err={err}")
                 stats["sink_ok"] = False
                 stop.set()
                 return
         # ★ 关键：RIDEV_INPUTSINK —— hwndTarget 指向我们的隐藏窗口，
         #   即使窗口无焦点/不可见，也能收到输入（后台监视的核心）。
-        hwnd = user32.CreateWindowExW(0, "LogiTrayRawInputProbe", "", 0,
-                                      0, 0, 0, 0, None, None, hinst, None)
+        hwnd = user32.CreateWindowExW(0, "LogiTrayRawInputProbe", "", 0, 0, 0, 0, 0, None, None, hinst, None)
         if not hwnd:
             print(f"[FAIL] CreateWindow err={ctypes.GetLastError()}")
             stats["sink_ok"] = False
@@ -232,8 +258,7 @@ def main() -> int:
         rid.usUsage = HID_USAGE_GENERIC_MOUSE
         rid.dwFlags = RIDEV_INPUTSINK
         rid.hwndTarget = hwnd
-        ok = user32.RegisterRawInputDevices(ctypes.byref(rid), 1,
-                                            ctypes.sizeof(RAWINPUTDEVICE))
+        ok = user32.RegisterRawInputDevices(ctypes.byref(rid), 1, ctypes.sizeof(RAWINPUTDEVICE))
         stats["sink_ok"] = bool(ok)
         if not ok:
             print(f"[FAIL] RegisterRawInputDevices err={ctypes.GetLastError()}")
@@ -262,8 +287,7 @@ def main() -> int:
 
     print("=== 探针结果 ===")
     print(f"Q1 隐藏窗口收到 WM_INPUT:      {'是 ✓' if stats['count'] > 0 else '否 ✗'}")
-    print(f"Q2 RIDEV_INPUTSINK 注册成功:   "
-          f"{'是 ✓' if stats['sink_ok'] else '否 ✗'}")
+    print(f"Q2 RIDEV_INPUTSINK 注册成功:   {'是 ✓' if stats['sink_ok'] else '否 ✗'}")
     print(f"   总条数: {stats['count']}")
     print(f"   按类型: {stats['by_type'] or '（无）'}")
     print(f"   鼠标细分: {stats['by_kind'] or '（无）'}")

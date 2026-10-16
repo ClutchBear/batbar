@@ -5,6 +5,7 @@
 本探针把两条都测：先造覆盖全屏的 WS_POPUP 窗口，再查 QUNS。
 跑完自动关窗。
 """
+
 import ctypes
 import time
 from ctypes import wintypes
@@ -12,15 +13,21 @@ from ctypes import wintypes
 user32 = ctypes.windll.user32
 shell32 = ctypes.windll.shell32
 
-user32.SetProcessDPIAware()   # 先 DPI 感知，尺寸才真实
+user32.SetProcessDPIAware()  # 先 DPI 感知，尺寸才真实
 
 q = shell32.SHQueryUserNotificationState
 q.restype = ctypes.c_long
 q.argtypes = (ctypes.POINTER(ctypes.c_int),)
 
-NAMES = {1: "NOT_PRESENT", 2: "BUSY", 3: "D3D_FULL_SCREEN",
-         4: "PRESENTATION_MODE", 5: "ACCEPTS_NOTIFICATIONS",
-         6: "QUIET_TIME", 7: "APP"}
+NAMES = {
+    1: "NOT_PRESENT",
+    2: "BUSY",
+    3: "D3D_FULL_SCREEN",
+    4: "PRESENTATION_MODE",
+    5: "ACCEPTS_NOTIFICATIONS",
+    6: "QUIET_TIME",
+    7: "APP",
+}
 
 
 def quns():
@@ -34,7 +41,7 @@ def show_tray_state():
     print(f"  主屏(DPI感知后) = {st[0]}x{st[1]}")
 
 
-print(f"建窗之前 QUNS = {quns()} ({NAMES.get(quns(),'?')})")
+print(f"建窗之前 QUNS = {quns()} ({NAMES.get(quns(), '?')})")
 show_tray_state()
 
 # 造一个覆盖全屏的 WS_POPUP 窗口（borderless fullscreen 的形态）
@@ -44,19 +51,20 @@ hinst = ctypes.windll.kernel32.GetModuleHandleW(None)
 
 sw = user32.GetSystemMetrics(0)
 sh = user32.GetSystemMetrics(1)
-hwnd = user32.CreateWindowExW(0, "STATIC", "fullscreen-probe", WS_POPUP | WS_VISIBLE,
-                              0, 0, sw, sh, None, None, hinst, None)
+hwnd = user32.CreateWindowExW(
+    0, "STATIC", "fullscreen-probe", WS_POPUP | WS_VISIBLE, 0, 0, sw, sh, None, None, hinst, None
+)
 print(f"\n造 borderless 全屏窗口 hwnd={hwnd} ({sw}x{sh})")
 time.sleep(1.2)
-print(f"  borderless 全屏时 QUNS = {quns()} ({NAMES.get(quns(),'?')})")
+print(f"  borderless 全屏时 QUNS = {quns()} ({NAMES.get(quns(), '?')})")
 
 # 用户此刻别动键盘鼠标，避免干扰
 time.sleep(1.0)
-print(f"  再查一次           QUNS = {quns()} ({NAMES.get(quns(),'?')})")
+print(f"  再查一次           QUNS = {quns()} ({NAMES.get(quns(), '?')})")
 
 user32.DestroyWindow(hwnd)
 time.sleep(0.5)
-print(f"\n关窗后 QUNS = {quns()} ({NAMES.get(quns(),'?')})")
+print(f"\n关窗后 QUNS = {quns()} ({NAMES.get(quns(), '?')})")
 
 print("\n结论提示：")
 print(" - 若 borderless 全屏时 QUNS 仍是 5，说明该 API **不认**无边框全屏；")

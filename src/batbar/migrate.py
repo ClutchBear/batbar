@@ -39,6 +39,7 @@
 所以本模块不自己打日志，而是把结果**返回**给调用方，由调用方在 `applog.setup()`
 之后补打一行。
 """
+
 from __future__ import annotations
 
 import os
@@ -74,9 +75,9 @@ def _copy_file(src: Path, dst: Path) -> bool:
         if dst.exists() or not src.is_file():
             return False
         dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(src, dst)          # copy2：连 mtime 一起带过去
+        shutil.copy2(src, dst)  # copy2：连 mtime 一起带过去
         return True
-    except Exception:                   # noqa: BLE001 - 单个文件失败不影响其它
+    except Exception:  # noqa: BLE001 - 单个文件失败不影响其它
         return False
 
 
@@ -97,8 +98,9 @@ def _copy_from(src: Path, dst: Path) -> list[str]:
     return done
 
 
-def migrate(old: str | os.PathLike[str] | None = None,
-            new: str | os.PathLike[str] | None = None) -> tuple[bool, str]:
+def migrate(
+    old: str | os.PathLike[str] | None = None, new: str | os.PathLike[str] | None = None
+) -> tuple[bool, str]:
     """把历史数据目录里的文件搬进当前数据目录。
 
     Args:
@@ -148,11 +150,13 @@ def migrate(old: str | os.PathLike[str] | None = None,
             done.extend(_copy_from(s, dst))
 
         if done:
-            return True, (f"已从历史目录复制 {len(done)} 个文件到 {dst}："
-                          f"{', '.join(done[:6])}{' …' if len(done) > 6 else ''}"
-                          f"（源目录保留未删）")
+            return True, (
+                f"已从历史目录复制 {len(done)} 个文件到 {dst}："
+                f"{', '.join(done[:6])}{' …' if len(done) > 6 else ''}"
+                f"（源目录保留未删）"
+            )
         if skipped_same:
             return False, f"数据目录即原始位置（{skipped_same[0]}），无需迁移"
         return False, "没有可迁移的历史数据（全新用户，或早已搬过）"
-    except Exception as exc:                       # noqa: BLE001 - 迁移失败不致命
+    except Exception as exc:  # noqa: BLE001 - 迁移失败不致命
         return False, f"迁移失败（已忽略）：{exc}"

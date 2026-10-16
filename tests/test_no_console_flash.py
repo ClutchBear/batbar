@@ -18,6 +18,7 @@
 ⚠️ 源码 `python agent.py` 跑时进程自带控制台、子进程直接继承，
 **永远复现不出这个 bug** ⇒ 必须由测试守住，不能靠手测。
 """
+
 from __future__ import annotations
 
 import subprocess
@@ -42,14 +43,12 @@ class NoConsoleFlash(unittest.TestCase):
         """
         offenders = []
         for p in sorted(SRC.rglob("*.py")):
-            if p.name == "winproc.py":          # 唯一允许直接调用的地方
+            if p.name == "winproc.py":  # 唯一允许直接调用的地方
                 continue
             for i, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1):
                 if "subprocess.run(" in line or "subprocess.Popen(" in line:
                     offenders.append("%s:%d" % (p.name, i))
-        self.assertEqual(
-            offenders, [],
-            "这些地方会弹控制台黑窗，请改用 winproc.run_hidden()：%s" % offenders)
+        self.assertEqual(offenders, [], "这些地方会弹控制台黑窗，请改用 winproc.run_hidden()：%s" % offenders)
 
     def test_shell_probers_go_through_run_hidden(self):
         """真正 spawn shell 的两个模块（回归钉）。"""
@@ -107,8 +106,9 @@ class NoConsoleFlash(unittest.TestCase):
             return None
 
         with mock.patch.object(W.subprocess, "run", fake_run):
-            W.run_hidden(["x"], capture_output=True, text=True, timeout=25,
-                         encoding="utf-8", errors="replace")
+            W.run_hidden(
+                ["x"], capture_output=True, text=True, timeout=25, encoding="utf-8", errors="replace"
+            )
         self.assertTrue(seen["capture_output"])
         self.assertEqual(seen["timeout"], 25)
         self.assertEqual(seen["encoding"], "utf-8")

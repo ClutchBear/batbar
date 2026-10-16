@@ -18,6 +18,7 @@ batbar 打包成 exe 后是 `console=False` 的 **GUI 子系统**程序，进程
 `tests/test_no_console_flash.py` 会扫源码守门：`src/batbar/` 下出现
 `subprocess.run(` / `subprocess.Popen(` 而没带 creationflags 即测试红。
 """
+
 from __future__ import annotations
 
 import subprocess
@@ -27,8 +28,7 @@ IS_WINDOWS = sys.platform == "win32"
 
 #: CREATE_NO_WINDOW（Win32 0x08000000）：不给子进程分配控制台。
 #: 非 Windows 恒为 0，`creationflags=0` 是合法空操作。
-CREATE_NO_WINDOW = (getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
-                    if IS_WINDOWS else 0)
+CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000) if IS_WINDOWS else 0
 
 
 def hidden_kwargs() -> dict:

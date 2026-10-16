@@ -15,6 +15,7 @@
     无任何放大，自然不糊）
 ⚠️ 图标改版后请重跑本脚本刷新 README 配图，别手改 PNG。
 """
+
 from __future__ import annotations
 
 import io
@@ -27,9 +28,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 from batbar.icons import IconSpec, render_icon  # noqa: E402
 
 OUT_DIR = os.path.join(os.path.dirname(__file__), "..", "assets")
-CANVAS = 32     # 图标画布（同运行时）
-SHOW = 16       # 托盘真实显示尺寸（1:1 原大展示）
-BIG = 128       # 大图原生渲染画布（不是放大，是直接画这么大）
+CANVAS = 32  # 图标画布（同运行时）
+SHOW = 16  # 托盘真实显示尺寸（1:1 原大展示）
+BIG = 128  # 大图原生渲染画布（不是放大，是直接画这么大）
 CELL_PAD = 14
 ROW_GAP = 8
 
@@ -43,7 +44,7 @@ CASES = [
     (None, False, "无设备/启动中"),
 ]
 
-DARK_BG = (32, 32, 32)      # 深色任务栏
+DARK_BG = (32, 32, 32)  # 深色任务栏
 LIGHT_BG = (243, 243, 243)  # 浅色任务栏
 
 
@@ -58,13 +59,22 @@ def _cjk_font(size: int = 14):
 
 
 def icon(percent, warning, light, size=CANVAS):
-    return Image.open(io.BytesIO(render_icon(IconSpec(
-        percent, False, size, light_taskbar=light, warning=warning,
-    )))).convert("RGBA")
+    return Image.open(
+        io.BytesIO(
+            render_icon(
+                IconSpec(
+                    percent,
+                    False,
+                    size,
+                    light_taskbar=light,
+                    warning=warning,
+                )
+            )
+        )
+    ).convert("RGBA")
 
 
-def strip(bg: tuple[int, int, int], light: bool, warning_all: bool,
-          path: str, cases=None) -> None:
+def strip(bg: tuple[int, int, int], light: bool, warning_all: bool, path: str, cases=None) -> None:
     cases = cases or CASES
     cell = BIG + CELL_PAD * 2
     W = len(cases) * cell
@@ -86,8 +96,7 @@ def strip(bg: tuple[int, int, int], light: bool, warning_all: bool,
         im.paste(big, (x0 + CELL_PAD, SHOW + ROW_GAP), big)
         # 刻度说明
         tw = d.textlength(caption, font=font)
-        d.text((x0 + (cell - tw) / 2, SHOW + ROW_GAP + BIG + 4),
-               caption, fill=fg, font=font)
+        d.text((x0 + (cell - tw) / 2, SHOW + ROW_GAP + BIG + 4), caption, fill=fg, font=font)
 
     os.makedirs(OUT_DIR, exist_ok=True)
     im.save(path)
@@ -97,9 +106,13 @@ def strip(bg: tuple[int, int, int], light: bool, warning_all: bool,
 def main() -> None:
     strip(DARK_BG, False, False, os.path.join(OUT_DIR, "tray-icons-dark.png"))
     strip(LIGHT_BG, True, False, os.path.join(OUT_DIR, "tray-icons-light.png"))
-    strip(DARK_BG, False, True, os.path.join(OUT_DIR, "tray-icons-warning.png"),
-          cases=[(15, True, "15% 低电警告"), (8, True, "8% 低电警告"),
-                 (None, False, "无设备/启动中")])
+    strip(
+        DARK_BG,
+        False,
+        True,
+        os.path.join(OUT_DIR, "tray-icons-warning.png"),
+        cases=[(15, True, "15% 低电警告"), (8, True, "8% 低电警告"), (None, False, "无设备/启动中")],
+    )
 
 
 if __name__ == "__main__":

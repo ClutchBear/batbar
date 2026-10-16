@@ -3,6 +3,7 @@
 用法（托盘正在跑时也能跑，只是会有句柄争用风险；建议先退出托盘）：
     .venv/Scripts/python.exe probes/verify_mouse_revive.py
 """
+
 from __future__ import annotations
 
 import os
@@ -32,8 +33,7 @@ def open_session(agent_discover):
         return None
     primary_i, flen = -1, None
     for i, (_d, dev) in enumerate(handles):
-        n = T.try_write(dev, H.build_write_frame(H.DEV_RECEIVER,
-                                                 bytes([0x00, 0x10, 0x00])))
+        n = T.try_write(dev, H.build_write_frame(H.DEV_RECEIVER, bytes([0x00, 0x10, 0x00])))
         if n is not None:
             primary_i, flen = i, n
             break
@@ -42,11 +42,12 @@ def open_session(agent_discover):
         return None
     pd, pdev = handles[primary_i]
     readers = [dev for i, (_d, dev) in enumerate(handles) if i != primary_i]
-    print(f"[i] primary up=0x{pd.get('usage_page', 0):X} "
-          f"{pd.get('product_string') or pd['path']} write={flen}B readers={len(readers)}")
+    print(
+        f"[i] primary up=0x{pd.get('usage_page', 0):X} "
+        f"{pd.get('product_string') or pd['path']} write={flen}B readers={len(readers)}"
+    )
     idx, _flen = agent_discover(pdev, readers, flen)
-    sess = HidppSession(T.HidapiTransport(pdev, frame_len=flen, readers=readers),
-                        device_index=idx)
+    sess = HidppSession(T.HidapiTransport(pdev, frame_len=flen, readers=readers), device_index=idx)
     return sess, idx
 
 

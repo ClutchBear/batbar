@@ -75,6 +75,7 @@ def anchor_cwd(target: str | None = None) -> str:
     参数 `target` 仅供测试注入。返回最终 cwd（失败时为原 cwd）。
     """
     import sys
+
     want = target
     if want is None:
         if getattr(sys, "frozen", False):
@@ -112,12 +113,14 @@ def attach_parent_console(attach: object = None) -> bool:
     参数 `attach` 仅供测试注入（True/False 模拟附加结果）。永不抛异常。
     """
     import sys
+
     if sys.stdout is not None:
         return True  # 源码运行 / console 版 exe：本来就有
     ok = False
     if attach is None:
         try:
             import ctypes
+
             # ATTACH_PARENT_PROCESS = -1
             ok = bool(ctypes.windll.kernel32.AttachConsole(-1))
         except Exception:  # noqa: BLE001
@@ -127,10 +130,8 @@ def attach_parent_console(attach: object = None) -> bool:
     if not ok:
         return False
     try:
-        sys.stdout = open("CONOUT$", "w", encoding="utf-8",
-                          errors="replace", buffering=1)
-        sys.stderr = open("CONOUT$", "w", encoding="utf-8",
-                          errors="replace", buffering=1)
+        sys.stdout = open("CONOUT$", "w", encoding="utf-8", errors="replace", buffering=1)
+        sys.stderr = open("CONOUT$", "w", encoding="utf-8", errors="replace", buffering=1)
     except Exception:  # noqa: BLE001 —— 接不上就退化成"只有日志"
         return False
     return True
@@ -149,6 +150,7 @@ def make_console_safe() -> None:
     真正的修复是把字符本身换成 GBK 可编码的（`_scan` 里已改 √ / ×）。
     """
     import sys
+
     for name in ("stdout", "stderr"):
         stream = getattr(sys, name, None)
         if stream is None:
@@ -174,8 +176,9 @@ def install_crash_log() -> None:
 
     def _hook(exc_type, exc, tb) -> None:
         try:
-            log.error("未捕获异常，进程即将退出：\n%s",
-                      "".join(traceback.format_exception(exc_type, exc, tb)))
+            log.error(
+                "未捕获异常，进程即将退出：\n%s", "".join(traceback.format_exception(exc_type, exc, tb))
+            )
         except Exception:  # noqa: BLE001
             pass
         sys.__excepthook__(exc_type, exc, tb)
@@ -200,8 +203,7 @@ ICON_SIZE = 32
 # 别的设备掉到低电也**不抢**图标；只有该设备从快照消失（拔线/断连/关机）才临时
 # 回落自动规则，它一回来图标立刻跟回去。想恢复旧的「N 秒后自动交还」行为，用
 # BATBAR_MANUAL_TTL 设一个秒数窗口。
-MANUAL_TTL = (float(os.environ["BATBAR_MANUAL_TTL"])
-              if os.environ.get("BATBAR_MANUAL_TTL") else None)
+MANUAL_TTL = float(os.environ["BATBAR_MANUAL_TTL"]) if os.environ.get("BATBAR_MANUAL_TTL") else None
 
 
 def _human_age(seconds: float) -> str:
@@ -365,6 +367,7 @@ class Agent:
                 return None
             # 环境变量可手动锁定（配合 --scan 输出）：BATBAR_USAGE_PAGE / BATBAR_DEVNUM
             import os
+
             up_env = os.environ.get("BATBAR_USAGE_PAGE")
             if up_env:
                 up = int(up_env, 16) if up_env.lower().startswith("0x") else int(up_env)
@@ -399,16 +402,22 @@ class Agent:
             pd, pdev = handles[primary_i]
             readers = [dev for i, (_d, dev) in enumerate(handles) if i != primary_i]
             idx, _ = self._discover_devnum(pdev, readers, flen, devnum_env)
-            sess = HidppSession(T.HidapiTransport(pdev, frame_len=flen, readers=readers),
-                                device_index=idx)
+            sess = HidppSession(T.HidapiTransport(pdev, frame_len=flen, readers=readers), device_index=idx)
             sess.set_notification_callback(self._on_notify)
             self._session = sess
-            log.info("opened HID++ device: up=0x%X %s (device_index=%d, write=%dB, readers=%d)",
-                     pd.get("usage_page", 0), pd.get("product_string") or pd["path"], idx, flen, len(readers))
+            log.info(
+                "opened HID++ device: up=0x%X %s (device_index=%d, write=%dB, readers=%d)",
+                pd.get("usage_page", 0),
+                pd.get("product_string") or pd["path"],
+                idx,
+                flen,
+                len(readers),
+            )
             return sess
 
-    def _discover_devnum(self, dev, readers, flen: int | None,
-                         devnum_env: str | None) -> tuple[int, int | None]:
+    def _discover_devnum(
+        self, dev, readers, flen: int | None, devnum_env: str | None
+    ) -> tuple[int, int | None]:
         """返回 (device_index, 写长度)。
 
         接收器把对码设备藏在槽位 1-7（0xFF 是接收器自己，无电池）。
@@ -521,8 +530,7 @@ class Agent:
         now = time.monotonic()
         if now < self._sleep_until:
             return  # 退避期内不重复戳
-        if (self._last_info is not None
-                and now - self._last_read_ts <= MOUSE_FRESH):
+        if self._last_info is not None and now - self._last_read_ts <= MOUSE_FRESH:
             return  # 读数还新鲜，免探
         try:
             sess = self._ensure_device()
@@ -556,8 +564,7 @@ class Agent:
             if self._last_info is not None:
                 log.info("罗技条目隐藏：接收器扫不到对码设备（鼠标关机/空槽）")
         elif self._last_info is not None:
-            log.info("罗技条目隐藏：槽位 %d 两次读取都无应答（鼠标关机）",
-                     sess._devnum)
+            log.info("罗技条目隐藏：槽位 %d 两次读取都无应答（鼠标关机）", sess._devnum)
         self._last_info = None
         self._sleep_until = now + 30.0
 
@@ -565,6 +572,7 @@ class Agent:
     def _bt_battery(self):
         if self._bt is None:
             from .bt_battery import BluetoothBattery
+
             self._bt = BluetoothBattery()
         return self._bt
 
@@ -587,16 +595,15 @@ class Agent:
                         return False
                     return R.is_wired(name, force=True)
 
-                self._lowbat = lowbattery.get(icon_getter=lambda: self._icon,
-                                              wired_check=_real_wired,
-                                              gate=self._gate_notify)
+                self._lowbat = lowbattery.get(
+                    icon_getter=lambda: self._icon, wired_check=_real_wired, gate=self._gate_notify
+                )
             return self._lowbat
         except Exception as exc:  # noqa: BLE001 - 提醒失败不影响监控
             log.debug("lowbat init: %s", exc)
             return None
 
-    def _feed_lowbat(self, name: str, pct: int | None,
-                     charging: bool = False) -> None:
+    def _feed_lowbat(self, name: str, pct: int | None, charging: bool = False) -> None:
         """喂一条读数给低电量状态机（廉价：有线态吃 TTL 缓存，不 force）。
 
         状态机内部一律用剥后缀基名做 key —— 显示名会随连接方式在
@@ -610,6 +617,7 @@ class Agent:
                 return
             from . import receiver24 as R
             from . import wired24
+
             base = R.base_name(name)
             wired = base in R.wired_bases()  # 吃缓存
             # 插线充电 = 安全态：有线通道的充电标志也喂进去，免得插着线报低电
@@ -633,8 +641,7 @@ class Agent:
             return
         for n, p in snap.items():
             # 跟踪源如果就是快照里这条，带上充电态（罗技 HID++ 报告里有）
-            chg = (n == self._tracked_name() and self._last_info is not None
-                   and bool(self._last_info.charging))
+            chg = n == self._tracked_name() and self._last_info is not None and bool(self._last_info.charging)
             self._feed_lowbat(n, p, chg)
 
     def _warn_throttled(self, key: str, msg: str, exc: BaseException) -> None:
@@ -671,6 +678,7 @@ class Agent:
             self._warn_throttled("bt", "蓝牙快照失败（蓝牙条目会缺失）", exc)
         try:
             from . import receiver24 as R
+
             r24 = R.devices(frozenset(out))
             # 键盘本体插着 USB 线时，菜单条目从「(2.4G)」改标「(有线)」——
             # 同厂商直连 USB 设备出现 = 线插着（dongle 通常同时在线，无线帧
@@ -692,6 +700,7 @@ class Agent:
             from . import receiver24 as R
             from . import wired24
             from .dongle import TARGETS
+
             have = {R.base_name(n) for n in out}
             for name in set(TARGETS.values()):
                 if name in have or not wired24.plugged(name):
@@ -714,6 +723,7 @@ class Agent:
             base = self._tracked[4:]
             from . import dongle as _dg
             from . import lastknown as _lk
+
             pct = _dg.battery(base)
             if pct is not None:
                 return pct, False, "ok"
@@ -725,8 +735,11 @@ class Agent:
             if self._last_info is not None and now - self._last_read_ts < READ_TTL:
                 return self._last_info.percent, self._last_info.charging, "ok"
             if now < self._sleep_until:
-                return (self._last_info.percent if self._last_info else None,
-                        bool(self._last_info and self._last_info.charging), "sleeping")
+                return (
+                    self._last_info.percent if self._last_info else None,
+                    bool(self._last_info and self._last_info.charging),
+                    "sleeping",
+                )
             sess = self._ensure_device()
             if sess is None:
                 self._sleep_until = now + 30.0
@@ -744,8 +757,11 @@ class Agent:
                 # 分支 —— 设备明明没连却像在。读不出就是读不出，按 sleeping
                 # 处理，保留上一次**真读数**（若有）。
                 self._sleep_until = now + 30.0
-                return (self._last_info.percent if self._last_info else None,
-                        bool(self._last_info and self._last_info.charging), "sleeping")
+                return (
+                    self._last_info.percent if self._last_info else None,
+                    bool(self._last_info and self._last_info.charging),
+                    "sleeping",
+                )
             self._last_info, self._last_read_ts = info, now
             return info.percent, info.charging, "ok"
         # 蓝牙源："BT:<名>"。自适应：设备切走（如键鼠改 2.4G、耳机断连）后
@@ -781,24 +797,23 @@ class Agent:
             # 形态后缀在「弹菜单→点下去」之间翻转了（如拔掉线，(有线)→(2.4G)）：
             # 换另一种后缀在快照里找，找不到再按原样（自动规则会兜底）。
             from . import receiver24 as R
+
             alt = {R.SUFFIX: R.WIRED_SUFFIX, R.WIRED_SUFFIX: R.SUFFIX}
             for suf, other in alt.items():
                 if name.endswith(suf) and (name[: -len(suf)] + other) in snap:
                     name = name[: -len(suf)] + other
                     break
         self._manual_name = name
-        self._manual_until = (time.monotonic() + MANUAL_TTL
-                              if MANUAL_TTL is not None else float("inf"))
+        self._manual_until = time.monotonic() + MANUAL_TTL if MANUAL_TTL is not None else float("inf")
         self._schedule_manual_revert()
         # 切源后立刻让 UI 反映新读数（旧 bridge 模式下外部会重推图标）
         if self._icon:
             if snap is not None:
-                threading.Thread(target=self._apply_icon,
-                                 args=(snap.get(name), False, snap),
-                                 daemon=True).start()
+                threading.Thread(
+                    target=self._apply_icon, args=(snap.get(name), False, snap), daemon=True
+                ).start()
             else:
-                threading.Thread(target=self._refresh_from_tracked,
-                                 daemon=True).start()
+                threading.Thread(target=self._refresh_from_tracked, daemon=True).start()
 
     def _schedule_manual_revert(self) -> None:
         """到点把图标交还给自动规则（低电设备长显）。
@@ -860,6 +875,7 @@ class Agent:
             return "鼠标 罗技 G304"
         if self._tracked.startswith("24G:"):
             from . import receiver24 as R
+
             base = self._tracked[4:]
             try:
                 if R.is_wired(base):
@@ -869,8 +885,7 @@ class Agent:
             return base + R.SUFFIX
         return self._tracked[3:]
 
-    def _tip_for(self, pct: int | None, charging: bool,
-                 name: str | None = None) -> str:
+    def _tip_for(self, pct: int | None, charging: bool, name: str | None = None) -> str:
         """文案格式对齐系统托盘原生提示（如「耳机 (蓝牙): 69%」）：
         走原生 szTip，Win11 shell 自动渲染成同款深色气泡/字体/字号。
 
@@ -887,6 +902,7 @@ class Agent:
             from . import dongle, lastknown
             from . import receiver24 as R
             from . import wired24
+
             base = R.base_name(name)
             # 凡带 2.4G/有线后缀的条目都可能吃存档值，判定按「后缀」不按
             # is_stale_entry —— 有线条目名字换成了 (有线)，后缀判定会漏它。
@@ -935,6 +951,7 @@ class Agent:
         try:
             from . import lowbattery as LW
             from . import receiver24 as R
+
             if snap is None:
                 snap = self.devices_snapshot()
             if not snap:
@@ -997,6 +1014,7 @@ class Agent:
         try:
             from . import receiver24 as R
             from . import wired24
+
             base = R.base_name(name)
             if wired24.plugged(base) and wired24.charging(base):
                 return True
@@ -1009,8 +1027,7 @@ class Agent:
             pass
         return False
 
-    def _apply_icon(self, pct: int | None, charging: bool,
-                    snap: dict | None = None) -> bool:
+    def _apply_icon(self, pct: int | None, charging: bool, snap: dict | None = None) -> bool:
         """直驱托盘画图（旧 bridge 模式由外部推 icon 消息，不走这；
         那种模式下图标配色不随任务栏深浅——PNG 是外部画的）。
 
@@ -1021,6 +1038,7 @@ class Agent:
         菜单行数字保证同源（同一次读取，不被 ADC 抖动劈成两个值）。
         """
         from . import icons as I
+
         try:
             self._last_raw = (pct, charging)
             light = not _detect_sys_dark()
@@ -1038,10 +1056,8 @@ class Agent:
                 tname, tpct, warn = tgt
                 # 插着数据线的键盘 → 图标带 ⚡（复用既有充电闪电设计）
                 chg = self._is_charging(tname)
-                spec = I.IconSpec(tpct, chg, ICON_SIZE,
-                                  light_taskbar=light, warning=warn)
-                tip = (f"⚠ {tname} 电量偏低: {tpct}%" if warn
-                       else self._tip_for(tpct, chg, name=tname))
+                spec = I.IconSpec(tpct, chg, ICON_SIZE, light_taskbar=light, warning=warn)
+                tip = f"⚠ {tname} 电量偏低: {tpct}%" if warn else self._tip_for(tpct, chg, name=tname)
             elif not snap or not self._ready:
                 # 快照空 / **还没拿到过任何真读数** = 一台设备都不在或还在启动。
                 # 此时显示「跟踪源未知」纯属误导——跟踪源那台根本不在（2026-10-12
@@ -1051,8 +1067,7 @@ class Agent:
                 # 空图，要等后台读完蓝牙（首次 CIM 查询 4~25s）才有内容 → 头几秒
                 # 托盘一片空白，紧接着又画 "?"（幽灵条目读不出值）。现在启动即
                 # 画 "--"，有数据立刻换成数字（2026-10-13 用户：证明它启动了）。
-                spec = I.IconSpec(None, False, ICON_SIZE, light_taskbar=light,
-                                  no_devices=True)
+                spec = I.IconSpec(None, False, ICON_SIZE, light_taskbar=light, no_devices=True)
                 tip = "启动中…" if not self._ready else "未发现设备"
             else:
                 # 有条目但全部读不出（关机充电的伪 None / 毛刺 0）：不再回落
@@ -1148,8 +1163,7 @@ class Agent:
         # 条目新鲜、或正处在失败退避期 → 不必催（探测也读不出新东西）
         if now < self._sleep_until:
             return
-        if (self._last_info is not None
-                and now - self._last_read_ts <= MOUSE_FRESH):
+        if self._last_info is not None and now - self._last_read_ts <= MOUSE_FRESH:
             return
 
         def _run() -> None:
@@ -1185,22 +1199,18 @@ class Agent:
         # 锁死模式（BATBAR_FULLSCREEN=on/off）只报一次日志，之后不必空转
         gate = self._fs_gate
         if gate.locked:
-            log.info("全屏感知：BATBAR_FULLSCREEN=%s（锁死 active=%s，不再查 QUNS）",
-                     gate.mode, gate.active)
+            log.info("全屏感知：BATBAR_FULLSCREEN=%s（锁死 active=%s，不再查 QUNS）", gate.mode, gate.active)
         else:
-            log.info("全屏感知已启动（每 %.0fs 采一次 QUNS，mode=%s）",
-                     FS.POLL_SECONDS, gate.mode)
+            log.info("全屏感知已启动（每 %.0fs 采一次 QUNS，mode=%s）", FS.POLL_SECONDS, gate.mode)
         while self._running:
             if not gate.locked:
                 state = _query_quns()
                 if gate.sample(state):
                     # 只在翻面那一刻打日志（否则 2s 一条刷屏）
                     if gate.active:
-                        log.info("进入全屏/游戏态（%s）→ 静音提醒 + 暂停后台轮询",
-                                 FS.state_name(state))
+                        log.info("进入全屏/游戏态（%s）→ 静音提醒 + 暂停后台轮询", FS.state_name(state))
                     else:
-                        log.info("退出全屏/游戏态（%s）→ 恢复提醒与正常轮询",
-                                 FS.state_name(state))
+                        log.info("退出全屏/游戏态（%s）→ 恢复提醒与正常轮询", FS.state_name(state))
             for _ in range(int(max(1, FS.POLL_SECONDS * 10))):
                 if not self._running:
                     return
@@ -1216,8 +1226,9 @@ class Agent:
         """
         if self._in_dont_disturb():
             self._fs_skip_toast += 1
-            log.info("全屏/游戏中，抑制低电量提醒：%s = %d%%（累计抑制 %d 次）",
-                     name, pct, self._fs_skip_toast)
+            log.info(
+                "全屏/游戏中，抑制低电量提醒：%s = %d%%（累计抑制 %d 次）", name, pct, self._fs_skip_toast
+            )
             return False
         return True
 
@@ -1229,6 +1240,7 @@ class Agent:
         永远查不到 → 托盘图标画 "?"（2026-10-12 实测）。
         """
         from . import receiver24 as R
+
         if name == "鼠标 罗技 G304":
             return "hidpp"
         if name.endswith(R.SUFFIX) or name.endswith(R.WIRED_SUFFIX):
@@ -1344,8 +1356,7 @@ class Agent:
             # 图标平时只在轮询/帧回调时重绘，可能落后一帧；弹菜单这个动作
             # 说明用户正盯着看，此刻必须一致。
             try:
-                if (self._last_icon is None
-                        or self._last_icon.percent != snap.get(icon_name)):
+                if self._last_icon is None or self._last_icon.percent != snap.get(icon_name):
                     self._apply_icon(snap.get(icon_name), False, snap)
             except Exception as exc:  # noqa: BLE001
                 log.debug("menu icon sync: %s", exc)
@@ -1355,9 +1366,11 @@ class Agent:
                 label = f"{name} {pct if pct is not None else '--'}%"
                 if self._is_charging(name):  # 插线充电中 → 加 ⚡（有线/2.4G/蓝牙都适用）
                     label += " ⚡"
-                items.append(pystray.MenuItem(
-                    label, _make_switch(key, snap),
-                    checked=(lambda _item, v=(key == shown_key): v)))
+                items.append(
+                    pystray.MenuItem(
+                        label, _make_switch(key, snap), checked=(lambda _item, v=(key == shown_key): v)
+                    )
+                )
             if not items:
                 items = [pystray.MenuItem("未发现设备", None, enabled=False)]
             items += [
@@ -1408,9 +1421,9 @@ class Agent:
         （2026-10-13 用户需求）。
         """
         from . import icons as I
+
         try:
-            spec = I.IconSpec(None, False, ICON_SIZE,
-                              light_taskbar=not _detect_sys_dark(), no_devices=True)
+            spec = I.IconSpec(None, False, ICON_SIZE, light_taskbar=not _detect_sys_dark(), no_devices=True)
             ok = self._set_icon(I.render_icon(spec), "启动中…")
             if ok:
                 self._last_icon, self._last_tooltip = spec, "启动中…"
@@ -1446,8 +1459,7 @@ class Agent:
                 self._drop_device()
                 self._sleep_until = 0.0
                 sess = self._ensure_device()
-                info = (self._read_with_second_chance(sess)
-                        if sess is not None else None)
+                info = self._read_with_second_chance(sess) if sess is not None else None
             if info is not None:
                 self._last_info, self._last_read_ts = info, time.monotonic()
                 self._sleep_until = 0.0
@@ -1494,6 +1506,7 @@ class Agent:
         def _g24_step() -> None:
             try:
                 from . import poll24
+
                 poll24.scan_now()  # 2.4G：当场扫一遍拿最新结论
             except Exception as exc:  # noqa: BLE001
                 log.debug("manual refresh 24g scan failed: %s", exc)
@@ -1537,13 +1550,14 @@ class Agent:
         from contextlib import nullcontext
 
         from PIL import Image
+
         if not self._icon:
             return False  # 托盘还没建好：调用方要据此重试，别写缓存
         # getattr 兜底：测试里用 object.__new__ 造的 Agent 没有这把锁
         lock = getattr(self, "_icon_lock", None) or nullcontext()
         try:
             with lock:
-                changed = ((png, tooltip) != getattr(self, "_last_painted", None))
+                changed = (png, tooltip) != getattr(self, "_last_painted", None)
                 img = Image.open(io.BytesIO(png))
                 self._icon.icon = _IcoBmpImage(img)  # pystray 热替换图标
                 self._icon.title = tooltip or "Logitech"
@@ -1591,8 +1605,9 @@ class Agent:
                     raise RuntimeError("tracked read error")
                 if pct is None:
                     return None
-                return H.BatteryInfo(pct, None, chg, None,
-                                     "hidpp" if self.a._tracked == "hidpp" else self.a._tracked)
+                return H.BatteryInfo(
+                    pct, None, chg, None, "hidpp" if self.a._tracked == "hidpp" else self.a._tracked
+                )
 
             def ping(self):
                 # 睡眠判定：_tracked_read 的 sleeping 态即"对端不应"
@@ -1675,11 +1690,11 @@ class Agent:
                         # ★ 选不出任何目标（快照空/全读不出）→ 图标也必须回到
                         # "--"，不许留着上一个设备的数字（2026-10-13：否则
                         # 「图标有、列表没有」会以另一种形式出现）。
-                        stale = (self._last_icon is not None
-                                 and self._last_icon.percent is not None)
-                    elif self._last_icon is None or \
-                            (self._last_icon.percent, self._last_icon.warning) \
-                            != (tgt[1], tgt[2]):
+                        stale = self._last_icon is not None and self._last_icon.percent is not None
+                    elif self._last_icon is None or (self._last_icon.percent, self._last_icon.warning) != (
+                        tgt[1],
+                        tgt[2],
+                    ):
                         stale = True
                 # 每 ~36s 无条件重绘一次：部分第三方任务栏（Seelen UI 等）会
                 # 缓存托盘图标、不响应 NIM_MODIFY，定期换新句柄可自愈。
@@ -1716,8 +1731,7 @@ class Agent:
         # 全屏/游戏感知（2026-10-13）：独立线程每 2s 采一次 QUNS 维护迟滞门。
         # 单独起线程是因为既有循环节拍太粗（~9s/60s），迟滞会慢到游戏打完；
         # 而这次查询是纯只读、<0.1ms，2s 节拍毫无压力。
-        threading.Thread(target=self._fs_poll_loop, name="fs-watch",
-                         daemon=True).start()
+        threading.Thread(target=self._fs_poll_loop, name="fs-watch", daemon=True).start()
         # 2.4G 接收器厂商通道的被动监听（只读，不往设备写任何字节）：
         # 拿到键盘在 dongle 模式下的实时电量；休眠帧/静默超时 → 条目自动消失。
         try:
@@ -1748,6 +1762,7 @@ class Agent:
         # 判据改为 poll24 扫描。）
         try:
             from . import feature24
+
             feature24.start()
         except Exception as exc:  # noqa: BLE001 - feature 失败不影响其它源
             log.debug("feature24 unavailable: %s", exc)
@@ -1757,6 +1772,7 @@ class Agent:
         # 条目隐藏。独立只写句柄，不碰监听线程的输入队列。
         try:
             from . import poll24
+
             # 全屏/游戏中跳过扫描（2026-10-13）：注入判据，poll24 保持模块独立
             poll24.set_skip_when(self._in_dont_disturb)
             poll24.start()
@@ -1767,6 +1783,7 @@ class Agent:
         # 也提供充电标志（图标 ⚡ + 低电豁免）。
         try:
             from . import wired24
+
             wired24.start()
         except Exception as exc:  # noqa: BLE001 - 有线失败不影响其它源
             log.debug("wired24 unavailable: %s", exc)
@@ -1814,12 +1831,14 @@ def _probe(a: Agent) -> int:
         except TransportClosed:
             p = None
         print(
-            f"读不到电量。ping={'通(协议OK,电池特性未命中——加 -v 看特性发现日志)' if p else '不通(设备休眠/未配对——动一下鼠标重试)'}")
+            f"读不到电量。ping={'通(协议OK,电池特性未命中——加 -v 看特性发现日志)' if p else '不通(设备休眠/未配对——动一下鼠标重试)'}"
+        )
         a._drop_device()
         return 3
     a._drop_device()
     print(
-        f"电量 {info.percent}%  charging={info.charging}  特性={info.source}  电压={info.voltage_mv}  档位={info.approx}")
+        f"电量 {info.percent}%  charging={info.charging}  特性={info.source}  电压={info.voltage_mv}  档位={info.approx}"
+    )
     return 0
 
 
@@ -1827,6 +1846,7 @@ def _raw_echo(dev, frame_len: int, siblings=(), extra_listeners=()) -> None:
     """原始帧回显：向 0xFF 和槽位 1-3 各发一发 ping，监听 1.5s 打印所有回帧。
     用于区分「设备完全不回」和「回了但我们的匹配/解析逻辑没认出来」。"""
     from . import transport as T
+
     print(f"  -- 原始回显（写长度={frame_len}，发 ping 监听 1.5s）--")
     mark = 0x5A
     reqs = {}
@@ -1886,8 +1906,10 @@ def _scan(a: Agent) -> int:
         if d.get("vendor_id") != 0x046D:
             continue
         up, uu = d.get("usage_page"), d.get("usage")
-        print(f"  up=0x{up:04X} uu=0x{uu:04X}  pid=0x{d['product_id']:04X}  "
-              f"{d.get('product_string')!r}  serial={d.get('serial_number')!r}")
+        print(
+            f"  up=0x{up:04X} uu=0x{uu:04X}  pid=0x{d['product_id']:04X}  "
+            f"{d.get('product_string')!r}  serial={d.get('serial_number')!r}"
+        )
         cands.append(d)
     if not cands:
         print("  （没找到任何罗技 HID 设备，确认接收器已插好）")
@@ -1923,17 +1945,20 @@ def _scan(a: Agent) -> int:
         _raw_echo(dev, n, siblings=sibs, extra_listeners=listeners)
         readers = [x for x in all_devs if x is not dev]
         for idx in [H.DEV_RECEIVER, 1, 2, 3, 4, 5, 6, 7]:
-            s = HidppSession(T.HidapiTransport(dev, frame_len=n, readers=readers),
-                             device_index=idx, timeout=0.4, retries=0)
+            s = HidppSession(
+                T.HidapiTransport(dev, frame_len=n, readers=readers), device_index=idx, timeout=0.4, retries=0
+            )
             try:
                 # 主判据 = 电池特性（标准 feature call，可靠）
                 bf = s.battery_feature()
                 if bf is None:
                     continue
                 info = s.read_battery()
-                tag = (f"  up=0x{d.get('usage_page'):04X} idx={idx}  "
-                       f"电池特性=0x{bf[0]:04X}@idx{bf[1]}  读数={info.percent if info else 'N/A'}%"
-                       f"  charging={info.charging if info else '-'}")
+                tag = (
+                    f"  up=0x{d.get('usage_page'):04X} idx={idx}  "
+                    f"电池特性=0x{bf[0]:04X}@idx{bf[1]}  读数={info.percent if info else 'N/A'}%"
+                    f"  charging={info.charging if info else '-'}"
+                )
                 hits.append((d["path"], d.get("usage_page"), idx, bf))
                 print(tag)
             except TransportClosed as exc:
@@ -1953,8 +1978,10 @@ def _scan(a: Agent) -> int:
         print(f"√ 可用组合：usage_page=0x{up:04X}, device_index={idx}, 电池特性=0x{bf[0]:04X}")
         print(f"   → 在 agent 里设 BATBAR_USAGE_PAGE=0x{up:04X} BATBAR_DEVNUM={idx} 即可锁定")
     else:
-        print("× 没有任何槽位读到电池特性。可能：鼠标真在睡（多晃几下再跑）/ "
-              "该接收器走的是标准 HID 电量而非 HID++（那要换读取路径）")
+        print(
+            "× 没有任何槽位读到电池特性。可能：鼠标真在睡（多晃几下再跑）/ "
+            "该接收器走的是标准 HID 电量而非 HID++（那要换读取路径）"
+        )
     return 0
 
 
@@ -1974,11 +2001,13 @@ def _enable_dpi_awareness() -> None:
       off / 0 / no  -> 完全不声明（发虚但绝不出渲染幺蛾子，排障兜底）
     """
     import os
+
     mode = (os.environ.get("BATBAR_DPI") or "system").strip().lower()
     if mode in ("0", "off", "no"):
         log.debug("DPI awareness off (BATBAR_DPI=%s)", mode)
         return
     import ctypes
+
     try:
         user32 = ctypes.windll.user32
     except AttributeError:  # 非 Windows（单测环境）
@@ -2036,10 +2065,11 @@ def _detect_sys_dark() -> bool:
     因此判据 = SystemUsesLightTheme == 0；该键缺失（老系统/未写过自定义）
     时回退 AppsUseLightTheme。注册表异常按浅色。"""
     import winreg
+
     try:
         k = winreg.OpenKey(
-            winreg.HKEY_CURRENT_USER,
-            r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize")
+            winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+        )
     except OSError:
         return False
     try:
@@ -2083,19 +2113,23 @@ def _start_theme_watch() -> None:
     WM_SETTINGCHANGE = 0x001A
     WM_THEMECHANGED = 0x031A
 
-    WNDPROC = ctypes.WINFUNCTYPE(ctypes.c_ssize_t, wintypes.HWND,
-                                 ctypes.c_uint, wintypes.WPARAM,
-                                 wintypes.LPARAM)
+    WNDPROC = ctypes.WINFUNCTYPE(
+        ctypes.c_ssize_t, wintypes.HWND, ctypes.c_uint, wintypes.WPARAM, wintypes.LPARAM
+    )
 
     class WNDCLASS(ctypes.Structure):
-        _fields_ = [("style", ctypes.c_uint), ("lpfnWndProc", WNDPROC),
-                    ("cbClsExtra", ctypes.c_int), ("cbWndExtra", ctypes.c_int),
-                    ("hInstance", wintypes.HINSTANCE),
-                    ("hIcon", wintypes.HICON),
-                    ("hCursor", wintypes.HANDLE),
-                    ("hbrBackground", wintypes.HBRUSH),
-                    ("lpszMenuName", wintypes.LPCWSTR),
-                    ("lpszClassName", wintypes.LPCWSTR)]
+        _fields_ = [
+            ("style", ctypes.c_uint),
+            ("lpfnWndProc", WNDPROC),
+            ("cbClsExtra", ctypes.c_int),
+            ("cbWndExtra", ctypes.c_int),
+            ("hInstance", wintypes.HINSTANCE),
+            ("hIcon", wintypes.HICON),
+            ("hCursor", wintypes.HANDLE),
+            ("hbrBackground", wintypes.HBRUSH),
+            ("lpszMenuName", wintypes.LPCWSTR),
+            ("lpszClassName", wintypes.LPCWSTR),
+        ]
 
     state = {"dark": _detect_sys_dark()}
     keeping = []  # 持 WNDPROC 强引用防 GC（回调悬垂会崩进程）
@@ -2122,8 +2156,7 @@ def _start_theme_watch() -> None:
     def _on_device_event(kind: str) -> None:
         """设备事件已静默 → 通知所有订阅者（各自重扫自己的数据源）。"""
         ev_state["fired"] += 1
-        log.info("设备树变化（%s）→ 触发即时刷新（第 %d 次）",
-                 kind, ev_state["fired"])
+        log.info("设备树变化（%s）→ 触发即时刷新（第 %d 次）", kind, ev_state["fired"])
         for cb in list(_device_listeners):
             try:
                 cb()
@@ -2134,8 +2167,7 @@ def _start_theme_watch() -> None:
         """RAWINPUT 已静默 → 通知订阅者「鼠标刚有活动」（催一次罗技探测）。"""
         # DEBUG 级心跳：排障时能一眼看出 RAWINPUT 是不是真在工作
         # （seen=收到多少条 WM_INPUT，active=其中判定为"真实活动"的条数）。
-        log.debug("鼠标活动去抖到点（seen=%d active=%d）→ 催探测",
-                  raw_stat["seen"], raw_stat["active"])
+        log.debug("鼠标活动去抖到点（seen=%d active=%d）→ 催探测", raw_stat["seen"], raw_stat["active"])
         for cb in list(_mouse_listeners):
             try:
                 cb()
@@ -2145,16 +2177,18 @@ def _start_theme_watch() -> None:
     # GetRawInputData 两步法：先问大小（pData=NULL），再取数据。缓冲复用。
     # 签名（x64 必须显式声明，否则 HANDLE 被默认 c_int 截断）。
     user32.GetRawInputData.restype = wintypes.UINT
-    user32.GetRawInputData.argtypes = (wintypes.HANDLE, wintypes.UINT,
-                                       wintypes.LPVOID,
-                                       ctypes.POINTER(wintypes.UINT),
-                                       wintypes.UINT)
+    user32.GetRawInputData.argtypes = (
+        wintypes.HANDLE,
+        wintypes.UINT,
+        wintypes.LPVOID,
+        ctypes.POINTER(wintypes.UINT),
+        wintypes.UINT,
+    )
     RID_INPUT = 0x10000003
     raw_stat = {"seen": 0, "active": 0}
 
     def _wnd_proc(hwnd, msg, wparam, lparam):
-        if msg in (WM_DWMCOLORIZATIONCOLORCHANGED, WM_SETTINGCHANGE,
-                   WM_THEMECHANGED):
+        if msg in (WM_DWMCOLORIZATIONCOLORCHANGED, WM_SETTINGCHANGE, WM_THEMECHANGED):
             new = _detect_sys_dark()
             if new != state["dark"]:
                 state["dark"] = new
@@ -2177,15 +2211,23 @@ def _start_theme_watch() -> None:
             # 只关心"有没有真实鼠标活动"：是 → 重置鼠标去抖定时器。
             # 解析失败/非鼠标（键盘/HID）→ 忽略。细节见 winevents 的 RAWINPUT 节。
             size = wintypes.UINT(0)
-            n = user32.GetRawInputData(wintypes.HANDLE(lparam), RID_INPUT,
-                                       None, ctypes.byref(size),
-                                       ctypes.sizeof(wintypes.HANDLE) * 3)
+            n = user32.GetRawInputData(
+                wintypes.HANDLE(lparam),
+                RID_INPUT,
+                None,
+                ctypes.byref(size),
+                ctypes.sizeof(wintypes.HANDLE) * 3,
+            )
             if n == 0 and size.value:
                 buf = ctypes.create_string_buffer(size.value)
                 cap = wintypes.UINT(size.value)
-                n = user32.GetRawInputData(wintypes.HANDLE(lparam), RID_INPUT,
-                                           buf, ctypes.byref(cap),
-                                           ctypes.sizeof(wintypes.HANDLE) * 3)
+                n = user32.GetRawInputData(
+                    wintypes.HANDLE(lparam),
+                    RID_INPUT,
+                    buf,
+                    ctypes.byref(cap),
+                    ctypes.sizeof(wintypes.HANDLE) * 3,
+                )
                 if n != 0xFFFFFFFF:
                     raw_stat["seen"] += 1
                     if _we.rawinput_activity(buf.raw[:n]):
@@ -2216,13 +2258,11 @@ def _start_theme_watch() -> None:
         # 64 位下必须显式声明签名，否则 HWND 等句柄被默认 c_int 截断
         dw = user32.DefWindowProcW
         dw.restype = ctypes.c_ssize_t
-        dw.argtypes = (wintypes.HWND, ctypes.c_uint,
-                       wintypes.WPARAM, wintypes.LPARAM)
+        dw.argtypes = (wintypes.HWND, ctypes.c_uint, wintypes.WPARAM, wintypes.LPARAM)
         user32.PostQuitMessage.argtypes = (ctypes.c_int,)
         gm = user32.GetMessageW
         gm.restype = ctypes.c_int
-        gm.argtypes = (ctypes.POINTER(wintypes.MSG), wintypes.HWND,
-                       ctypes.c_uint, ctypes.c_uint)
+        gm.argtypes = (ctypes.POINTER(wintypes.MSG), wintypes.HWND, ctypes.c_uint, ctypes.c_uint)
         user32.TranslateMessage.argtypes = (ctypes.POINTER(wintypes.MSG),)
         dm = user32.DispatchMessageW
         dm.restype = ctypes.c_ssize_t
@@ -2232,30 +2272,35 @@ def _start_theme_watch() -> None:
         rc.argtypes = (ctypes.POINTER(WNDCLASS),)
         cw = user32.CreateWindowExW
         cw.restype = wintypes.HWND
-        cw.argtypes = (wintypes.DWORD, wintypes.LPCWSTR, wintypes.LPCWSTR,
-                       wintypes.DWORD, ctypes.c_int, ctypes.c_int,
-                       ctypes.c_int, ctypes.c_int, wintypes.HWND,
-                       wintypes.HMENU, wintypes.HINSTANCE, wintypes.LPVOID)
+        cw.argtypes = (
+            wintypes.DWORD,
+            wintypes.LPCWSTR,
+            wintypes.LPCWSTR,
+            wintypes.DWORD,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            wintypes.HWND,
+            wintypes.HMENU,
+            wintypes.HINSTANCE,
+            wintypes.LPVOID,
+        )
         kernel32.GetModuleHandleW.restype = wintypes.HINSTANCE
         hinst = kernel32.GetModuleHandleW(None)
         kernel32.GetModuleHandleW.restype = None
         # SetTimer/KillTimer 签名（WM_TIMER 去抖用）
         user32.SetTimer.restype = wintypes.UINT
-        user32.SetTimer.argtypes = (wintypes.HWND, wintypes.UINT,
-                                    wintypes.UINT, wintypes.LPVOID)
+        user32.SetTimer.argtypes = (wintypes.HWND, wintypes.UINT, wintypes.UINT, wintypes.LPVOID)
         user32.KillTimer.restype = wintypes.BOOL
         user32.KillTimer.argtypes = (wintypes.HWND, wintypes.UINT)
-        wc = WNDCLASS(style=0, lpfnWndProc=proc, hInstance=hinst,
-                      lpszClassName="BatbarThemeWatcher")
+        wc = WNDCLASS(style=0, lpfnWndProc=proc, hInstance=hinst, lpszClassName="BatbarThemeWatcher")
         if not user32.RegisterClassW(ctypes.byref(wc)):
-            log.debug("theme watch: RegisterClass failed rc=%s",
-                      ctypes.GetLastError())
+            log.debug("theme watch: RegisterClass failed rc=%s", ctypes.GetLastError())
             return
-        hwnd = user32.CreateWindowExW(0, "BatbarThemeWatcher", "", 0,
-                                      0, 0, 0, 0, None, None, hinst, None)
+        hwnd = user32.CreateWindowExW(0, "BatbarThemeWatcher", "", 0, 0, 0, 0, 0, None, None, hinst, None)
         if not hwnd:
-            log.debug("theme watch: CreateWindow failed rc=%s",
-                      ctypes.GetLastError())
+            log.debug("theme watch: CreateWindow failed rc=%s", ctypes.GetLastError())
             return
         # ── 注册 USB 设备接口通知（拿到精确的 ARRIVAL/REMOVECOMPLETE）──
         # 实测：不注册也能收到 DBT_DEVNODES_CHANGED，但注册后能区分"插/拔"。
@@ -2293,16 +2338,18 @@ def _register_usb_notify(user32, hwnd) -> None:
     from ctypes import wintypes
 
     class DEV_BROADCAST_DEVICEINTERFACE(ctypes.Structure):
-        _fields_ = [("dbcc_size", wintypes.DWORD),
-                    ("dbcc_devicetype", wintypes.DWORD),
-                    ("dbcc_reserved", wintypes.DWORD),
-                    ("dbcc_classguid", ctypes.c_ubyte * 16),
-                    ("dbcc_name", ctypes.c_wchar * 1)]
+        _fields_ = [
+            ("dbcc_size", wintypes.DWORD),
+            ("dbcc_devicetype", wintypes.DWORD),
+            ("dbcc_reserved", wintypes.DWORD),
+            ("dbcc_classguid", ctypes.c_ubyte * 16),
+            ("dbcc_name", ctypes.c_wchar * 1),
+        ]
 
     # {A5DCBF10-6530-11D2-901F-00C04FB951ED} = GUID_DEVINTERFACE_USB_DEVICE
-    GUID_USB = (ctypes.c_ubyte * 16)(*[
-        0x10, 0xBF, 0xDC, 0xA5, 0x30, 0x65, 0xD2, 0x11,
-        0x90, 0x1F, 0x00, 0xC0, 0x4F, 0xB9, 0x51, 0xED])
+    GUID_USB = (ctypes.c_ubyte * 16)(
+        *[0x10, 0xBF, 0xDC, 0xA5, 0x30, 0x65, 0xD2, 0x11, 0x90, 0x1F, 0x00, 0xC0, 0x4F, 0xB9, 0x51, 0xED]
+    )
     DBT_DEVTYP_DEVICEINTERFACE = 5
     DEVICE_NOTIFY_WINDOW_HANDLE = 0x00000000
 
@@ -2311,10 +2358,8 @@ def _register_usb_notify(user32, hwnd) -> None:
     dbi.dbcc_devicetype = DBT_DEVTYP_DEVICEINTERFACE
     ctypes.memmove(ctypes.byref(dbi.dbcc_classguid), GUID_USB, 16)
     user32.RegisterDeviceNotificationW.restype = wintypes.HANDLE
-    user32.RegisterDeviceNotificationW.argtypes = (
-        wintypes.HWND, wintypes.LPVOID, wintypes.DWORD)
-    hn = user32.RegisterDeviceNotificationW(
-        hwnd, ctypes.byref(dbi), DEVICE_NOTIFY_WINDOW_HANDLE)
+    user32.RegisterDeviceNotificationW.argtypes = (wintypes.HWND, wintypes.LPVOID, wintypes.DWORD)
+    hn = user32.RegisterDeviceNotificationW(hwnd, ctypes.byref(dbi), DEVICE_NOTIFY_WINDOW_HANDLE)
     log.debug("USB 设备通知已注册 handle=%s", hn)
     # 持强引用：结构体被 GC 后内核回调可能读到悬垂内存
     _usb_notify_keep.append(dbi)
@@ -2342,10 +2387,12 @@ def _register_raw_mouse(user32, hwnd) -> None:
     from ctypes import wintypes
 
     class RAWINPUTDEVICE(ctypes.Structure):
-        _fields_ = [("usUsagePage", ctypes.c_ushort),
-                    ("usUsage", ctypes.c_ushort),
-                    ("dwFlags", wintypes.DWORD),
-                    ("hwndTarget", wintypes.HWND)]
+        _fields_ = [
+            ("usUsagePage", ctypes.c_ushort),
+            ("usUsage", ctypes.c_ushort),
+            ("dwFlags", wintypes.DWORD),
+            ("hwndTarget", wintypes.HWND),
+        ]
 
     HID_USAGE_PAGE_GENERIC = 0x01
     HID_USAGE_GENERIC_MOUSE = 0x02
@@ -2388,6 +2435,7 @@ def _query_quns() -> int | None:
     常见形态）返回的是 `BUSY`。判定统一走 `fullscreen.is_dont_disturb()`。
     """
     import ctypes
+
     try:
         f = ctypes.windll.shell32.SHQueryUserNotificationState
         f.restype = ctypes.c_long
@@ -2425,6 +2473,7 @@ def _enable_dark_menus() -> None:
     import ctypes
     import os
     from ctypes import wintypes
+
     try:
         kernel32 = ctypes.windll.kernel32
     except AttributeError:  # 非 Windows（单测环境）
@@ -2434,31 +2483,37 @@ def _enable_dark_menus() -> None:
     _MANIFEST = (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
         '<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">\n'
-        ' <dependency>\n'
-        '  <dependentAssembly>\n'
+        " <dependency>\n"
+        "  <dependentAssembly>\n"
         '   <assemblyIdentity type="win32" name="Microsoft.Windows.Common-Controls"'
         ' version="6.0.0.0" processorArchitecture="*" publicKeyToken="6595b64144ccf1df"'
         ' language="*"/>\n'
-        '  </dependentAssembly>\n'
-        ' </dependency>\n'
-        '</assembly>\n'
+        "  </dependentAssembly>\n"
+        " </dependency>\n"
+        "</assembly>\n"
     )
 
     class ACTCTX(ctypes.Structure):
-        _fields_ = [("cbSize", wintypes.UINT), ("dwFlags", wintypes.DWORD),
-                    ("lpSource", wintypes.LPCWSTR), ("lpProcedureName", wintypes.LPCWSTR),
-                    ("lpAssemblyDirectory", wintypes.LPCWSTR), ("lpResourceName", wintypes.LPCWSTR),
-                    ("wLangId", wintypes.WORD), ("hModule", wintypes.HMODULE),
-                    ("lpAssemblySecurityAttributes", wintypes.LPVOID)]
+        _fields_ = [
+            ("cbSize", wintypes.UINT),
+            ("dwFlags", wintypes.DWORD),
+            ("lpSource", wintypes.LPCWSTR),
+            ("lpProcedureName", wintypes.LPCWSTR),
+            ("lpAssemblyDirectory", wintypes.LPCWSTR),
+            ("lpResourceName", wintypes.LPCWSTR),
+            ("wLangId", wintypes.WORD),
+            ("hModule", wintypes.HMODULE),
+            ("lpAssemblySecurityAttributes", wintypes.LPVOID),
+        ]
 
     try:
         import tempfile
+
         mdir = tempfile.mkdtemp(prefix="batbar-manifest-")
         mpath = os.path.join(mdir, "batbar.manifest")
         with open(mpath, "w", encoding="utf-8") as f:
             f.write(_MANIFEST)
-        ctx = ACTCTX(cbSize=ctypes.sizeof(ACTCTX), dwFlags=0,
-                     lpSource=mpath)
+        ctx = ACTCTX(cbSize=ctypes.sizeof(ACTCTX), dwFlags=0, lpSource=mpath)
         kernel32.CreateActCtxW.restype = wintypes.HANDLE
         kernel32.CreateActCtxW.argtypes = (ctypes.POINTER(ACTCTX),)
         handle = kernel32.CreateActCtxW(ctypes.byref(ctx))
@@ -2525,15 +2580,21 @@ def main():
     _cwd = anchor_cwd()
     ap = argparse.ArgumentParser(prog="batbar-agent")
     ap.add_argument("--device", default=None, help="蓝牙直连设备名关键字（USB 接收器用户不需要）")
-    ap.add_argument("--standalone", action="store_true",
-                    help="Windows 侧自己轮询+渲染+托盘（验证/轻量部署）")
-    ap.add_argument("--probe", action="store_true",
-                    help="只读一次电量打印结果就退出，验证 HID++ 协议对你的设备是否生效")
-    ap.add_argument("--scan", action="store_true",
-                    help="诊断：枚举所有罗技 collection 并逐槽位探测，定位正确的 usage_page+device_index")
+    ap.add_argument("--standalone", action="store_true", help="Windows 侧自己轮询+渲染+托盘（验证/轻量部署）")
+    ap.add_argument(
+        "--probe", action="store_true", help="只读一次电量打印结果就退出，验证 HID++ 协议对你的设备是否生效"
+    )
+    ap.add_argument(
+        "--scan",
+        action="store_true",
+        help="诊断：枚举所有罗技 collection 并逐槽位探测，定位正确的 usage_page+device_index",
+    )
     ap.add_argument("-v", "--verbose", action="store_true")
-    ap.add_argument("--allow-multiple", action="store_true",
-                    help="调试用：跳过单实例检查（两个实例会抢同一条 HID 输入队列）")
+    ap.add_argument(
+        "--allow-multiple",
+        action="store_true",
+        help="调试用：跳过单实例检查（两个实例会抢同一条 HID 输入队列）",
+    )
     args = ap.parse_args()
     # ★ 历史数据搬迁（2026-10-13）：落盘位置走过两代（logi-tray → batbar →
     #   现在的绿色模式「跟 exe 同目录」）。把老位置的文件**复制**进当前数据目录
@@ -2546,8 +2607,10 @@ def main():
     #   目录），迁移一跑就把 %LOCALAPPDATA%\batbar 的历史电量表复制进了发布
     #   目录，随后被打进 zip 发出去（2026-10-13 首次构建 v0.1.2 真踩到）。
     from . import migrate
+
     _migrated, _migrate_why = migrate.migrate()
     from . import applog, singleinstance, paths
+
     path = applog.setup("agent", verbose=args.verbose)
     if path is not None:
         log.info("日志文件：%s", path)

@@ -10,6 +10,7 @@
   * `logs` / `last-known.json` / `agent.pid` 都从同一个 data_dir 派生 —— 任何
     模块自己再拼一次路径，都算回归（有源码扫描用例守着）。
 """
+
 from __future__ import annotations
 
 import ctypes
@@ -66,8 +67,13 @@ class DataDirResolution(unittest.TestCase):
         self.appdata.mkdir()
         p = unittest.mock.patch.dict(
             os.environ,
-            {"LOCALAPPDATA": str(self.appdata), "APPDATA": str(self.appdata),
-             "BATBAR_LOG_DIR": "", "BATBAR_DATA_DIR": ""})
+            {
+                "LOCALAPPDATA": str(self.appdata),
+                "APPDATA": str(self.appdata),
+                "BATBAR_LOG_DIR": "",
+                "BATBAR_DATA_DIR": "",
+            },
+        )
         p.start()
         self.addCleanup(p.stop)
 
@@ -92,8 +98,10 @@ class DataDirResolution(unittest.TestCase):
         """绿色模式的核心：数据落在 batbar.exe 旁边。"""
         exe_dir = self.tmp / "portable"
         exe_dir.mkdir()
-        with unittest.mock.patch.object(sys, "frozen", True, create=True), \
-                unittest.mock.patch.object(sys, "executable", str(exe_dir / "batbar.exe")):
+        with (
+            unittest.mock.patch.object(sys, "frozen", True, create=True),
+            unittest.mock.patch.object(sys, "executable", str(exe_dir / "batbar.exe")),
+        ):
             paths.reset_cache()
             self.assertEqual(_canon(paths.data_dir()), _canon(exe_dir))
             self.assertIn("绿色模式", paths.note())
@@ -116,23 +124,24 @@ class DataDirResolution(unittest.TestCase):
             self.skipTest("本卷未启用 8.3 短名（fsutil 8dot3name query <盘符>）")
         exe_dir = Path(short_root) / "portable"
         exe_dir.mkdir()
-        with unittest.mock.patch.object(sys, "frozen", True, create=True), \
-                unittest.mock.patch.object(sys, "executable",
-                                           str(exe_dir / "batbar.exe")):
+        with (
+            unittest.mock.patch.object(sys, "frozen", True, create=True),
+            unittest.mock.patch.object(sys, "executable", str(exe_dir / "batbar.exe")),
+        ):
             paths.reset_cache()
             self.assertEqual(_canon(paths.data_dir()), _canon(exe_dir))
-            self.assertEqual(str(paths.data_dir()).lower(),
-                             str(exe_dir.resolve()).lower())
+            self.assertEqual(str(paths.data_dir()).lower(), str(exe_dir.resolve()).lower())
             # 自证前提：短名与长名确实是两个字符串，否则上面两行没有意义
             self.assertNotEqual(str(paths.data_dir()), str(exe_dir))
 
     def test_frozen_unwritable_falls_back(self):
         """★ exe 目录不可写（解压到 Program Files 之类）⇒ 回退用户目录。"""
-        blocker = self.tmp / "not-a-dir"       # 拿文件冒充目录 → mkdir 必失败
+        blocker = self.tmp / "not-a-dir"  # 拿文件冒充目录 → mkdir 必失败
         blocker.write_text("x", encoding="utf-8")
-        with unittest.mock.patch.object(sys, "frozen", True, create=True), \
-                unittest.mock.patch.object(sys, "executable",
-                                           str(blocker / "batbar.exe")):
+        with (
+            unittest.mock.patch.object(sys, "frozen", True, create=True),
+            unittest.mock.patch.object(sys, "executable", str(blocker / "batbar.exe")),
+        ):
             paths.reset_cache()
             self.assertEqual(paths.data_dir(), self.appdata / "batbar")
             self.assertIn("不可写", paths.note())
@@ -144,11 +153,12 @@ class DataDirResolution(unittest.TestCase):
             self.assertEqual(paths.data_dir(), self.appdata / "batbar")
 
     def test_falls_back_to_home_without_appdata(self):
-        with unittest.mock.patch.dict(os.environ, {"LOCALAPPDATA": "", "APPDATA": ""}), \
-                unittest.mock.patch.object(sys, "frozen", False, create=True):
+        with (
+            unittest.mock.patch.dict(os.environ, {"LOCALAPPDATA": "", "APPDATA": ""}),
+            unittest.mock.patch.object(sys, "frozen", False, create=True),
+        ):
             paths.reset_cache()
-            self.assertEqual(paths.data_dir(),
-                             Path(os.path.expanduser("~")) / paths.APP_DIR)
+            self.assertEqual(paths.data_dir(), Path(os.path.expanduser("~")) / paths.APP_DIR)
 
     # ---- 可写性探测本身 ----------------------------------------------
     def test_writable_true_and_probe_cleaned(self):
@@ -197,9 +207,8 @@ class SingleSourceOfTruth(unittest.TestCase):
         #   目录，但**本类测的就是「不设 override 时 lastknown 跟数据目录走」**，
         #   所以这里显式清空（empty string 是 falsy，等价于没设）。
         p = unittest.mock.patch.dict(
-            os.environ,
-            {"BATBAR_DATA_DIR": str(self.tmp), "BATBAR_LOG_DIR": "",
-             "BATBAR_LASTKNOWN": ""})
+            os.environ, {"BATBAR_DATA_DIR": str(self.tmp), "BATBAR_LOG_DIR": "", "BATBAR_LASTKNOWN": ""}
+        )
         p.start()
         self.addCleanup(p.stop)
 
@@ -235,8 +244,10 @@ class NoModuleRebuildsPathsOnItsOwn(unittest.TestCase):
     """
 
     ALLOWED = {"paths.py", "migrate.py"}
-    PAT = re.compile(r"""environ(?:\.get)?[\[(]\s*['"]LOCALAPPDATA"""
-                     r"""|getenv\(\s*['"]LOCALAPPDATA""")
+    PAT = re.compile(
+        r"""environ(?:\.get)?[\[(]\s*['"]LOCALAPPDATA"""
+        r"""|getenv\(\s*['"]LOCALAPPDATA"""
+    )
 
     def test_only_allowed_modules_read_localappdata(self):
         offenders = []
@@ -245,14 +256,15 @@ class NoModuleRebuildsPathsOnItsOwn(unittest.TestCase):
                 continue
             if self.PAT.search(f.read_text(encoding="utf-8")):
                 offenders.append(f.name)
-        self.assertEqual(offenders, [],
-                         "这些模块自己拼了 %LOCALAPPDATA%，应改走 paths.py")
+        self.assertEqual(offenders, [], "这些模块自己拼了 %LOCALAPPDATA%，应改走 paths.py")
 
     def test_allowed_modules_really_do_read_it(self):
         """反向断言：免得哪天 paths 改走别的机制、这条扫描变成永远为真的空转。"""
         for name in self.ALLOWED:
-            self.assertTrue(self.PAT.search((SRC / name).read_text(encoding="utf-8")),
-                            f"{name} 应仍在读 LOCALAPPDATA（扫描白名单该更新了）")
+            self.assertTrue(
+                self.PAT.search((SRC / name).read_text(encoding="utf-8")),
+                f"{name} 应仍在读 LOCALAPPDATA（扫描白名单该更新了）",
+            )
 
     def test_paths_module_is_dependency_free(self):
         """paths 是最底层模块，不该 import 本项目其它模块（避免循环依赖）。"""

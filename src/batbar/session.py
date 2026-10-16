@@ -12,6 +12,7 @@ hidapi，单测侧是 FakeTransport），本模块只做协议编排：
     接收器对码设备由配置传 1-6）
   - 通知不单独开线程；read_battery 的读循环里顺手消化通知帧（见 _pump）
 """
+
 from __future__ import annotations
 
 import logging
@@ -50,16 +51,17 @@ class Transport:
 
 
 class HidppSession:
-    def __init__(self, transport: Transport, device_index: int = H.DEV_RECEIVER,
-                 timeout: float = 0.6, retries: int = 1):
+    def __init__(
+        self, transport: Transport, device_index: int = H.DEV_RECEIVER, timeout: float = 0.6, retries: int = 1
+    ):
         self._t = transport
         self._devnum = device_index
-        self._timeout = timeout      # 单次请求超时；扫描空槽位时可调小加速
+        self._timeout = timeout  # 单次请求超时；扫描空槽位时可调小加速
         self._retries = retries
         # RLock：read_battery → find_feature → _request 嵌套加锁，必须可重入
         self._lock = threading.RLock()
         self._sw = 0
-        self._feat_cache: dict[int, int | None] = {}   # feature_num -> index（None=不支持）
+        self._feat_cache: dict[int, int | None] = {}  # feature_num -> index（None=不支持）
         self._battery_feat: tuple[int, int] | None = None  # (num, index)
 
     # ---------- 底层请求 ----------
@@ -69,8 +71,9 @@ class HidppSession:
         self._sw = self._sw % 7 + 1
         return self._sw | 0x08
 
-    def _request(self, request_id: int, params: bytes = b"",
-                 timeout: float | None = None, retries: int | None = None) -> bytes | None:
+    def _request(
+        self, request_id: int, params: bytes = b"", timeout: float | None = None, retries: int | None = None
+    ) -> bytes | None:
         """发送一个 HID++ 请求并等待匹配回复。返回 payload[2:]（数据段）或 None。
 
         timeout/retries 不传时用实例默认值（__init__ 的 self._timeout/_retries），
@@ -104,6 +107,7 @@ class HidppSession:
           匹配只靠 payload 头两字节，天然兼容。
         """
         import time as _time
+
         deadline = _time.monotonic() + timeout
         while _time.monotonic() < deadline:
             raw = self._t.read(max(0.05, deadline - _time.monotonic()))
@@ -164,8 +168,9 @@ class HidppSession:
     ping = protocol_version
 
     # ---------- HID++ 1.0 寄存器（接收器侧状态，Unifying 规范 §4） ----------
-    def read_register(self, register: int, device_index: int | None = None,
-                      timeout: float = 0.6) -> bytes | None:
+    def read_register(
+        self, register: int, device_index: int | None = None, timeout: float = 0.6
+    ) -> bytes | None:
         """读 HID++ 1.0 短寄存器（sub_id 0x81）。
 
         请求帧 = [0x81, register, 0x00, 0x00, 0x00]；回复 =

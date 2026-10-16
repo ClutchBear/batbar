@@ -1,4 +1,5 @@
 """state 状态机单测（纯标准库）。"""
+
 import unittest
 
 from batbar import hidpp as H
@@ -28,7 +29,7 @@ class TestState(unittest.TestCase):
         p = BatteryPoller()
         p.poll_response(self._info(85))
         p.take_icon_update()
-        p.poll_response(self._info(80))          # 跨 5% 档
+        p.poll_response(self._info(80))  # 跨 5% 档
         self.assertIsNotNone(p.take_icon_update())
 
     def test_charging_toggle_is_dirty(self):
@@ -41,14 +42,14 @@ class TestState(unittest.TestCase):
     def test_sleeping_backoff(self):
         clock = [0.0]
         p = BatteryPoller(now=lambda: clock[0])
-        p.poll_response(self._info())            # 一次正常读数
+        p.poll_response(self._info())  # 一次正常读数
         p.take_icon_update()
         clock[0] += 61
         self.assertTrue(p.due())
-        p.poll_response(None, sleeping=True)     # 失败且 agent 判定睡眠
+        p.poll_response(None, sleeping=True)  # 失败且 agent 判定睡眠
         self.assertTrue(p.state.sleeping)
         clock[0] += 61
-        self.assertFalse(p.due())                # 睡眠期 5min 才试一次
+        self.assertFalse(p.due())  # 睡眠期 5min 才试一次
         clock[0] += 240
         self.assertTrue(p.due())
 
@@ -58,7 +59,7 @@ class TestState(unittest.TestCase):
         p.poll_response(None, sleeping=True)
         self.assertTrue(p.state.sleeping)
         clock[0] += 301
-        p.poll_response(self._info())            # 醒来后的成功读数
+        p.poll_response(self._info())  # 醒来后的成功读数
         self.assertFalse(p.state.sleeping)
         clock[0] += 61
         self.assertTrue(p.due())
@@ -68,7 +69,7 @@ class TestState(unittest.TestCase):
         p = BatteryPoller(now=lambda: clock[0])
         p.poll_response(self._info(85))
         p.take_icon_update()
-        p.on_notification(self._info(33))        # 设备主动推，无视在途/档位
+        p.on_notification(self._info(33))  # 设备主动推，无视在途/档位
         self.assertIsNotNone(p.take_icon_update())
         self.assertEqual(p.state.percent, 33)
 
@@ -78,12 +79,12 @@ class TestState(unittest.TestCase):
         clock = [0.0]
         p = BatteryPoller(now=lambda: clock[0])
         clock[0] = 60.0
-        p.poll_response(self._info())         # 有过成功读数
+        p.poll_response(self._info())  # 有过成功读数
         clock[0] += 5
-        p.poll_response(None)                 # 单次读失败（agent 未断言睡眠）
-        self.assertFalse(p.state.sleeping)    # 设备在线标记保持
+        p.poll_response(None)  # 单次读失败（agent 未断言睡眠）
+        self.assertFalse(p.state.sleeping)  # 设备在线标记保持
         clock[0] += 61
-        self.assertTrue(p.due())              # 正常 60s 节奏继续
+        self.assertTrue(p.due())  # 正常 60s 节奏继续
 
     def test_never_succeeded_failure_means_sleep(self):
         """反面：从未成功读过 + 本次读失败 ⇒ 判定睡眠退避到 5min。
@@ -92,21 +93,21 @@ class TestState(unittest.TestCase):
         """
         clock = [0.0]
         p = BatteryPoller(now=lambda: clock[0])
-        p.poll_response(None)                 # 首次就读失败，agent 未断言睡眠
+        p.poll_response(None)  # 首次就读失败，agent 未断言睡眠
         self.assertTrue(p.state.sleeping)
         clock[0] += 61
-        self.assertFalse(p.due())             # 已退避到 5min
+        self.assertFalse(p.due())  # 已退避到 5min
         clock[0] += 240
         self.assertTrue(p.due())
 
     def test_bt_fallback_only_when_hidpp_dead(self):
         p = BatteryPoller()
-        p.poll_response(self._info(85))          # HID++ 活着
+        p.poll_response(self._info(85))  # HID++ 活着
         p.on_bt_battery(40)
-        self.assertEqual(p.state.percent, 85)    # 蓝牙值被忽略
+        self.assertEqual(p.state.percent, 85)  # 蓝牙值被忽略
         clock = [0.0]
         p2 = BatteryPoller(now=lambda: clock[0])
-        p2.poll_response(None, sleeping=True)    # HID++ 睡
+        p2.poll_response(None, sleeping=True)  # HID++ 睡
         p2.on_bt_battery(40)
         self.assertEqual(p2.state.percent, 40)
         self.assertEqual(p2.state.info.source, "bluetooth")
@@ -120,8 +121,10 @@ class TestState(unittest.TestCase):
         「只剩定义、唯一调用方是单测」的死代码，且会被自己的测试保护住。
         """
         for name in ("request_due", "mark_request_sent", "note_timeout", "_awaiting"):
-            self.assertFalse(hasattr(BatteryPoller, name),
-                             "BatteryPoller.%s 又回来了 —— 异步 RPC 模式已随旧桥接删除" % name)
+            self.assertFalse(
+                hasattr(BatteryPoller, name),
+                "BatteryPoller.%s 又回来了 —— 异步 RPC 模式已随旧桥接删除" % name,
+            )
 
     def test_tooltip_contains_percent(self):
         p = BatteryPoller()

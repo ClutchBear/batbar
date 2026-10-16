@@ -6,6 +6,7 @@
 （历史：01:52 曾把「真槽位不应答」判成睡眠保留，11:00 被实测证伪——
 静置 40s 的 G304 依然应答，判据说明见 `agent._read_with_second_chance`。）
 """
+
 from __future__ import annotations
 
 import time
@@ -45,23 +46,20 @@ class SecondChance(unittest.TestCase):
         """第一枪就应答 → 直接用，不再戳第二枪。"""
         new = H.BatteryInfo(88, None, False, None, "hidpp")
         sess = self._sess([new, mock.Mock()])
-        self.assertIs(A.Agent._read_with_second_chance(object.__new__(A.Agent),
-                                                       sess), new)
+        self.assertIs(A.Agent._read_with_second_chance(object.__new__(A.Agent), sess), new)
         self.assertEqual(sess.read_battery.call_count, 1)
 
     def test_second_answer_rescued(self):
         """第一枪哑、第二枪应答 = 单次毛刺 → 返回读数（条目保留）。"""
         new = H.BatteryInfo(88, None, False, None, "hidpp")
         sess = self._sess([None, new])
-        self.assertIs(A.Agent._read_with_second_chance(object.__new__(A.Agent),
-                                                       sess), new)
+        self.assertIs(A.Agent._read_with_second_chance(object.__new__(A.Agent), sess), new)
         self.assertEqual(sess.read_battery.call_count, 2)
 
     def test_both_none_is_absent(self):
         """两枪都哑 = 设备不在（关机/离队）→ None。"""
         sess = self._sess([None, None])
-        self.assertIsNone(A.Agent._read_with_second_chance(
-            object.__new__(A.Agent), sess))
+        self.assertIsNone(A.Agent._read_with_second_chance(object.__new__(A.Agent), sess))
         self.assertEqual(sess.read_battery.call_count, 2)
 
 
@@ -69,8 +67,7 @@ class ProbeMouse(unittest.TestCase):
     def test_fresh_reading_skips_probe(self):
         """读数还新鲜（≤MOUSE_FRESH）→ 根本不戳硬件。"""
         a = _fake_agent(_INFO, age=1.0)
-        a._ensure_device = lambda: (_ for _ in ()).throw(
-            AssertionError("新鲜期不该探测"))
+        a._ensure_device = lambda: (_ for _ in ()).throw(AssertionError("新鲜期不该探测"))
         a._probe_mouse()
         self.assertEqual(a._last_info, _INFO)
 
@@ -140,6 +137,7 @@ class ProbeMouse(unittest.TestCase):
 
         def boom():
             raise TransportClosed("write error")
+
         a._ensure_device = boom
         a._probe_mouse()
         self.assertIsNone(a._last_info)
@@ -152,12 +150,12 @@ class ProbeMouse(unittest.TestCase):
         "no known battery feature"）。"""
         a = _fake_agent(_INFO, age=A.MOUSE_FRESH + 5)
         sess = mock.Mock()
-        sess._devnum = H.DEV_RECEIVER          # 0xFF 死会话
+        sess._devnum = H.DEV_RECEIVER  # 0xFF 死会话
         sess.read_battery.return_value = None
         a._ensure_device = lambda: sess
         a._probe_mouse()
         self.assertIsNone(a._last_info)
-        self.assertEqual(a._drop_calls, 1)     # 会话被丢，下轮重扫槽位
+        self.assertEqual(a._drop_calls, 1)  # 会话被丢，下轮重扫槽位
 
     def test_real_slot_no_answer_keeps_session(self):
         """真槽位会话两次不应答：条目隐藏但**会话保留**（不重建会话）——
@@ -175,9 +173,8 @@ class ProbeMouse(unittest.TestCase):
         """退避期内再调 → 不重复戳硬件（防 9s 循环狂戳关机的鼠标）。"""
         a = _fake_agent(_INFO, age=A.MOUSE_FRESH + 5)
         a._sleep_until = time.monotonic() + 20
-        a._ensure_device = lambda: (_ for _ in ()).throw(
-            AssertionError("退避期不该探测"))
-        a._probe_mouse()                     # 不炸即通过
+        a._ensure_device = lambda: (_ for _ in ()).throw(AssertionError("退避期不该探测"))
+        a._probe_mouse()  # 不炸即通过
         self.assertEqual(a._last_info, _INFO)
 
     def test_no_device_still_probes_periodically(self):
@@ -216,8 +213,10 @@ class DiscoverDevnum(unittest.TestCase):
 
         tr = mock.Mock()
         tr._frame_len = 7
-        with mock.patch.object(A.T, "HidapiTransport", lambda *a2, **k2: tr), \
-             mock.patch.object(A, "HidppSession", FakeProbe):
+        with (
+            mock.patch.object(A.T, "HidapiTransport", lambda *a2, **k2: tr),
+            mock.patch.object(A, "HidppSession", FakeProbe),
+        ):
             idx, flen = a._discover_devnum(mock.Mock(), [], 7, None)
         return idx, calls
 
@@ -231,8 +230,8 @@ class DiscoverDevnum(unittest.TestCase):
         """记住的槽位不应答（重新对码）→ 全扫命中槽 2 并更新记忆。"""
         idx, calls = self._agent_and_probe({2}, remembered=1)
         self.assertEqual(idx, 2)
-        self.assertEqual(calls[0][0], 1)           # 先试记住的
-        self.assertEqual(calls[-1][0], 2)          # 全扫命中
+        self.assertEqual(calls[0][0], 1)  # 先试记住的
+        self.assertEqual(calls[-1][0], 2)  # 全扫命中
 
     def test_full_scan_updates_memory(self):
         a2 = object.__new__(A.Agent)
@@ -249,8 +248,10 @@ class DiscoverDevnum(unittest.TestCase):
             def battery_feature(self):
                 return (0x1004, 1) if self._devnum == 3 else None
 
-        with mock.patch.object(A.T, "HidapiTransport", lambda *a2_, **k2: tr), \
-             mock.patch.object(A, "HidppSession", FakeProbe):
+        with (
+            mock.patch.object(A.T, "HidapiTransport", lambda *a2_, **k2: tr),
+            mock.patch.object(A, "HidppSession", FakeProbe),
+        ):
             idx, _ = a2._discover_devnum(mock.Mock(), [], 7, None)
         self.assertEqual(idx, 3)
         self.assertEqual(a2._last_devnum, 3)
@@ -259,7 +260,7 @@ class DiscoverDevnum(unittest.TestCase):
         """全不应答（鼠标关机）→ 回落 0xFF，由探测层的「死会话丢弃」兜住。"""
         idx, calls = self._agent_and_probe(set(), remembered=None)
         self.assertEqual(idx, H.DEV_RECEIVER)
-        self.assertEqual(len(calls), 7)            # 1-7 各试一遍
+        self.assertEqual(len(calls), 7)  # 1-7 各试一遍
 
 
 class ManualRefreshConsistency(unittest.TestCase):
@@ -295,8 +296,7 @@ class ManualRefreshConsistency(unittest.TestCase):
 
     def test_transport_closed_clears(self):
         a = _fake_agent(_INFO, age=1.0)
-        a._ensure_device = lambda: (_ for _ in ()).throw(
-            TransportClosed("gone"))
+        a._ensure_device = lambda: (_ for _ in ()).throw(TransportClosed("gone"))
         a._push_fresh_read()
         self.assertIsNone(a._last_info)
         self.assertEqual(a._drop_calls, 1)
@@ -312,7 +312,7 @@ class ManualRefreshRevives(unittest.TestCase):
     def _agent(self, devnums, answers):
         """devnums/answers = 每次 _ensure_device 依次产出的 (devnum, 读数)。"""
         a = _fake_agent(_INFO, age=1.0)
-        a._sleep_until = time.monotonic() + 30      # 卡在退避里也要能复活
+        a._sleep_until = time.monotonic() + 30  # 卡在退避里也要能复活
         made = []
 
         def ensure():
@@ -323,6 +323,7 @@ class ManualRefreshRevives(unittest.TestCase):
             s.read_battery.return_value = answers.pop(0)
             made.append(s)
             return s
+
         a._ensure_device = ensure
         return a, made
 
@@ -331,10 +332,10 @@ class ManualRefreshRevives(unittest.TestCase):
         new = H.BatteryInfo(90, None, False, None, "hidpp")
         a, made = self._agent([H.DEV_RECEIVER, 1], [None, new])
         a._push_fresh_read()
-        self.assertIs(a._last_info, new)             # 当场复活，不用等下一轮
-        self.assertEqual(a._drop_calls, 1)           # 死会话确实被丢
-        self.assertEqual(len(made), 2)               # 丢了之后确实重建了
-        self.assertEqual(a._sleep_until, 0.0)        # 退避解禁，后台也能跟
+        self.assertIs(a._last_info, new)  # 当场复活，不用等下一轮
+        self.assertEqual(a._drop_calls, 1)  # 死会话确实被丢
+        self.assertEqual(len(made), 2)  # 丢了之后确实重建了
+        self.assertEqual(a._sleep_until, 0.0)  # 退避解禁，后台也能跟
 
     def test_ff_dropped_rebuild_still_no_answer_hides(self):
         """重建后依然不应答（鼠标真关机）→ 条目保持隐藏，不冻在旧读数。"""

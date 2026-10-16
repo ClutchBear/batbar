@@ -26,6 +26,7 @@
 所以下面每条扫描断言都**先自证扫到了东西**（见 `test_scan_actually_reaches_sources`
 与各断言里的存在性检查），再断言内容。
 """
+
 from __future__ import annotations
 
 import re
@@ -76,15 +77,16 @@ class NoListener(unittest.TestCase):
         """
         self.assertTrue(SRC.is_dir(), "扫描根 %s 不存在 —— 守卫在空转" % SRC)
         n = len(_py_files())
-        self.assertGreater(n, 10,
-                           "只扫到 %d 个 .py —— SRC 路径或 glob 写错了，断言会假通过" % n)
+        self.assertGreater(n, 10, "只扫到 %d 个 .py —— SRC 路径或 glob 写错了，断言会假通过" % n)
 
     def test_no_module_binds_or_listens(self):
         hits = _scan()
         self.assertEqual(
-            hits, [],
+            hits,
+            [],
             "这些地方会开监听端口 ⇒ 触发防火墙弹窗，请删掉（batbar 读电量走本地 "
-            "HID，完全不需要联网）：\n  " + "\n  ".join(hits))
+            "HID，完全不需要联网）：\n  " + "\n  ".join(hits),
+        )
 
     def test_no_module_imports_socket(self):
         """整个包都不该再有 socket 的立足点（扫**全包**，与这句话对齐）。
@@ -102,28 +104,30 @@ class NoListener(unittest.TestCase):
         files = _py_files()
         self.assertTrue(files, "扫不到任何 .py —— 本条会假通过")
         for p in files:
-            self.assertNotIn("socket", scanutil.imported_roots(p),
-                             "%s 又 import socket 了 —— 包内不该有网络代码" % p.name)
+            self.assertNotIn(
+                "socket", scanutil.imported_roots(p), "%s 又 import socket 了 —— 包内不该有网络代码" % p.name
+            )
             body = p.read_text(encoding="utf-8")
-            self.assertNotIn("socket.socket", body,
-                             "%s 又建 socket 了 —— 包内不该有网络代码" % p.name)
+            self.assertNotIn("socket.socket", body, "%s 又建 socket 了 —— 包内不该有网络代码" % p.name)
 
     def test_socket_guard_is_not_vacuous(self):
         """阳性对照：确认上面那条不是「永远通过」。"""
         self.assertIn("socket", scanutil.imported_roots_from_source("import socket\n"))
         self.assertIn("socket", scanutil.imported_roots_from_source("import os, socket\n"))
         # 阴性对照：docstring 里提到 **import socket** 不该算违规
-        self.assertNotIn("socket", scanutil.imported_roots_from_source(
-            '"""CPython 的 logging/handlers.py 顶层 import socket。"""\n'))
+        self.assertNotIn(
+            "socket",
+            scanutil.imported_roots_from_source(
+                '"""CPython 的 logging/handlers.py 顶层 import socket。"""\n'
+            ),
+        )
 
     def test_no_hardcoded_port_constants(self):
         """`HOST`/`PORT` 这对桥接常量不该回来了（防止顺手抄回旧代码）。"""
         for p in _py_files():
             body = p.read_text(encoding="utf-8")
-            self.assertFalse(re.search(r"^PORT\s*=", body, re.M),
-                             "%s 又出现了 PORT 常量" % p.name)
-            self.assertFalse(re.search(r"^HOST\s*=", body, re.M),
-                             "%s 又出现了 HOST 常量" % p.name)
+            self.assertFalse(re.search(r"^PORT\s*=", body, re.M), "%s 又出现了 PORT 常量" % p.name)
+            self.assertFalse(re.search(r"^HOST\s*=", body, re.M), "%s 又出现了 HOST 常量" % p.name)
 
     def test_legacy_bridge_modules_stay_deleted(self):
         """wire.py / net.py / controller.py 不许复活（可从 git 历史里捞回，故需守门）。
@@ -136,10 +140,8 @@ class NoListener(unittest.TestCase):
         按**文件名**在任意层级匹配 —— 只查顶层的话，挪进 `src/batbar/_legacy/`
         就绕过了。
         """
-        present = sorted(p.relative_to(SRC).as_posix()
-                         for p in SRC.rglob("*") if p.name in _DEAD_BRIDGE)
-        self.assertEqual(present, [],
-                         "旧双进程桥接已废弃，不要恢复：%s" % ", ".join(present))
+        present = sorted(p.relative_to(SRC).as_posix() for p in SRC.rglob("*") if p.name in _DEAD_BRIDGE)
+        self.assertEqual(present, [], "旧双进程桥接已废弃，不要恢复：%s" % ", ".join(present))
 
 
 if __name__ == "__main__":

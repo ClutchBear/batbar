@@ -27,6 +27,7 @@ request_id 语义：
     其中 function_sw_id 的 bit4..7 存功能号（0x00/0x10/0x20...），低 4 位被
     sw_id 覆盖。发送时 request_id 拆成大端两字节。
 """
+
 from __future__ import annotations
 
 import struct
@@ -41,19 +42,19 @@ SHORT_DATA = 5
 LONG_DATA = 18
 
 DEV_RECEIVER = 0xFF  # 寻址到接收器本身
-BOLT_PID = 0xC53F    # 本机实测 Bolt 接收器 PID
+BOLT_PID = 0xC53F  # 本机实测 Bolt 接收器 PID
 
 # ---- HID++ 2.0 核心特性页（Solaar hidpp20_constants.py:33-34）----
 FEATURE_ROOT = 0x0000
 FEATURE_FEATURE_SET = 0x0001
 
 # ROOT 页功能号
-FN_ROOT_GET_FEATURE = 0x00   # 参数：目标 feature 号（大端 2 字节）→ 回复字节 0 = 索引
-FN_ROOT_PING = 0x01          # 参数：ping 字节
+FN_ROOT_GET_FEATURE = 0x00  # 参数：目标 feature 号（大端 2 字节）→ 回复字节 0 = 索引
+FN_ROOT_PING = 0x01  # 参数：ping 字节
 FN_ROOT_GET_FEATURE_COUNT = 0x02  # → 回复字节 0 = 特性个数（不含 ROOT）
 
 # ---- 电池特性页（Solaar hidpp20_constants.py:53-55,90）----
-FEAT_BATTERY_STATUS = 0x1000   # 早期，档位粗
+FEAT_BATTERY_STATUS = 0x1000  # 早期，档位粗
 FEAT_BATTERY_VOLTAGE = 0x1001  # 电压
 FEAT_UNIFIED_BATTERY = 0x1004  # 现代鼠标主力（MX Anywhere/Master 系列）
 FEAT_ADC_MEASUREMENT = 0x1F20  # 充电状态机
@@ -116,11 +117,12 @@ def build_write_frame(device_index: int, payload: bytes, long_message: bool = Fa
 @dataclass(frozen=True)
 class BatteryInfo:
     """归一化的电池读数。level 单位 %，None 表示设备只给档位不给精确值。"""
-    level: int | None       # 0-100 或 None
-    approx: str | None      # "empty|critical|low|good|full" 之一
+
+    level: int | None  # 0-100 或 None
+    approx: str | None  # "empty|critical|low|good|full" 之一
     charging: bool
     voltage_mv: int | None
-    source: str             # "0x1004"/"0x1000"/"0x1001"/"0x1F20"/"bluetooth"/"unified"
+    source: str  # "0x1004"/"0x1000"/"0x1001"/"0x1F20"/"bluetooth"/"unified"
 
     @property
     def percent(self) -> int | None:
@@ -154,7 +156,13 @@ def parse_battery_status(reply: bytes) -> BatteryInfo | None:
     if level == 0:
         level = None
         # 0x1000 设备通常只报档位；Solaar 也是按状态推断
-    return BatteryInfo(level, approx, status in (STATUS_RECHARGING, STATUS_ALMOST_FULL, STATUS_FULL, STATUS_SLOW_RECHARGE), None, "0x1000")
+    return BatteryInfo(
+        level,
+        approx,
+        status in (STATUS_RECHARGING, STATUS_ALMOST_FULL, STATUS_FULL, STATUS_SLOW_RECHARGE),
+        None,
+        "0x1000",
+    )
 
 
 def parse_battery_voltage(reply: bytes) -> BatteryInfo | None:
@@ -194,9 +202,19 @@ def parse_adc_measurement(reply: bytes) -> BatteryInfo | None:
 def estimate_voltage_percent(mv: int) -> int | None:
     """电压→百分比线性插值。折点表抄自 Solaar hidpp20.py:2290-2304。"""
     table = [
-        (4186, 100), (4067, 90), (3989, 80), (3922, 70), (3859, 60),
-        (3811, 50), (3778, 40), (3751, 30), (3717, 20), (3671, 10),
-        (3646, 5), (3579, 2), (3500, 0),
+        (4186, 100),
+        (4067, 90),
+        (3989, 80),
+        (3922, 70),
+        (3859, 60),
+        (3811, 50),
+        (3778, 40),
+        (3751, 30),
+        (3717, 20),
+        (3671, 10),
+        (3646, 5),
+        (3579, 2),
+        (3500, 0),
     ]
     if mv >= table[0][0]:
         return table[0][1]
@@ -216,6 +234,7 @@ def estimate_voltage_percent(mv: int) -> int | None:
 #       [0x10, devnum, ...] 即可（与 Solaar 同一代码路径）；read 返回首字节 = Report ID。
 #   Linux hidraw：write 原样发送、read 带 Report ID 首字节。
 # 两端行为一致，但历史版本/hidapi 实现偶有不带 ID 的情况，故解析层做容错。
+
 
 def parse_input_report(raw: bytes) -> tuple[int, int, bytes] | None:
     """把设备读回的原始字节解析为 (report_id, device_index, payload)。
@@ -268,7 +287,9 @@ def frame_function(payload: bytes) -> int:
     return payload[1] & 0xF0
 
 
-def parse_notification_battery(payload: bytes, battery_feature_index: int, battery_feature_num: int) -> BatteryInfo | None:
+def parse_notification_battery(
+    payload: bytes, battery_feature_index: int, battery_feature_num: int
+) -> BatteryInfo | None:
     """设备主动上报电池（省电时它推、我们不用轮询）。
 
     通知帧布局与查询回复相同：[feat_index, function|0, data...]。

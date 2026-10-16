@@ -19,6 +19,7 @@ SeCreateGlobalPrivilege，托盘程序没必要。
 互斥量句柄**必须全程持有**。一旦被 GC 或 CloseHandle，锁立即释放 ——
 所以句柄存在模块级全局变量里，绝不放局部变量。
 """
+
 from __future__ import annotations
 
 import ctypes
@@ -33,12 +34,13 @@ log = logging.getLogger("batbar.single")
 
 MUTEX_NAME = r"Local\batbar-agent"
 ERROR_ALREADY_EXISTS = 183
-ENV_POPUP = "BATBAR_SINGLETON_POPUP"   # =0 关弹窗：脚本化验证/无人值守时用
-PID_NAME = "agent.pid"               # 见 write_pid/read_pid 的注释（重启脚本秒杀用）
+ENV_POPUP = "BATBAR_SINGLETON_POPUP"  # =0 关弹窗：脚本化验证/无人值守时用
+PID_NAME = "agent.pid"  # 见 write_pid/read_pid 的注释（重启脚本秒杀用）
 
 
 def popup_enabled() -> bool:
     return os.environ.get(ENV_POPUP, "1").strip().lower() not in ("0", "false", "no")
+
 
 # ── Win32 声明 ────────────────────────────────────────────────────────────
 _k32 = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -58,26 +60,26 @@ def _message_box(title: str, text: str) -> None:
     try:
         if _user32 is None:
             _user32 = ctypes.WinDLL("user32", use_last_error=True)
-            _user32.MessageBoxW.argtypes = [wintypes.HWND, wintypes.LPCWSTR,
-                                            wintypes.LPCWSTR, wintypes.UINT]
+            _user32.MessageBoxW.argtypes = [wintypes.HWND, wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.UINT]
             _user32.MessageBoxW.restype = ctypes.c_int
         MB_OK = 0x00000000
         MB_ICONINFORMATION = 0x00000040
-        MB_SETFOREGROUND = 0x00010000      # 不抢焦点，但要让人看见
+        MB_SETFOREGROUND = 0x00010000  # 不抢焦点，但要让人看见
         _user32.MessageBoxW(None, text, title, MB_OK | MB_ICONINFORMATION | MB_SETFOREGROUND)
-    except Exception as exc:               # noqa: BLE001 - 弹窗失败无所谓
+    except Exception as exc:  # noqa: BLE001 - 弹窗失败无所谓
         log.debug("message box failed: %s", exc)
 
 
-_handle: int | None = None   # ★ 模块级持有：被 GC 就等于解锁
+_handle: int | None = None  # ★ 模块级持有：被 GC 就等于解锁
 
 
-RETRY_TIMES = 5        # 抢占重试次数
-RETRY_DELAY = 0.3      # 每次重试间隔（秒）→ 最多多等 1.5 秒
+RETRY_TIMES = 5  # 抢占重试次数
+RETRY_DELAY = 0.3  # 每次重试间隔（秒）→ 最多多等 1.5 秒
 
 
-def acquire(name: str = MUTEX_NAME, notify: bool = True,
-            retries: int = RETRY_TIMES, delay: float = RETRY_DELAY) -> bool:
+def acquire(
+    name: str = MUTEX_NAME, notify: bool = True, retries: int = RETRY_TIMES, delay: float = RETRY_DELAY
+) -> bool:
     """抢占单实例锁。
 
     Returns:
@@ -96,7 +98,7 @@ def acquire(name: str = MUTEX_NAME, notify: bool = True,
     if sys.platform != "win32":
         log.debug("non-Windows: single-instance guard skipped")
         return True
-    if _handle is not None:                # 同进程重复调用 = 自己持有，放行
+    if _handle is not None:  # 同进程重复调用 = 自己持有，放行
         return True
 
     for attempt in range(retries + 1):
@@ -107,8 +109,7 @@ def acquire(name: str = MUTEX_NAME, notify: bool = True,
         h = _k32.CreateMutexW(None, False, name)
         if not h:
             # 拿不到句柄（极罕见）：不挡住程序，只是失去保护
-            log.warning("CreateMutexW failed (%s): single-instance guard inactive",
-                        ctypes.get_last_error())
+            log.warning("CreateMutexW failed (%s): single-instance guard inactive", ctypes.get_last_error())
             return True
         err = ctypes.get_last_error()
         if err != ERROR_ALREADY_EXISTS:
@@ -123,11 +124,13 @@ def acquire(name: str = MUTEX_NAME, notify: bool = True,
 
     log.error("已有 batbar 实例在运行，本次启动退出（两个实例会抢同一条 HID 输入队列）")
     if notify and popup_enabled():
-        _message_box("batbar",
-                     "batbar 已经在运行了（看系统托盘图标）。\n\n"
-                     "同时开两个会互相抢 HID 数据，导致电量读数不动，"
-                     "所以这次启动被拦下了。\n\n"
-                     "要重启的话：先右键托盘图标退出，再启动。")
+        _message_box(
+            "batbar",
+            "batbar 已经在运行了（看系统托盘图标）。\n\n"
+            "同时开两个会互相抢 HID 数据，导致电量读数不动，"
+            "所以这次启动被拦下了。\n\n"
+            "要重启的话：先右键托盘图标退出，再启动。",
+        )
     return False
 
 
@@ -139,14 +142,14 @@ def already_running(name: str = MUTEX_NAME) -> bool:
     """
     if sys.platform != "win32":
         return False
-    if _handle is not None:                # 本进程自己就持有锁
+    if _handle is not None:  # 本进程自己就持有锁
         return True
     ctypes.set_last_error(0)
     h = _k32.CreateMutexW(None, False, name)
     if not h:
         return False
     busy = ctypes.get_last_error() == ERROR_ALREADY_EXISTS
-    _k32.CloseHandle(h)                    # 探测用句柄立即归还，绝不持有
+    _k32.CloseHandle(h)  # 探测用句柄立即归还，绝不持有
     return busy
 
 
@@ -184,7 +187,7 @@ def write_pid(path: str | os.PathLike[str] | None = None) -> Path | None:
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(str(os.getpid()), encoding="utf-8")
         return p
-    except Exception as exc:               # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         log.debug("write pid failed: %s", exc)
         return None
 
@@ -195,7 +198,7 @@ def read_pid(path: str | os.PathLike[str] | None = None) -> int | None:
         p = Path(path) if path is not None else pid_path()
         txt = p.read_text(encoding="utf-8").strip()
         return int(txt) if txt.isdigit() else None
-    except Exception:                      # noqa: BLE001
+    except Exception:  # noqa: BLE001
         return None
 
 
@@ -210,7 +213,7 @@ def release() -> None:
     try:
         _k32.ReleaseMutex(_handle)
         _k32.CloseHandle(_handle)
-    except Exception as exc:               # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         log.debug("release mutex failed: %s", exc)
     finally:
         _handle = None

@@ -20,6 +20,7 @@ r"""打包产物 dist/batbar.exe 的端到端验收。
 它会选哪个，所以两个都记基线、跑完看哪个变大了（2026-10-13 改绿色模式时踩过：
 只盯老路径会把验收验成"日志没新增"的假失败）。
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -134,7 +135,8 @@ def dynamic_check() -> int:
     proc = subprocess.Popen(
         [str(EXE), "--standalone", "-v"],
         cwd=SYS32,
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
     print(f"  已启动 pid={proc.pid}，等 20 秒让它轮询一轮设备 ...")
     time.sleep(20)
@@ -149,13 +151,15 @@ def dynamic_check() -> int:
     exe_name = EXE.name
     alive = subprocess.run(
         ["tasklist", "/FI", f"IMAGENAME eq {exe_name}", "/NH"],
-        capture_output=True, text=True, errors="replace", check=False,
+        capture_output=True,
+        text=True,
+        errors="replace",
+        check=False,
     ).stdout
     running = exe_name.lower() in alive.lower()
     print(f"  进程存活: {running}   (查 {exe_name})")
 
-    subprocess.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)],
-                   capture_output=True, check=False)
+    subprocess.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)], capture_output=True, check=False)
     try:
         proc.wait(timeout=10)
     except subprocess.TimeoutExpired:
@@ -206,8 +210,10 @@ def dynamic_check() -> int:
     m = re.search(r"数据目录 = (.+?)(（|$)", fresh_txt)
     if m:
         green = "绿色模式" in fresh_txt
-        print(f"  数据目录 => {m.group(1).strip()}   "
-              f"[{'绿色模式 ✓' if green else '注意：不是 exe 同目录，见该行括号里的原因'}]")
+        print(
+            f"  数据目录 => {m.group(1).strip()}   "
+            f"[{'绿色模式 ✓' if green else '注意：不是 exe 同目录，见该行括号里的原因'}]"
+        )
 
     # cwd 锚定：frozen 下应锚到 exe 所在目录，绝不该停在 System32
     m = re.search(r"cwd 已锚定：(.+)", fresh_txt)

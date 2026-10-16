@@ -13,6 +13,7 @@
 
 用法: python verify_green_mode.py <exe路径> [秒数]
 """
+
 from __future__ import annotations
 
 import json
@@ -30,8 +31,7 @@ LOCAL = Path(os.environ.get("LOCALAPPDATA") or ".")
 LEGACY = LOCAL / "batbar"
 LEGACY_OLD = LOCAL / "logi-tray"
 
-EXE_SRC = Path(sys.argv[1] if len(sys.argv) > 1
-               else r"D:\workbuddy\space\batbar\dist\batbar.exe").resolve()
+EXE_SRC = Path(sys.argv[1] if len(sys.argv) > 1 else r"D:\workbuddy\space\batbar\dist\batbar.exe").resolve()
 SECONDS = float(sys.argv[2]) if len(sys.argv) > 2 else 25.0
 
 
@@ -54,7 +54,7 @@ def main() -> int:
         return 1
 
     work = Path(tempfile.mkdtemp(prefix="batbar-green-"))
-    exe = work / "batbar.exe"                 # ★ 平铺：exe 直接躺在工作目录里
+    exe = work / "batbar.exe"  # ★ 平铺：exe 直接躺在工作目录里
     shutil.copy2(EXE_SRC, exe)
 
     legacy_log = LEGACY / "logs" / "agent.log"
@@ -66,12 +66,18 @@ def main() -> int:
     }
 
     print("工作目录:", work)
-    print("跑之前 —— 用户目录里有 %d 个文件，历史目录里有 %d 个文件"
-          % (len(before["legacy_files"]), len(before["legacy_old_files"])))
+    print(
+        "跑之前 —— 用户目录里有 %d 个文件，历史目录里有 %d 个文件"
+        % (len(before["legacy_files"]), len(before["legacy_old_files"]))
+    )
 
-    proc = subprocess.Popen([str(exe)], cwd=r"C:\Windows\System32",
-                            stdin=subprocess.DEVNULL,
-                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    proc = subprocess.Popen(
+        [str(exe)],
+        cwd=r"C:\Windows\System32",
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
     time.sleep(SECONDS)
     alive = proc.poll() is None
     print(f"  进程存活: {alive}  (pid={proc.pid})")
@@ -86,8 +92,9 @@ def main() -> int:
         "exe 同目录出现 agent.pid": (work / "agent.pid").is_file(),
         "日志声明绿色模式": "绿色模式" in log_txt,
         "日志声明数据目录": "数据目录 =" in log_txt,
-        "历史数据被复制进来": any(f.startswith("logs/") or f == "last-known.json"
-                                  for f in after_files if f != "logs/agent.log"),
+        "历史数据被复制进来": any(
+            f.startswith("logs/") or f == "last-known.json" for f in after_files if f != "logs/agent.log"
+        ),
         "旧目录仍在（只复制不删源）": bool(_tree(LEGACY)) or not before["legacy_files"],
         "用户目录日志未再增长": _size(legacy_log) <= before["legacy_log_size"],
     }
@@ -104,14 +111,27 @@ def main() -> int:
             print("   ", ln[:160])
 
     # 收尸：杀掉这次起的进程树（别动别的 batbar 实例）
-    subprocess.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)],
-                   capture_output=True, check=False, creationflags=NO_WINDOW)
+    subprocess.run(
+        ["taskkill", "/T", "/F", "/PID", str(proc.pid)],
+        capture_output=True,
+        check=False,
+        creationflags=NO_WINDOW,
+    )
 
-    with open(Path(__file__).resolve().parents[1] / "_tmp" / "verify_green_result.json",
-              "w", encoding="utf-8") as fh:
-        json.dump({"work": str(work), "files": after_files, "checks": checks,
-                   "log_head": log_txt.splitlines()[:20]}, fh,
-                  ensure_ascii=False, indent=2)
+    with open(
+        Path(__file__).resolve().parents[1] / "_tmp" / "verify_green_result.json", "w", encoding="utf-8"
+    ) as fh:
+        json.dump(
+            {
+                "work": str(work),
+                "files": after_files,
+                "checks": checks,
+                "log_head": log_txt.splitlines()[:20],
+            },
+            fh,
+            ensure_ascii=False,
+            indent=2,
+        )
     bad = [k for k, v in checks.items() if not v]
     print("\n判定:", "全部通过" if not bad else "未通过：" + "、".join(bad))
     return 0 if not bad else 1

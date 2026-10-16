@@ -9,6 +9,7 @@ MI_02 上的 "符合 HID 标准的供应商定义设备"）。选择逻辑对齐
 优先 usage_page 0xFF00 且 usage 0xFF01/0xFF02/0xFF09/0x0003（Bolt），
 拿不到就退回该 VID/PID 的第一个可枚举设备。
 """
+
 from __future__ import annotations
 
 import logging
@@ -38,7 +39,9 @@ def find_devices(bt_names: tuple[str, ...] = ()) -> list[dict]:
         elif bt_names and any(n.lower() in (d.get("product_string") or "").lower() for n in bt_names):
             out.append(d)
     # 罗技接收器的 vendor collection 排在最前
-    out.sort(key=lambda d: (0 if d.get("vendor_id") == 0x046D and d.get("usage_page") in VENDOR_PAGES[:4] else 1))
+    out.sort(
+        key=lambda d: 0 if d.get("vendor_id") == 0x046D and d.get("usage_page") in VENDOR_PAGES[:4] else 1
+    )
     return out
 
 
@@ -82,11 +85,10 @@ class HidapiTransport(Transport):
     读要同时轮询 primary + 同 usage_page 的全部兄弟 collection（readers）。
     """
 
-    def __init__(self, dev: hid.device, frame_len: int | None = None,
-                 readers: tuple | list = ()):
+    def __init__(self, dev: hid.device, frame_len: int | None = None, readers: tuple | list = ()):
         self._dev = dev
         self._closed = False
-        self._frame_len = frame_len   # 已探明的写长度，避免每帧重试
+        self._frame_len = frame_len  # 已探明的写长度，避免每帧重试
         self._readers = [dev] + [r for r in readers if r is not dev]
 
     def write(self, payload: bytes, device_index: int, long: bool) -> None:
@@ -112,6 +114,7 @@ class HidapiTransport(Transport):
         if self._closed:
             raise TransportClosed("handle closed")
         import time
+
         deadline = time.monotonic() + timeout_s
         while True:
             for r in self._readers:

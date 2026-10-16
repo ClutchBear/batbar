@@ -26,6 +26,7 @@ Hub 的 90% 来自 0xFF02 口对 `13 4a 01 00`（reportID 0x13，2.4G 默认）�
 与 0xFF02 监听的关系：HidD_GetFeature 是同步 IOCTL，**不消耗输入队列**，
 与 dongle 的单读者监听互不冲突（不同 collection、不同机制），可放心并存。
 """
+
 from __future__ import annotations
 
 import ctypes
@@ -38,17 +39,20 @@ from . import win32ctypes as w32
 
 log = logging.getLogger("batbar.feature24")
 
-POLL_INTERVAL = 30.0          # 秒。feature 是拉取式，无事件可依，定时轮询
-BRUTE_IDS = range(0x20)       # 首次发现时穷举的 reportID 范围
+POLL_INTERVAL = 30.0  # 秒。feature 是拉取式，无事件可依，定时轮询
+BRUTE_IDS = range(0x20)  # 首次发现时穷举的 reportID 范围
 
 
 # ---------- Win32 绑定（统一走 win32ctypes，勿在此重声明 argtypes） ----------
 
+
 def _dlls():
     """返回 (setupapi, hid, kernel32)；非 Windows 抛 AttributeError。"""
-    return (ctypes.windll.setupapi,          # type: ignore[attr-defined]
-            ctypes.windll.hid,               # type: ignore[attr-defined]
-            ctypes.windll.kernel32)          # type: ignore[attr-defined]
+    return (
+        ctypes.windll.setupapi,  # type: ignore[attr-defined]
+        ctypes.windll.hid,  # type: ignore[attr-defined]
+        ctypes.windll.kernel32,
+    )  # type: ignore[attr-defined]
 
 
 def _feature_collections(vid: int, pid: int) -> list[tuple[str, int]]:
@@ -68,8 +72,9 @@ def _feature_collections(vid: int, pid: int) -> list[tuple[str, int]]:
         return []
     w32.ensure_argtypes()
     guid = w32.hid_guid()
-    hdev = setupapi.SetupDiGetClassDevsW(byref(guid), None, None,
-                                         w32.DIGCF_PRESENT | w32.DIGCF_DEVICEINTERFACE)
+    hdev = setupapi.SetupDiGetClassDevsW(
+        byref(guid), None, None, w32.DIGCF_PRESENT | w32.DIGCF_DEVICEINTERFACE
+    )
     if not hdev or hdev == w32.invalid_handle():
         return []
     out: list[tuple[str, int]] = []
@@ -79,22 +84,22 @@ def _feature_collections(vid: int, pid: int) -> list[tuple[str, int]]:
         while True:
             ifd = w32.IFD()
             ifd.cbSize = ctypes.sizeof(w32.IFD)
-            if not setupapi.SetupDiEnumDeviceInterfaces(hdev, None, byref(guid),
-                                                        i, byref(ifd)):
+            if not setupapi.SetupDiEnumDeviceInterfaces(hdev, None, byref(guid), i, byref(ifd)):
                 break
             i += 1
             det = w32.DETAIL()
             det.cbSize = 8
             size = wintypes.DWORD(ctypes.sizeof(w32.DETAIL))
             if not setupapi.SetupDiGetDeviceInterfaceDetailW(
-                    hdev, byref(ifd), byref(det), size, byref(size), None):
+                hdev, byref(ifd), byref(det), size, byref(size), None
+            ):
                 continue
             up = det.DevicePath.upper()
             if f"VID_{vid:04X}" not in up or f"PID_{pid:04X}" not in up:
                 continue
-            h = k32.CreateFileW(det.DevicePath, 0,
-                                w32.FILE_SHARE_READ | w32.FILE_SHARE_WRITE,
-                                None, w32.OPEN_EXISTING, 0, 0)
+            h = k32.CreateFileW(
+                det.DevicePath, 0, w32.FILE_SHARE_READ | w32.FILE_SHARE_WRITE, None, w32.OPEN_EXISTING, 0, 0
+            )
             if not h or h == w32.invalid_handle():
                 continue
             try:
@@ -126,9 +131,9 @@ def read_feature(path: str, featlen: int, rid: int) -> bytes | None:
     w32.ensure_argtypes()
     # 探针实测用 GENERIC_READ|GENERIC_WRITE 打开成功；只读是否足够未验证，
     # 沿用已证实的组合（GetFeature 是同步 IOCTL，不消耗输入队列，无单读者冲突）。
-    h = k32.CreateFileW(path, 0xC0000000,
-                        w32.FILE_SHARE_READ | w32.FILE_SHARE_WRITE,
-                        None, w32.OPEN_EXISTING, 0, 0)
+    h = k32.CreateFileW(
+        path, 0xC0000000, w32.FILE_SHARE_READ | w32.FILE_SHARE_WRITE, None, w32.OPEN_EXISTING, 0, 0
+    )
     if not h or h == w32.invalid_handle():
         return None
     try:
@@ -145,7 +150,7 @@ def read_feature(path: str, featlen: int, rid: int) -> bytes | None:
 # ---------- 发现 + 轮询状态机 ----------
 
 _lock = threading.Lock()
-_found: dict[str, list[tuple[str, int, int]]] = {}   # name -> [(path, featlen, rid)]
+_found: dict[str, list[tuple[str, int, int]]] = {}  # name -> [(path, featlen, rid)]
 _samples: dict[str, list[tuple[float, bytes]]] = {}  # name -> [(ts, raw)] 最近 N 组
 _stop = threading.Event()
 _thread: threading.Thread | None = None
@@ -161,8 +166,7 @@ def discover(name: str, vid: int, pid: int) -> list[tuple[str, int, int]]:
             data = read_feature(path, featlen, rid)
             if data is not None:
                 hits.append((path, featlen, rid))
-                log.info("feature 命中 %s rid=0x%02x len=%d: %s",
-                         name, rid, featlen, data.hex(" "))
+                log.info("feature 命中 %s rid=0x%02x len=%d: %s", name, rid, featlen, data.hex(" "))
     with _lock:
         _found[name] = hits
     return hits
@@ -173,7 +177,7 @@ def poll_once(name: str) -> list[bytes]:
     with _lock:
         targets = list(_found.get(name, []))
     got: list[bytes] = []
-    for (path, featlen, rid) in targets:
+    for path, featlen, rid in targets:
         data = read_feature(path, featlen, rid)
         if data is not None:
             got.append(data)
@@ -181,7 +185,7 @@ def poll_once(name: str) -> list[bytes]:
                 buf = _samples.setdefault(name, [])
                 buf.append((time.time(), data))
                 if len(buf) > MAX_SAMPLES:
-                    del buf[:len(buf) - MAX_SAMPLES]
+                    del buf[: len(buf) - MAX_SAMPLES]
     return got
 
 
@@ -209,6 +213,7 @@ def _loop() -> None:
     事件推送帧 + `poll24` 代发官方 getBattery 查询得到的**应答帧**。
     """
     from .dongle import TARGETS
+
     while not _stop.is_set():
         for (vid, pid), name in list(TARGETS.items()):
             try:
@@ -217,9 +222,9 @@ def _loop() -> None:
                 if not known:
                     hits = discover(name, vid, pid)
                     if not hits:
-                        continue          # 该目标无 feature 口，下轮再试
-                poll_once(name)           # 只存样本供取证，不转记活帧
-            except Exception as exc:      # noqa: BLE001 - 单设备失败不拖垮循环
+                        continue  # 该目标无 feature 口，下轮再试
+                poll_once(name)  # 只存样本供取证，不转记活帧
+            except Exception as exc:  # noqa: BLE001 - 单设备失败不拖垮循环
                 log.debug("feature poll %s: %s", name, exc)
         _stop.wait(POLL_INTERVAL)
 

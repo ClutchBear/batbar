@@ -29,6 +29,7 @@
   * 窗口创建 / 消息循环 —— Windows-only，由 `agent._start_theme_watch` 所在的
     那个隐藏窗口承载（复用，不新建窗口）。
 """
+
 from __future__ import annotations
 
 import logging
@@ -38,9 +39,9 @@ log = logging.getLogger("batbar.event")
 
 # ── Windows 消息常量 ──
 WM_DEVICECHANGE = 0x0219
-DBT_DEVICEARRIVAL = 0x8000          # 设备接入
-DBT_DEVICEREMOVECOMPLETE = 0x8004   # 设备移除
-DBT_DEVNODES_CHANGED = 0x0007       # 设备树变化（最频繁，需去抖）
+DBT_DEVICEARRIVAL = 0x8000  # 设备接入
+DBT_DEVICEREMOVECOMPLETE = 0x8004  # 设备移除
+DBT_DEVNODES_CHANGED = 0x0007  # 设备树变化（最频繁，需去抖）
 
 # 去抖窗口（秒）。实测一次插拔的 NODES_CHANGED 连发集中在 ~1s 内（12 条挤在
 # 同一秒），取 600ms 足够把一波合并成一次刷新，又不会让用户感到延迟。
@@ -137,7 +138,7 @@ def classify(wparam: int) -> str | None:
 #   * `RegisterRawInputDevices` / `GetRawInputData` —— Windows-only，在 agent
 #     的隐藏消息窗口里做。
 
-WM_INPUT = 0x00FF              # 原始输入到达（RIDEV_INPUTSINK 下后台也收）
+WM_INPUT = 0x00FF  # 原始输入到达（RIDEV_INPUTSINK 下后台也收）
 
 RIM_TYPEMOUSE = 0
 RIM_TYPEKEYBOARD = 1
@@ -161,7 +162,7 @@ MOUSE_BUTTON_4_DOWN = 0x0040
 MOUSE_BUTTON_4_UP = 0x0080
 MOUSE_BUTTON_5_DOWN = 0x0100
 MOUSE_BUTTON_5_UP = 0x0200
-MOUSE_BUTTON_MASK = 0x07FF          # 上面所有按键位的并集
+MOUSE_BUTTON_MASK = 0x07FF  # 上面所有按键位的并集
 MOUSE_WHEEL = 0x0400
 MOUSE_HWHEEL = 0x0800
 
@@ -231,16 +232,15 @@ def decode_rawinput(raw: bytes) -> dict | None:
     dy = int.from_bytes(raw[40:44], "little", signed=True)
     if buttons & (MOUSE_WHEEL | MOUSE_HWHEEL):
         kind = "wheel"
-    elif buttons & 0x07FF:                # BUTTON_1..BUTTON_5 的 down/up 位
+    elif buttons & 0x07FF:  # BUTTON_1..BUTTON_5 的 down/up 位
         kind = "button"
     elif us_flags & (MOUSE_MOVE_ABSOLUTE | MOUSE_MOVE_RELATIVE):
         kind = "move"
-    elif dx != 0 or dy != 0:              # 兜底：有位移就算移动
+    elif dx != 0 or dy != 0:  # 兜底：有位移就算移动
         kind = "move"
     else:
         kind = "other"
-    return {"kind": kind, "dx": dx, "dy": dy,
-            "flags": us_flags, "buttons": buttons}
+    return {"kind": kind, "dx": dx, "dy": dy, "flags": us_flags, "buttons": buttons}
 
 
 def rawinput_activity(raw: bytes) -> bool:

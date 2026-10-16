@@ -40,6 +40,7 @@ QUNS 会随焦点微抖动（点一下桌面、弹个 UAC、切个窗口都可�
 还糟。故用**连续 N 次才翻面**的迟滞：进"别打扰"快（3 次 ≈ 6s，游戏一开始就
 安静），出"别打扰"慢（5 次 ≈ 10s，避免刚切出去又切回来时白刷一轮）。
 """
+
 from __future__ import annotations
 
 import logging
@@ -49,24 +50,26 @@ import time
 log = logging.getLogger("batbar.fullscreen")
 
 # ── QUNS 枚举（msdn: SHQueryUserNotificationState）──
-QUNS_NOT_PRESENT = 1                # 屏保/锁屏，用户不在
-QUNS_BUSY = 2                       # 全屏应用（含无边框全屏）★ 本机实测命中
-QUNS_RUNNING_D3D_FULL_SCREEN = 3    # 独占 D3D 全屏
-QUNS_PRESENTATION_MODE = 4          # 演示/投屏
-QUNS_ACCEPTS_NOTIFICATIONS = 5      # 正常，可打扰
-QUNS_QUIET_TIME = 6                 # 系统安静时间
-QUNS_APP = 7                        # Win8+ 应用态
+QUNS_NOT_PRESENT = 1  # 屏保/锁屏，用户不在
+QUNS_BUSY = 2  # 全屏应用（含无边框全屏）★ 本机实测命中
+QUNS_RUNNING_D3D_FULL_SCREEN = 3  # 独占 D3D 全屏
+QUNS_PRESENTATION_MODE = 4  # 演示/投屏
+QUNS_ACCEPTS_NOTIFICATIONS = 5  # 正常，可打扰
+QUNS_QUIET_TIME = 6  # 系统安静时间
+QUNS_APP = 7  # Win8+ 应用态
 
 # 全部"别打扰"取值。★ 特意含 BUSY 与 PRESENTATION_MODE：
 # 实测无边框全屏返回的是 BUSY 而非 D3D_FULL_SCREEN，只认 D3D 会漏掉绝大多数游戏。
-_DONT_DISTURB_STATES = frozenset({
-    QUNS_NOT_PRESENT,
-    QUNS_BUSY,
-    QUNS_RUNNING_D3D_FULL_SCREEN,
-    QUNS_PRESENTATION_MODE,
-    QUNS_QUIET_TIME,
-    QUNS_APP,
-})
+_DONT_DISTURB_STATES = frozenset(
+    {
+        QUNS_NOT_PRESENT,
+        QUNS_BUSY,
+        QUNS_RUNNING_D3D_FULL_SCREEN,
+        QUNS_PRESENTATION_MODE,
+        QUNS_QUIET_TIME,
+        QUNS_APP,
+    }
+)
 
 _STATE_NAMES = {
     QUNS_NOT_PRESENT: "NOT_PRESENT",
@@ -123,9 +126,9 @@ def is_dont_disturb(state: int | None) -> bool:
 
 
 # ── 迟滞参数 ──
-ENTER_STREAK = 3     # 连续 N 次"别打扰"才进入（进得快：游戏一开始就安静）
-EXIT_STREAK = 5      # 连续 N 次"可打扰"才退出（出得慢：防抖，避免白刷硬件）
-POLL_SECONDS = 2.0   # 查询节拍（2s × 3 = 6s 进入；2s × 5 = 10s 退出）
+ENTER_STREAK = 3  # 连续 N 次"别打扰"才进入（进得快：游戏一开始就安静）
+EXIT_STREAK = 5  # 连续 N 次"可打扰"才退出（出得慢：防抖，避免白刷硬件）
+POLL_SECONDS = 2.0  # 查询节拍（2s × 3 = 6s 进入；2s × 5 = 10s 退出）
 
 
 class FullscreenGate:
@@ -140,9 +143,9 @@ class FullscreenGate:
     变化，跟着走会在游戏里反复"暂停→恢复"，每次恢复都真读硬件。
     """
 
-    def __init__(self, enter_streak: int = ENTER_STREAK,
-                 exit_streak: int = EXIT_STREAK,
-                 mode: str | None = None) -> None:
+    def __init__(
+        self, enter_streak: int = ENTER_STREAK, exit_streak: int = EXIT_STREAK, mode: str | None = None
+    ) -> None:
         """
         Args:
             enter_streak: 连续多少次"别打扰"才进入。
@@ -187,8 +190,7 @@ class FullscreenGate:
         """当前状态是何时进入的（monotonic），供日志算持续时长。"""
         return self._since
 
-    def sample(self, state: int | None,
-               now: float | None = None) -> bool:
+    def sample(self, state: int | None, now: float | None = None) -> bool:
         """喂一次 QUNS 采样。返回 **本次是否发生了翻面**。
 
         Args:
@@ -197,7 +199,7 @@ class FullscreenGate:
         """
         self._last_state = state
         if self.locked:
-            return False        # off/on：状态已锁死，采样纯记录不参与判定
+            return False  # off/on：状态已锁死，采样纯记录不参与判定
 
         now = time.monotonic() if now is None else now
         if is_dont_disturb(state):
@@ -218,6 +220,8 @@ class FullscreenGate:
 
     def describe(self) -> str:
         """一行状态摘要（日志用）。"""
-        return (f"mode={self._mode} active={self._active} "
-                f"last={state_name(self._last_state)} "
-                f"busy0={self._busy_streak} free0={self._free_streak}")
+        return (
+            f"mode={self._mode} active={self._active} "
+            f"last={state_name(self._last_state)} "
+            f"busy0={self._busy_streak} free0={self._free_streak}"
+        )

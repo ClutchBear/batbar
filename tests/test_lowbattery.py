@@ -1,4 +1,5 @@
 """低电量提醒状态机：去抖 / 迟滞 / 充电有线豁免 / 单发解除布防 / 弹前实时复核。"""
+
 from __future__ import annotations
 
 import os
@@ -30,9 +31,9 @@ class Feed(unittest.TestCase):
         """中间夹一次正常读数 → 计数归零，毛刺 0 帧不累积。"""
         w = self._w(confirm=3)
         w.feed("K", 10)
-        w.feed("K", 0)      # 孤立 0 帧（链路切换毛刺）
-        w.feed("K", 80)     # 正常 → 归零
-        w.feed("K", 10)     # 重新计数，前功尽弃
+        w.feed("K", 0)  # 孤立 0 帧（链路切换毛刺）
+        w.feed("K", 80)  # 正常 → 归零
+        w.feed("K", 10)  # 重新计数，前功尽弃
         self.assertFalse(w.feed("K", 9))
 
     def test_disarms_after_notify_until_rearm(self):
@@ -41,18 +42,18 @@ class Feed(unittest.TestCase):
         gap = LB.DEFAULT_RESET_GAP
         w = self._w(confirm=3)
         for _ in range(3):
-            w.feed("K", 5)         # 第三次触发
-        self.assertFalse(w.feed("K", 5))   # 已解除，不再弹
+            w.feed("K", 5)  # 第三次触发
+        self.assertFalse(w.feed("K", 5))  # 已解除，不再弹
         # 迟滞带内（thr < pct < thr+gap）不重新布防
         w.feed("K", thr + 1)
         for _ in range(3):
             r = w.feed("K", 5)
-        self.assertFalse(r)        # 仍未布防 → 不弹
+        self.assertFalse(r)  # 仍未布防 → 不弹
         # 回升到 threshold+gap 才重新布防
         w.feed("K", thr + gap)
         for _ in range(2):
             w.feed("K", 5)
-        self.assertTrue(w.feed("K", 4))   # 重新布防后再次达标 → 弹
+        self.assertTrue(w.feed("K", 4))  # 重新布防后再次达标 → 弹
 
     def test_charging_exempt(self):
         """充电中豁免：绝不弹，且撤销计数。"""
@@ -73,7 +74,7 @@ class Feed(unittest.TestCase):
         w = self._w(confirm=3)
         w.feed("K", 10)
         w.feed("K", None)
-        self.assertFalse(w.feed("K", 10))   # None 归零后重新计数，未达 3
+        self.assertFalse(w.feed("K", 10))  # None 归零后重新计数，未达 3
 
     def test_realtime_wired_check_blocks_false_alarm(self):
         """弹前 wired_check 实时复核发现插线 → 抑制假警报并重新布防。"""
@@ -81,13 +82,13 @@ class Feed(unittest.TestCase):
 
         def wired(name):
             calls["n"] += 1
-            return True      # 模拟：即将弹时实时查到「其实插着线」
+            return True  # 模拟：即将弹时实时查到「其实插着线」
 
         w = self._w(confirm=3, wired_check=wired)
         w.feed("K", 5)
         w.feed("K", 5)
-        self.assertFalse(w.feed("K", 5))     # 达标但被 wired_check 拦下
-        self.assertEqual(calls["n"], 1)      # 只在真要弹时调一次
+        self.assertFalse(w.feed("K", 5))  # 达标但被 wired_check 拦下
+        self.assertEqual(calls["n"], 1)  # 只在真要弹时调一次
 
     def test_wired_check_only_called_on_trigger(self):
         """wired_check 不在常规低读数里跑（只在达阈值那一瞬）。"""
@@ -99,13 +100,14 @@ class Feed(unittest.TestCase):
 
         w = self._w(confirm=3, wired_check=wired)
         w.feed("K", 5)
-        w.feed("K", 5)                        # 未达 confirm，不该查
+        w.feed("K", 5)  # 未达 confirm，不该查
         self.assertEqual(calls["n"], 0)
-        self.assertTrue(w.feed("K", 5))       # 第三次：查一次 → 未有线 → 弹
+        self.assertTrue(w.feed("K", 5))  # 第三次：查一次 → 未有线 → 弹
         self.assertEqual(calls["n"], 1)
 
     def test_threshold_env_override(self):
         import os
+
         os.environ["BATBAR_LOWBAT_THRESHOLD"] = "30"
         try:
             LB.reset()
@@ -133,27 +135,27 @@ class GateSuppression(unittest.TestCase):
         class FakeIcon:
             def notify(self, title, msg):
                 sent.append((title, msg))
+
         return FakeIcon()
 
     def test_gate_false_suppresses_delivery(self):
         """gate 返回 False → 不弹，且 feed 返回 False。"""
         sent = []
-        w = LB.LowBatteryWatcher(icon_getter=lambda: self._icon(sent),
-                                 confirm=1, gate=lambda n, p: False)
+        w = LB.LowBatteryWatcher(icon_getter=lambda: self._icon(sent), confirm=1, gate=lambda n, p: False)
         self.assertFalse(w.feed("键盘", 5))
         self.assertEqual(sent, [])
 
     def test_gate_true_allows_delivery(self):
         sent = []
-        w = LB.LowBatteryWatcher(icon_getter=lambda: self._icon(sent),
-                                 confirm=1, gate=lambda n, p: True)
+        w = LB.LowBatteryWatcher(icon_getter=lambda: self._icon(sent), confirm=1, gate=lambda n, p: True)
         self.assertTrue(w.feed("键盘", 5))
         self.assertEqual(len(sent), 1)
 
     def test_gate_receives_name_and_pct(self):
         seen = []
-        w = LB.LowBatteryWatcher(icon_getter=lambda: None, confirm=1,
-                                 gate=lambda n, p: seen.append((n, p)) or True)
+        w = LB.LowBatteryWatcher(
+            icon_getter=lambda: None, confirm=1, gate=lambda n, p: seen.append((n, p)) or True
+        )
         w.feed("键盘", 7)
         self.assertEqual(seen, [("键盘", 7)])
 
@@ -167,10 +169,10 @@ class GateSuppression(unittest.TestCase):
             return False
 
         w = LB.LowBatteryWatcher(icon_getter=lambda: None, confirm=1, gate=gate)
-        w.feed("K", 5)                  # 触发一次 → 被抑制 → 解除布防
+        w.feed("K", 5)  # 触发一次 → 被抑制 → 解除布防
         for _ in range(10):
-            self.assertFalse(w.feed("K", 5))   # 已解除，不重复
-        self.assertEqual(calls, [5])    # gate 只被问过一次
+            self.assertFalse(w.feed("K", 5))  # 已解除，不重复
+        self.assertEqual(calls, [5])  # gate 只被问过一次
 
     def test_gate_exception_treated_as_allow(self):
         """门控自己抛异常 → 按"允许弹"处理（宁可打扰也别丢提醒）。"""
@@ -180,8 +182,7 @@ class GateSuppression(unittest.TestCase):
         def boom(n, p):
             raise RuntimeError("quns down")
 
-        w = LB.LowBatteryWatcher(icon_getter=lambda: self._icon(sent),
-                                 confirm=1, gate=boom)
+        w = LB.LowBatteryWatcher(icon_getter=lambda: self._icon(sent), confirm=1, gate=boom)
         self.assertTrue(w.feed("键盘", 5))
         self.assertEqual(len(sent), 1)
 
@@ -195,17 +196,18 @@ class GateSuppression(unittest.TestCase):
     def test_gate_only_consulted_at_delivery(self):
         """gate 不应在 feed 的**计数阶段**被调用（否则全屏切换会断掉计数）。"""
         calls = []
-        w = LB.LowBatteryWatcher(icon_getter=lambda: None, confirm=3,
-                                 gate=lambda n, p: calls.append(1) or True)
-        w.feed("K", 5)      # 第 1 次：未达 confirm，不该问 gate
-        w.feed("K", 5)      # 第 2 次：同上
+        w = LB.LowBatteryWatcher(
+            icon_getter=lambda: None, confirm=3, gate=lambda n, p: calls.append(1) or True
+        )
+        w.feed("K", 5)  # 第 1 次：未达 confirm，不该问 gate
+        w.feed("K", 5)  # 第 2 次：同上
         self.assertEqual(calls, [])
-        w.feed("K", 5)      # 第 3 次：达标 → 投递前才问
+        w.feed("K", 5)  # 第 3 次：达标 → 投递前才问
         self.assertEqual(calls, [1])
 
     def test_singleton_get_passes_gate(self):
         """LB.get(gate=...) 要把 gate 接上单例。"""
-        g = lambda n, p: False            # noqa: E731
+        g = lambda n, p: False  # noqa: E731
         w = LB.get(icon_getter=lambda: None, gate=g)
         self.assertIs(w._gate, g)
 
@@ -221,7 +223,7 @@ class Deliver(unittest.TestCase):
 
     def test_toast_default_off(self):
         """2026-10-12 起默认不弹 toast（用户不看小铃铛；红字图标替代）。"""
-        os.environ.pop("BATBAR_LOWBAT_TOAST", None)   # 清掉 setUp 打开的开关
+        os.environ.pop("BATBAR_LOWBAT_TOAST", None)  # 清掉 setUp 打开的开关
         sent = []
 
         class FakeIcon:
@@ -233,7 +235,7 @@ class Deliver(unittest.TestCase):
         self.assertEqual(sent, [])
         # 打开开关后同一路径应送达
         os.environ["BATBAR_LOWBAT_TOAST"] = "1"
-        w.feed("K2", 6)   # 新设备、布防态默认 True
+        w.feed("K2", 6)  # 新设备、布防态默认 True
         self.assertEqual(len(sent), 1)
 
     def test_notify_called_via_icon_getter(self):
@@ -255,15 +257,16 @@ class Deliver(unittest.TestCase):
         calls = {"n": 0}
 
         class StrictIcon:
-            def notify(self, title, msg, cb):   # 强制三参
+            def notify(self, title, msg, cb):  # 强制三参
                 calls["n"] += 1
 
         w = LB.LowBatteryWatcher(icon_getter=lambda: StrictIcon(), confirm=1)
-        w.feed("K", 5)     # 第一次 notify(title,msg) 抛 TypeError → 补回调重试
+        w.feed("K", 5)  # 第一次 notify(title,msg) 抛 TypeError → 补回调重试
         self.assertEqual(calls["n"], 1)
 
     def test_notify_exception_swallowed(self):
         """notify 抛异常不能冒泡（弹通知失败绝不影响监控）。"""
+
         class BoomIcon:
             def notify(self, *a, **k):
                 raise RuntimeError("boom")
@@ -288,10 +291,12 @@ class PickDisplay(unittest.TestCase):
 
     def test_excludes_wired_and_charging(self):
         snap = {"键盘 LEOBOG Hi98C Pro": 8, "耳机 西圣 XISEM-Air": 60}
-        self.assertEqual(LB.pick_display(snap, wired_bases={"键盘 LEOBOG Hi98C Pro"}),
-                         ("耳机 西圣 XISEM-Air", 60))
-        self.assertEqual(LB.pick_display(snap, charging_names={"键盘 LEOBOG Hi98C Pro"}),
-                         ("耳机 西圣 XISEM-Air", 60))
+        self.assertEqual(
+            LB.pick_display(snap, wired_bases={"键盘 LEOBOG Hi98C Pro"}), ("耳机 西圣 XISEM-Air", 60)
+        )
+        self.assertEqual(
+            LB.pick_display(snap, charging_names={"键盘 LEOBOG Hi98C Pro"}), ("耳机 西圣 XISEM-Air", 60)
+        )
 
     def test_excludes_zero_and_none(self):
         snap = {"毛刺": 0, "未知": None, "耳机": 45}
@@ -334,6 +339,7 @@ class WarningIconColor(unittest.TestCase):
         from batbar import icons as I
         from PIL import Image
         import io as _io
+
         spec = I.IconSpec(10, False, 32, light_taskbar=False, warning=True)
         png = I.render_icon(spec)
         img = Image.open(_io.BytesIO(png)).convert("RGBA")
@@ -345,6 +351,7 @@ class WarningIconColor(unittest.TestCase):
         from batbar import icons as I
         from PIL import Image
         import io as _io
+
         spec = I.IconSpec(90, False, 32, light_taskbar=False, warning=False)
         png = I.render_icon(spec)
         img = Image.open(_io.BytesIO(png)).convert("RGBA")
@@ -362,12 +369,14 @@ class NoBoltOnIcon(unittest.TestCase):
 
     def test_charging_pixel_identical_to_normal(self):
         from batbar import icons as I
+
         a = I.render_icon(I.IconSpec(80, False, 32, light_taskbar=True))
         b = I.render_icon(I.IconSpec(80, True, 32, light_taskbar=True))
         self.assertEqual(a, b, "充电态图标必须与常规态一模一样（无闪电）")
 
     def test_100_charging_same(self):
         from batbar import icons as I
+
         a = I.render_icon(I.IconSpec(100, True, 32, light_taskbar=False))
         b = I.render_icon(I.IconSpec(100, False, 32, light_taskbar=False))
         self.assertEqual(a, b)
@@ -384,12 +393,14 @@ class NoDevicesDash(unittest.TestCase):
     def test_none_always_draws_dash(self):
         """no_devices 开关不影响像素：两种 None 都画 "--"。"""
         from batbar import icons as I
+
         a = I.render_icon(I.IconSpec(None, False, 32, no_devices=True))
         b = I.render_icon(I.IconSpec(None, False, 32, no_devices=False))
         self.assertEqual(a, b)
 
     def test_dash_differs_from_digits(self):
         from batbar import icons as I
+
         dash = I.render_icon(I.IconSpec(None, False, 32))
         n = I.render_icon(I.IconSpec(90, False, 32))
         self.assertNotEqual(dash, n)
@@ -397,8 +408,10 @@ class NoDevicesDash(unittest.TestCase):
     def test_key_includes_no_devices(self):
         """`no_devices` 仍进缓存键（语义不同 → 允许重绘一次，但像素相同）。"""
         from batbar import icons as I
-        self.assertNotEqual(I.IconSpec(None, False, 32, no_devices=True).key(),
-                            I.IconSpec(None, False, 32).key())
+
+        self.assertNotEqual(
+            I.IconSpec(None, False, 32, no_devices=True).key(), I.IconSpec(None, False, 32).key()
+        )
 
 
 class Singleton(unittest.TestCase):
@@ -411,9 +424,9 @@ class Singleton(unittest.TestCase):
         self.assertIs(a, b)
 
     def test_get_late_binds_icon_getter(self):
-        LB.get()                          # 先建，无 getter
+        LB.get()  # 先建，无 getter
         ig = lambda: None
-        w = LB.get(icon_getter=ig)        # 后补 getter
+        w = LB.get(icon_getter=ig)  # 后补 getter
         self.assertIs(w._icon_getter, ig)
 
 

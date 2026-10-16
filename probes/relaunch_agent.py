@@ -2,6 +2,7 @@
 
 用法：.venv/Scripts/python.exe probes/relaunch_agent.py [等待秒数]
 """
+
 import subprocess
 import sys
 import time
@@ -17,14 +18,16 @@ CREATE_NEW_PROCESS_GROUP = 0x00000200
 
 def main() -> int:
     wait = float(sys.argv[1]) if len(sys.argv) > 1 else 8.0
-    before = LOG.read_text(encoding="utf-8", errors="replace").count("\n") \
-        if LOG.exists() else 0
+    before = LOG.read_text(encoding="utf-8", errors="replace").count("\n") if LOG.exists() else 0
     p = subprocess.Popen(
         [str(EXE), "-m", "batbar.agent", "--standalone"],
         cwd=str(ROOT),
         creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP,
-        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL, close_fds=True)
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        close_fds=True,
+    )
     print(f"[i] launched agent pid={p.pid} (detached)")
     time.sleep(wait)
     lines = LOG.read_text(encoding="utf-8", errors="replace").splitlines()

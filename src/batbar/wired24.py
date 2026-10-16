@@ -29,6 +29,7 @@
   说成「2.4G 实时」）；由 receiver24/agent 显式取用；
 · 拔出线/设备消失 → `plugged()` 立刻转 False，条目按原逻辑回落。
 """
+
 from __future__ import annotations
 
 import ctypes
@@ -45,7 +46,7 @@ log = logging.getLogger("batbar.wired")
 WIRED_QUERY = bytes([0x06, 0x87, 0x00, 0x00, 0x01, 0x00, 0x02, 0x00])
 # 有线通道的 feature 报告长度下限：接收器那些口最多 8~65 字节，键盘这个是 520
 _MIN_FEATURE = 256
-POLL_INTERVAL = 30.0          # 有线读数轮询间隔（插线时才有意义，成本极低）
+POLL_INTERVAL = 30.0  # 有线读数轮询间隔（插线时才有意义，成本极低）
 _RECEIVER_HINTS = ("receiver", "dongle", "接收器")
 
 
@@ -55,11 +56,11 @@ _RECEIVER_HINTS = ("receiver", "dongle", "接收器")
 
 
 def _setupapi():
-    return ctypes.windll.setupapi          # type: ignore[attr-defined]
+    return ctypes.windll.setupapi  # type: ignore[attr-defined]
 
 
 def _hid():
-    return ctypes.windll.hid               # type: ignore[attr-defined]
+    return ctypes.windll.hid  # type: ignore[attr-defined]
 
 
 def _declare(sa, hid, k32) -> None:
@@ -105,8 +106,9 @@ def enumerate_wired(targets: dict[tuple[int, int], str]) -> list[dict]:
 
     guid = w32.hid_guid()
     hid.HidD_GetHidGuid(byref(guid))
-    hdev = sa.SetupDiGetClassDevsW(byref(guid), None, None,
-                                   w32.DIGCF_DEVICEINTERFACE | w32.DIGCF_PRESENT)   # PRESENT|DEVICEINTERFACE
+    hdev = sa.SetupDiGetClassDevsW(
+        byref(guid), None, None, w32.DIGCF_DEVICEINTERFACE | w32.DIGCF_PRESENT
+    )  # PRESENT|DEVICEINTERFACE
     if not hdev or hdev == w32.invalid_handle():
         return []
     out: list[dict] = []
@@ -116,20 +118,17 @@ def enumerate_wired(targets: dict[tuple[int, int], str]) -> list[dict]:
         while True:
             ifd = w32.IFD()
             ifd.cbSize = ctypes.sizeof(w32.IFD)
-            if not sa.SetupDiEnumDeviceInterfaces(hdev, None, byref(guid), i,
-                                                  byref(ifd)):
+            if not sa.SetupDiEnumDeviceInterfaces(hdev, None, byref(guid), i, byref(ifd)):
                 break
             i += 1
             det = w32.DETAIL()
             det.cbSize = 8
             size = wintypes.DWORD(ctypes.sizeof(w32.DETAIL))
-            if not sa.SetupDiGetDeviceInterfaceDetailW(hdev, byref(ifd),
-                                                       byref(det), size,
-                                                       byref(size), None):
+            if not sa.SetupDiGetDeviceInterfaceDetailW(hdev, byref(ifd), byref(det), size, byref(size), None):
                 continue
-            h = k32.CreateFileW(det.DevicePath, 0, w32.FILE_SHARE_READ
-                                 | w32.FILE_SHARE_WRITE, None,
-                                 w32.OPEN_EXISTING, 0, 0)
+            h = k32.CreateFileW(
+                det.DevicePath, 0, w32.FILE_SHARE_READ | w32.FILE_SHARE_WRITE, None, w32.OPEN_EXISTING, 0, 0
+            )
             if not h or h == w32.invalid_handle():
                 continue
             try:
@@ -142,17 +141,15 @@ def enumerate_wired(targets: dict[tuple[int, int], str]) -> list[dict]:
                 if name is None or key in seen:
                     continue
                 buf = ctypes.create_unicode_buffer(256)
-                prod = (buf.value
-                        if hid.HidD_GetProductString(h, buf, 512) else "")
+                prod = buf.value if hid.HidD_GetProductString(h, buf, 512) else ""
                 low = prod.lower()
                 if any(hint in low for hint in _RECEIVER_HINTS):
-                    continue                    # 这是接收器，不是键盘本体
+                    continue  # 这是接收器，不是键盘本体
                 featlen = _caps_feature_len(hid, h)
                 if featlen < _MIN_FEATURE:
-                    continue                    # 不是有线厂商通道
+                    continue  # 不是有线厂商通道
                 seen.add(key)
-                out.append({"name": name, "path": det.DevicePath,
-                            "featlen": featlen, "product": prod})
+                out.append({"name": name, "path": det.DevicePath, "featlen": featlen, "product": prod})
             finally:
                 k32.CloseHandle(h)
     finally:
@@ -184,10 +181,10 @@ def parse_wired(data: bytes) -> tuple[int, bool] | None:
 def read_wired(path: str, featlen: int) -> tuple[int, bool] | None:
     """向有线 feature 接口发一次查询并读回 (电量%, 充电中)；失败返回 None。"""
     try:
-        hid, k32 = _hid(), ctypes.windll.kernel32     # type: ignore[attr-defined]
+        hid, k32 = _hid(), ctypes.windll.kernel32  # type: ignore[attr-defined]
     except AttributeError:
         return None
-    h = k32.CreateFileW(path, 0xC0000000, 0x03, None, 3, 0, 0)   # 同步句柄
+    h = k32.CreateFileW(path, 0xC0000000, 0x03, None, 3, 0, 0)  # 同步句柄
     if not h or h == w32.invalid_handle():
         return None
     try:
@@ -195,13 +192,13 @@ def read_wired(path: str, featlen: int) -> tuple[int, bool] | None:
         sb = ctypes.create_string_buffer(q, featlen)
         if not hid.HidD_SetFeature(h, sb, featlen):
             return None
-        time.sleep(0.05)          # 给固件一点时间把答案写进 feature
+        time.sleep(0.05)  # 给固件一点时间把答案写进 feature
         gb = ctypes.create_string_buffer(featlen)
         gb[0] = bytes([WIRED_QUERY[0]])
         if not hid.HidD_GetFeature(h, gb, featlen):
             return None
         return parse_wired(bytes(gb.raw[:featlen]))
-    except Exception as exc:      # noqa: BLE001 - 读失败按「无数据」处理
+    except Exception as exc:  # noqa: BLE001 - 读失败按「无数据」处理
         log.debug("wired read failed: %s", exc)
         return None
     finally:
@@ -209,7 +206,7 @@ def read_wired(path: str, featlen: int) -> tuple[int, bool] | None:
 
 
 # ---------- 状态缓存 + 后台轮询 ----------
-_state: dict[str, dict] = {}          # 名 -> {path, featlen, pct, charging, ts}
+_state: dict[str, dict] = {}  # 名 -> {path, featlen, pct, charging, ts}
 _lock = threading.Lock()
 _thread: threading.Thread | None = None
 _running = False
@@ -223,20 +220,24 @@ def poll_once() -> dict[str, tuple[int, bool] | None]:
     的 258A:010C（在 WIRED_TARGETS 里）。
     """
     from .dongle import TARGETS, WIRED_TARGETS
+
     found = enumerate_wired({**TARGETS, **WIRED_TARGETS})
     res: dict[str, tuple[int, bool] | None] = {}
     now = time.time()
     with _lock:
         alive = {f["name"] for f in found}
-        for stale in set(_state) - alive:      # 拔线/换档 → 立刻失效
+        for stale in set(_state) - alive:  # 拔线/换档 → 立刻失效
             del _state[stale]
         for f in found:
             got = read_wired(f["path"], f["featlen"])
             res[f["name"]] = got
-            _state[f["name"]] = {"path": f["path"], "featlen": f["featlen"],
-                                 "pct": got[0] if got else None,
-                                 "charging": got[1] if got else False,
-                                 "ts": now}
+            _state[f["name"]] = {
+                "path": f["path"],
+                "featlen": f["featlen"],
+                "pct": got[0] if got else None,
+                "charging": got[1] if got else False,
+                "ts": now,
+            }
     return res
 
 
@@ -283,7 +284,7 @@ def _loop() -> None:
     while _running:
         try:
             poll_once()
-        except Exception as exc:      # noqa: BLE001 - 轮询失败不影响其它源
+        except Exception as exc:  # noqa: BLE001 - 轮询失败不影响其它源
             log.debug("wired poll: %s", exc)
         for _ in range(int(POLL_INTERVAL * 2)):
             if not _running:

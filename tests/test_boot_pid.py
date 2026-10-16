@@ -9,6 +9,7 @@ CIM 枚举（3~8s）。
   1. 重启脚本**不许再用 CIM 枚举**，改用 agent 自己写的 PID 文件；
   2. PID 文件的写/读行为（含脏数据、不存在、目录重定向）。
 """
+
 from __future__ import annotations
 
 import os
@@ -51,6 +52,7 @@ class PidFile(unittest.TestCase):
         import importlib
 
         from batbar import applog
+
         with unittest.mock.patch.dict(os.environ, {"BATBAR_LOG_DIR": self._tmp()}):
             importlib.reload(applog)
             # 两边都要 resolve()，不能拿 `pid_path()` 的原始串去比：
@@ -60,16 +62,14 @@ class PidFile(unittest.TestCase):
             # runneradmin，超过 8 字符 ⇒ 系统给了短名），于是「原始串 == 长名」
             # 这个断言在那边**永远不成立**（本机用户名 xin 短，所以一直没暴露）。
             # 本用例要断言的是「PID 跟着日志目录搬家」这个语义，不是字符串形态。
-            self.assertEqual(Path(SI.pid_path()).resolve(),
-                             Path(self._tmp()).resolve() / "agent.pid")
+            self.assertEqual(Path(SI.pid_path()).resolve(), Path(self._tmp()).resolve() / "agent.pid")
         importlib.reload(applog)
 
     def setUp(self):
         import tempfile
 
         self._tmpdir = tempfile.mkdtemp(prefix="batbar-pid-")
-        self.addCleanup(lambda: __import__("shutil").rmtree(
-            self._tmpdir, ignore_errors=True))
+        self.addCleanup(lambda: __import__("shutil").rmtree(self._tmpdir, ignore_errors=True))
 
     def _tmp(self) -> str:
         """本用例专属临时目录（同一个用例内多次调用返回同一处）。"""
@@ -88,20 +88,19 @@ class RestartScripts(unittest.TestCase):
     @staticmethod
     def _code(text: str) -> str:
         """去掉 REM 注释行，只看真正会执行的部分（注释里可以提历史，命令不行）。"""
-        return "\n".join(ln for ln in text.splitlines()
-                         if not ln.strip().upper().startswith("REM"))
+        return "\n".join(ln for ln in text.splitlines() if not ln.strip().upper().startswith("REM"))
 
     def test_no_cim_process_walk(self):
         for p in self._scripts():
             text = p.read_text(encoding="utf-8", errors="replace")
-            self.assertNotIn("Get-CimInstance", self._code(text),
-                             f"{p.name} 又用 CIM 全进程枚举了（3~8s）；改用 PID 文件")
+            self.assertNotIn(
+                "Get-CimInstance", self._code(text), f"{p.name} 又用 CIM 全进程枚举了（3~8s）；改用 PID 文件"
+            )
 
     def test_uses_pid_file(self):
         for p in self._scripts():
             text = p.read_text(encoding="utf-8", errors="replace")
-            self.assertIn("agent.pid", text,
-                          f"{p.name} 应当先读 agent.pid 再 taskkill")
+            self.assertIn("agent.pid", text, f"{p.name} 应当先读 agent.pid 再 taskkill")
 
     def test_untrusted_pid_falls_back_to_scan(self):
         """PID 不可信（缺失/陈旧）必须回退扫描，不能直接启动。
@@ -110,16 +109,16 @@ class RestartScripts(unittest.TestCase):
         """
         for p in self._scripts():
             code = self._code(p.read_text(encoding="utf-8", errors="replace"))
-            self.assertIn("goto fallback", code,
-                          f"{p.name} 不可信 PID 时必须 goto fallback 兜底扫描")
+            self.assertIn("goto fallback", code, f"{p.name} 不可信 PID 时必须 goto fallback 兜底扫描")
             self.assertIn(":fallback", code, f"{p.name} 缺少 :fallback 分支")
 
     def test_scripts_are_ascii(self):
         """cmd 按 GBK 解码 .bat：混进非 ASCII 会错行拼到下一行命令里。"""
         for p in self._scripts():
             raw = p.read_bytes()
-            self.assertTrue(all(b < 128 for b in raw),
-                            f"{p.name} 含非 ASCII 字节（cmd 会按 GBK 解码 → 错行）")
+            self.assertTrue(
+                all(b < 128 for b in raw), f"{p.name} 含非 ASCII 字节（cmd 会按 GBK 解码 → 错行）"
+            )
 
 
 class BootTiming(unittest.TestCase):

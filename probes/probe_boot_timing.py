@@ -2,6 +2,7 @@
 
 用法：.venv/Scripts/python.exe probes/probe_boot_timing.py
 """
+
 import sys
 import time
 
@@ -19,18 +20,23 @@ def main() -> int:
     mark("script start")
 
     import PIL
+
     mark(f"import PIL ({PIL.__version__})")
 
     from PIL import Image, ImageDraw, ImageFont
+
     mark("import PIL.Image/ImageDraw/ImageFont")
 
     import pystray
+
     mark("import pystray")
 
     from batbar import icons as I
+
     mark("import batbar.icons")
 
     from batbar import agent as A
+
     mark("import batbar.agent (heavy: hidpp/transport/ctypes)")
 
     # 字体加载：icon 渲染第一枪的真实成本

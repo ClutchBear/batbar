@@ -39,6 +39,7 @@
 读不到属预期），此时走 receiver24 + lastknown；部分耳机只走厂商私有协议
 也不显示。读不到 = 不在此路径。
 """
+
 from __future__ import annotations
 
 import json
@@ -217,15 +218,20 @@ def connected_macs(macs: list[str], *, force: bool = False) -> dict[str, bool]:
             return cached
     if not macs:
         return _conn_cache[1]
-    shell = shutil.which("powershell")      # 必须 5.1（WinRT 投影）
+    shell = shutil.which("powershell")  # 必须 5.1（WinRT 投影）
     if not shell:
         return {}
     macs_lit = ",".join("'%s'" % m.upper() for m in macs)
     script = _PS_CONN.replace("__MACS__", "@(%s)" % macs_lit)
     try:
-        r = winproc.run_hidden([shell, "-NoProfile", "-Command", script],
-                               capture_output=True, text=True, timeout=25,
-                               encoding="utf-8", errors="replace")
+        r = winproc.run_hidden(
+            [shell, "-NoProfile", "-Command", script],
+            capture_output=True,
+            text=True,
+            timeout=25,
+            encoding="utf-8",
+            errors="replace",
+        )
     except (OSError, subprocess.TimeoutExpired) as exc:
         log.debug("bt conn query failed: %s", exc)
         return {}
@@ -251,19 +257,39 @@ def connected_macs(macs: list[str], *, force: bool = False) -> dict[str, bool]:
 # 关键字 → 友好名（小写匹配，先命中先赢）。# 命名规范（用户拍板 2026-10-12）：「类别 品牌+型号」—— 耳机/鼠标/键盘打头，
 # 后面跟能确定的具体型号；型号未知的保留品牌泛称。
 _NICKNAMES = [
-    ("hi98", "键盘 LEOBOG Hi98C Pro"), ("leobog", "键盘 LEOBOG Hi98C Pro"),
-    ("qcy", "耳机 QCY Era 7"), ("era 7", "耳机 QCY Era 7"),
-    ("airpods", "耳机 AirPods"), ("wh-1000", "耳机 Sony"), ("wf-1000", "耳机 Sony"),
+    ("hi98", "键盘 LEOBOG Hi98C Pro"),
+    ("leobog", "键盘 LEOBOG Hi98C Pro"),
+    ("qcy", "耳机 QCY Era 7"),
+    ("era 7", "耳机 QCY Era 7"),
+    ("airpods", "耳机 AirPods"),
+    ("wh-1000", "耳机 Sony"),
+    ("wf-1000", "耳机 Sony"),
     ("xisem", "耳机 西圣 XISEM-Air"),
-    ("galaxy buds", "耳机 三星 Buds"), ("freebuds", "耳机 华为 FreeBuds"),
+    ("galaxy buds", "耳机 三星 Buds"),
+    ("freebuds", "耳机 华为 FreeBuds"),
     ("xiaomi", "耳机 小米"),
-    ("nuphy", "键盘 NuPhy"), ("machose", "键盘 迈从 K87"), ("mchose", "键盘 迈从 K87"),
-    ("rapoo", "雷柏"), ("vgn", "鼠标 VGN"), ("atk", "鼠标 ATK"), ("vxe", "鼠标 VXE"),
+    ("nuphy", "键盘 NuPhy"),
+    ("machose", "键盘 迈从 K87"),
+    ("mchose", "键盘 迈从 K87"),
+    ("rapoo", "雷柏"),
+    ("vgn", "鼠标 VGN"),
+    ("atk", "鼠标 ATK"),
+    ("vxe", "鼠标 VXE"),
 ]
 
 # 设备节点名里的协议噪声后缀，友好化时剥掉
-_NOISE = (" Hands-Free AG", " Hands-Free", " Avrcp 传输", " 蓝牙 LE 链路层",
-          " BLE", " 5.0", " 5.1", " 5.2", " 5.3", " 5.4")
+_NOISE = (
+    " Hands-Free AG",
+    " Hands-Free",
+    " Avrcp 传输",
+    " 蓝牙 LE 链路层",
+    " BLE",
+    " 5.0",
+    " 5.1",
+    " 5.2",
+    " 5.3",
+    " 5.4",
+)
 
 
 def friendly(name: str) -> str:
@@ -306,14 +332,14 @@ def _parse(items, connected: dict[str, bool] | None = None) -> dict[str, int | N
             continue
         mac = str(d.get("mac") or "").upper()
         if connected is not None and mac and connected.get(mac) is False:
-            continue                      # 未连接：整条不显示
+            continue  # 未连接：整条不显示
         name = friendly(str(d.get("name") or "BT"))
         raw = d.get("battery")
         pct = None if raw is None else max(0, min(100, int(raw)))
         if pct is not None:
             devs[name] = pct
         elif name not in devs:
-            devs[name] = None      # 有读数的节点永远优先，不被 None 覆盖
+            devs[name] = None  # 有读数的节点永远优先，不被 None 覆盖
     return devs
 
 
@@ -328,14 +354,14 @@ class BluetoothBattery:
     def __init__(self, ttl: float = 20.0):
         self._ttl = ttl
         self._ts = 0.0
-        self._devices: dict[str, int | None] = {}   # 友好名 -> 电量%
+        self._devices: dict[str, int | None] = {}  # 友好名 -> 电量%
         self._shell = None
-        self._refreshing = False                    # 后台预热去重（多个调用方同时触发）
-        self._lock = threading.Lock()               # 并发线程同时判定 TTL 时防重复起进程
-        self._iolock = threading.Lock()             # 真正的查询串行化（防两个 PS 并存）
-        self._empty_streak = 0                      # 连续空结果计数（仅用于日志）
-        self._last_ok_ts = 0.0                      # 上次拿到非空列表的时刻（宽限期基准）
-        self._mac_by_name: dict[str, str] = {}      # 友好名 -> MAC（空表复核用）
+        self._refreshing = False  # 后台预热去重（多个调用方同时触发）
+        self._lock = threading.Lock()  # 并发线程同时判定 TTL 时防重复起进程
+        self._iolock = threading.Lock()  # 真正的查询串行化（防两个 PS 并存）
+        self._empty_streak = 0  # 连续空结果计数（仅用于日志）
+        self._last_ok_ts = 0.0  # 上次拿到非空列表的时刻（宽限期基准）
+        self._mac_by_name: dict[str, str] = {}  # 友好名 -> MAC（空表复核用）
         self._fast_add_protect: dict[str, float] = {}  # 友好名 -> 保护截止（上线快判闪回保护，bug 15）
 
     def prewarm(self) -> None:
@@ -387,9 +413,14 @@ class BluetoothBattery:
             return
         script = _PS_QUERY.replace("__TRIES__", "1" if quick else "3")
         try:
-            r = winproc.run_hidden([self._shell, "-NoProfile", "-Command", script],
-                                   capture_output=True, text=True, timeout=25,
-                                   encoding="utf-8", errors="replace")
+            r = winproc.run_hidden(
+                [self._shell, "-NoProfile", "-Command", script],
+                capture_output=True,
+                text=True,
+                timeout=25,
+                encoding="utf-8",
+                errors="replace",
+            )
         except (OSError, subprocess.TimeoutExpired) as exc:
             log.debug("bt query failed: %s", exc)
             return
@@ -403,14 +434,12 @@ class BluetoothBattery:
                 # 下一轮 TTL 到期自然重试（保留旧列表好过翻烙饼）。
                 log.debug("bt json parse fail: %r", out[:120])
                 return
-            if isinstance(data, dict):      # 单条时 ConvertTo-Json 可能输出裸对象
+            if isinstance(data, dict):  # 单条时 ConvertTo-Json 可能输出裸对象
                 data = [data]
         # 空输出（""/null）按「无行」处理，走 _accept 的保留逻辑，不再直接清缓存。
         # 连接态过滤（未连接的蓝牙设备不显示）：只对候选 MAC 查一次
-        macs = [str(d.get("mac") or "").upper() for d in data
-                if isinstance(d, dict) and d.get("mac")]
-        conn = (connected_macs(sorted(set(macs)), force=force_conn)
-                if macs else {})
+        macs = [str(d.get("mac") or "").upper() for d in data if isinstance(d, dict) and d.get("mac")]
+        conn = connected_macs(sorted(set(macs)), force=force_conn) if macs else {}
         devs = _parse(data, connected=conn or None)
 
         # 记住「友好名 → MAC」：空表复核（_all_offline_confirmed）要靠它
@@ -418,8 +447,7 @@ class BluetoothBattery:
         # 上次成功查询攒下的映射。
         for d in data:
             if isinstance(d, dict) and d.get("mac"):
-                self._mac_by_name[friendly(str(d.get("name") or "BT"))] = \
-                    str(d["mac"]).upper()
+                self._mac_by_name[friendly(str(d.get("name") or "BT"))] = str(d["mac"]).upper()
 
         # 记住真值；读不到这一轮的设备用历史值兜底
         for name, pct in list(devs.items()):
@@ -458,19 +486,26 @@ class BluetoothBattery:
         elif now - self._last_ok_ts >= EMPTY_GRACE:
             self._empty_streak = 0
             self._devices = {}
-            log.info("bt 空结果已持续 %.0fs（> %.0fs 宽限），接受为空（设备真离线）",
-                     now - self._last_ok_ts, EMPTY_GRACE)
+            log.info(
+                "bt 空结果已持续 %.0fs（> %.0fs 宽限），接受为空（设备真离线）",
+                now - self._last_ok_ts,
+                EMPTY_GRACE,
+            )
         elif self._all_offline_confirmed():
             self._empty_streak = 0
-            log.info("bt 空结果 + WinRT 复核全部离线（距上次成功 %.0fs），"
-                     "提前接受为空（最后一台蓝牙已断开）",
-                     now - self._last_ok_ts)
+            log.info(
+                "bt 空结果 + WinRT 复核全部离线（距上次成功 %.0fs），提前接受为空（最后一台蓝牙已断开）",
+                now - self._last_ok_ts,
+            )
             self._devices = {}
         else:
             self._empty_streak += 1
-            log.info("bt 查询空结果（连续第 %d 次，距上次成功 %.0fs），保留上次列表 %s",
-                     self._empty_streak, now - self._last_ok_ts,
-                     sorted(self._devices))
+            log.info(
+                "bt 查询空结果（连续第 %d 次，距上次成功 %.0fs），保留上次列表 %s",
+                self._empty_streak,
+                now - self._last_ok_ts,
+                sorted(self._devices),
+            )
         self._ts = now
 
     def _preserve_fast_adds(self, devs: dict[str, int | None]) -> dict[str, int | None]:
@@ -490,14 +525,14 @@ class BluetoothBattery:
         now = time.monotonic()
         out = dict(devs)
         for name in list(self._fast_add_protect):
-            if name in devs:                       # CIM 扫到了 → 保护失效
+            if name in devs:  # CIM 扫到了 → 保护失效
                 del self._fast_add_protect[name]
                 continue
             if now >= self._fast_add_protect[name]:  # 保护期已过
                 del self._fast_add_protect[name]
                 out.pop(name, None)
                 continue
-            if name not in out:                    # 沿用快判兜底值，别抹掉
+            if name not in out:  # 沿用快判兜底值，别抹掉
                 prev = self._devices.get(name)
                 out[name] = prev
                 log.debug("上线快判保护：%s 本轮 CIM 未扫到，沿用兜底值 %s", name, prev)
@@ -517,12 +552,12 @@ class BluetoothBattery:
         """
         macs = [self._mac_by_name.get(n) for n in self._devices]
         macs = [m for m in macs if m]
-        if not macs:                       # 没有任何 MAC 可问 → 无法复核
+        if not macs:  # 没有任何 MAC 可问 → 无法复核
             return False
         # 宽限里可能要撑 180s，连接态不能吃 15s 旧缓存（stale 的 Connected
         # 会把真离线错判成抖动），必须 force=True。
         conn = connected_macs(macs, force=True)
-        if not conn:                       # 查询失败 = 未知，维持宽限
+        if not conn:  # 查询失败 = 未知，维持宽限
             return False
         return not any(conn.get(m) for m in macs)
 
@@ -556,21 +591,19 @@ class BluetoothBattery:
         with self._iolock:
             if not self._devices or not self._mac_by_name:
                 return []
-            pairs = [(n, self._mac_by_name[n]) for n in sorted(self._devices)
-                     if n in self._mac_by_name]
+            pairs = [(n, self._mac_by_name[n]) for n in sorted(self._devices) if n in self._mac_by_name]
             macs = sorted({m for _, m in pairs})
             if not macs:
                 return []
-            conn = connected_macs(macs, force=True)   # 不能吃 15s 旧缓存
-            if not conn:                    # 问不出 = 未知，不动缓存
+            conn = connected_macs(macs, force=True)  # 不能吃 15s 旧缓存
+            if not conn:  # 问不出 = 未知，不动缓存
                 return []
             dead = [n for n, m in pairs if conn.get(m) is False]
             for n in dead:
                 self._devices.pop(n, None)
-                self._fast_add_protect.pop(n, None)   # 清保护标记（bug 15）
+                self._fast_add_protect.pop(n, None)  # 清保护标记（bug 15）
             if dead:
-                log.info("bt 立即刷新：连接态确认离线，先摘 %s（电量值随后 CIM 复核）",
-                         dead)
+                log.info("bt 立即刷新：连接态确认离线，先摘 %s（电量值随后 CIM 复核）", dead)
             return dead
 
     def sync_now(self) -> tuple[list[str], list[str]]:
@@ -599,18 +632,18 @@ class BluetoothBattery:
             if not self._mac_by_name:
                 return [], []
             all_macs = sorted(set(self._mac_by_name.values()))
-            conn = connected_macs(all_macs, force=True)   # 不能吃 15s 旧缓存
-            if not conn:                    # 问不出 = 未知，全不动（fail-open）
+            conn = connected_macs(all_macs, force=True)  # 不能吃 15s 旧缓存
+            if not conn:  # 问不出 = 未知，全不动（fail-open）
                 return [], []
             now = time.monotonic()
             added: list[str] = []
             dropped: list[str] = []
             for name, mac in self._mac_by_name.items():
                 state = conn.get(mac)
-                if state is None:           # 这台没问到 → 不动
+                if state is None:  # 这台没问到 → 不动
                     continue
                 in_list = name in self._devices
-                if state and not in_list:   # 刚上线 → 加入
+                if state and not in_list:  # 刚上线 → 加入
                     rec = lastknown.get(name)
                     self._devices[name] = None if rec is None else rec[0]
                     self._fast_add_protect[name] = now + _FAST_ADD_PROTECT
@@ -620,10 +653,12 @@ class BluetoothBattery:
                     self._fast_add_protect.pop(name, None)
                     dropped.append(name)
             if added or dropped:
-                log.info("bt 立即刷新：连接态双向快判 → 上线 %s / 下线 %s"
-                         "（电量值随后 CIM 刷新）", sorted(added), sorted(dropped))
+                log.info(
+                    "bt 立即刷新：连接态双向快判 → 上线 %s / 下线 %s（电量值随后 CIM 刷新）",
+                    sorted(added),
+                    sorted(dropped),
+                )
             return added, dropped
-
 
     def all_devices(self) -> dict[str, int | None]:
         """{设备名: 电量%|None}；TTL 内复用缓存。"""

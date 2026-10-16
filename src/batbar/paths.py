@@ -30,6 +30,7 @@
 
 放置约定：`logs` / `last-known.json` / `agent.pid` **同级平铺**在数据目录里。
 """
+
 from __future__ import annotations
 
 import logging
@@ -44,12 +45,12 @@ ENV_DIR = "BATBAR_DATA_DIR"
 #: 日志目录单独重定向（兼容既有约定，优先级高于本模块的推导）
 ENV_LOG_DIR = "BATBAR_LOG_DIR"
 
-APP_DIR = "batbar"              # 回退目录名（%LOCALAPPDATA%\batbar）
+APP_DIR = "batbar"  # 回退目录名（%LOCALAPPDATA%\batbar）
 PROBE_NAME = ".batbar-writable-probe"
 
-_cache: dict[tuple, Path] = {}   # 按「输入签名」缓存，见 _signature()
+_cache: dict[tuple, Path] = {}  # 按「输入签名」缓存，见 _signature()
 _notes: dict[tuple, str] = {}
-_note: str | None = None         # 最近一次落点决策的人类可读说明
+_note: str | None = None  # 最近一次落点决策的人类可读说明
 
 
 def _signature() -> tuple:
@@ -62,11 +63,13 @@ def _signature() -> tuple:
     `sys.executable` 被 mock 的测试也自动失效。
     """
     frozen = is_frozen()
-    return (os.environ.get(ENV_DIR),
-            os.environ.get("LOCALAPPDATA"),
-            os.environ.get("APPDATA"),
-            frozen,
-            str(sys.executable) if frozen else "")
+    return (
+        os.environ.get(ENV_DIR),
+        os.environ.get("LOCALAPPDATA"),
+        os.environ.get("APPDATA"),
+        frozen,
+        str(sys.executable) if frozen else "",
+    )
 
 
 def _home_dir() -> Path:
@@ -124,7 +127,7 @@ def _writable(d: Path) -> bool:
         probe.write_text("", encoding="utf-8")
         probe.unlink()
         return True
-    except Exception:              # noqa: BLE001 - 探测失败就是不可写
+    except Exception:  # noqa: BLE001 - 探测失败就是不可写
         return False
 
 
@@ -148,8 +151,7 @@ def data_dir() -> Path:
                 _note = f"数据目录 = {d}（绿色模式：跟着 exe 走）"
             else:
                 p = legacy_dir()
-                _note = (f"数据目录 = {p}（**exe 所在目录不可写**：{d} "
-                         f"⇒ 回退到用户目录）")
+                _note = f"数据目录 = {p}（**exe 所在目录不可写**：{d} ⇒ 回退到用户目录）"
                 log.warning("exe 目录不可写（%s），数据回退到 %s", d, p)
         else:
             p = legacy_dir()

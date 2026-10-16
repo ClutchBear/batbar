@@ -26,6 +26,7 @@
 ⚠️ 铁律：新增 Win32 HID/SetupAPI 调用时，**签名一律加在这里**，
 不要在业务模块里写 `xxx.argtypes = [...]`（会重新引入全局覆盖竞争）。
 """
+
 from __future__ import annotations
 
 import ctypes
@@ -37,8 +38,13 @@ from ctypes import POINTER, wintypes
 
 class GUID(ctypes.Structure):
     """Windows GUID（16 字节）。"""
-    _fields_ = [("Data1", wintypes.DWORD), ("Data2", ctypes.c_ushort),
-                ("Data3", ctypes.c_ushort), ("Data4", ctypes.c_ubyte * 8)]
+
+    _fields_ = [
+        ("Data1", wintypes.DWORD),
+        ("Data2", ctypes.c_ushort),
+        ("Data3", ctypes.c_ushort),
+        ("Data4", ctypes.c_ubyte * 8),
+    ]
 
 
 class IFD(ctypes.Structure):
@@ -47,8 +53,13 @@ class IFD(ctypes.Structure):
     ⚠️ 调用前**必须**设 `cbSize = ctypes.sizeof(IFD)`，否则第一条枚举就失败
     （枚举出 0 个，最难查）。
     """
-    _fields_ = [("cbSize", wintypes.DWORD), ("InterfaceClassGuid", GUID),
-                ("Flags", wintypes.DWORD), ("Reserved", ctypes.c_ulonglong)]
+
+    _fields_ = [
+        ("cbSize", wintypes.DWORD),
+        ("InterfaceClassGuid", GUID),
+        ("Flags", wintypes.DWORD),
+        ("Reserved", ctypes.c_ulonglong),
+    ]
 
 
 class DETAIL(ctypes.Structure):
@@ -57,32 +68,42 @@ class DETAIL(ctypes.Structure):
     ⚠️ x64 下 `cbSize` 必须填 **8**（对齐后的 sizeof(DWORD)+padding），
     填 0/6 会 `ERROR_INVALID_DATA`。
     """
+
     _fields_ = [("cbSize", wintypes.DWORD), ("DevicePath", wintypes.WCHAR * 1024)]
 
 
 class ATTRS(ctypes.Structure):
     """HIDD_ATTRIBUTES。"""
-    _fields_ = [("Size", wintypes.ULONG), ("VendorID", ctypes.c_ushort),
-                ("ProductID", ctypes.c_ushort), ("VersionNumber", ctypes.c_ushort)]
+
+    _fields_ = [
+        ("Size", wintypes.ULONG),
+        ("VendorID", ctypes.c_ushort),
+        ("ProductID", ctypes.c_ushort),
+        ("VersionNumber", ctypes.c_ushort),
+    ]
 
 
 class CAPS(ctypes.Structure):
     """HIDP_CAPS —— 字段顺序照 MSDN，错一位就读到垃圾长度。"""
-    _fields_ = [("Usage", ctypes.c_ushort), ("UsagePage", ctypes.c_ushort),
-                ("InputReportByteLength", ctypes.c_ushort),
-                ("OutputReportByteLength", ctypes.c_ushort),
-                ("FeatureReportByteLength", ctypes.c_ushort),
-                ("Reserved", ctypes.c_ushort * 17),
-                ("NumberLinkCollectionNodes", ctypes.c_ushort),
-                ("NumberInputButtonCaps", ctypes.c_ushort),
-                ("NumberInputValueCaps", ctypes.c_ushort),
-                ("NumberInputDataIndices", ctypes.c_ushort),
-                ("NumberOutputButtonCaps", ctypes.c_ushort),
-                ("NumberOutputValueCaps", ctypes.c_ushort),
-                ("NumberOutputDataIndices", ctypes.c_ushort),
-                ("NumberFeatureButtonCaps", ctypes.c_ushort),
-                ("NumberFeatureValueCaps", ctypes.c_ushort),
-                ("NumberFeatureDataIndices", ctypes.c_ushort)]
+
+    _fields_ = [
+        ("Usage", ctypes.c_ushort),
+        ("UsagePage", ctypes.c_ushort),
+        ("InputReportByteLength", ctypes.c_ushort),
+        ("OutputReportByteLength", ctypes.c_ushort),
+        ("FeatureReportByteLength", ctypes.c_ushort),
+        ("Reserved", ctypes.c_ushort * 17),
+        ("NumberLinkCollectionNodes", ctypes.c_ushort),
+        ("NumberInputButtonCaps", ctypes.c_ushort),
+        ("NumberInputValueCaps", ctypes.c_ushort),
+        ("NumberInputDataIndices", ctypes.c_ushort),
+        ("NumberOutputButtonCaps", ctypes.c_ushort),
+        ("NumberOutputValueCaps", ctypes.c_ushort),
+        ("NumberOutputDataIndices", ctypes.c_ushort),
+        ("NumberFeatureButtonCaps", ctypes.c_ushort),
+        ("NumberFeatureValueCaps", ctypes.c_ushort),
+        ("NumberFeatureDataIndices", ctypes.c_ushort),
+    ]
 
 
 # ---------------------------------------------------------------- 句柄/常量
@@ -116,9 +137,9 @@ def ensure_argtypes() -> None:
         return
 
     try:
-        setupapi = ctypes.windll.setupapi         # type: ignore[attr-defined]
-        hid = ctypes.windll.hid                   # type: ignore[attr-defined]
-        k32 = ctypes.windll.kernel32              # type: ignore[attr-defined]
+        setupapi = ctypes.windll.setupapi  # type: ignore[attr-defined]
+        hid = ctypes.windll.hid  # type: ignore[attr-defined]
+        k32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
     except AttributeError:
         # 非 Windows（ctypes.windll 不存在）或单测把 ctypes.windll 换成了
         # 只含 kernel32 的替身 —— 此时声明签名无意义，直接返回。
@@ -130,52 +151,77 @@ def ensure_argtypes() -> None:
     hid.HidD_GetHidGuid.restype = None
     hid.HidD_GetAttributes.argtypes = [wintypes.HANDLE, ctypes.c_void_p]
     hid.HidD_GetAttributes.restype = wintypes.BOOLEAN
-    hid.HidD_GetProductString.argtypes = [wintypes.HANDLE, ctypes.c_void_p,
-                                          wintypes.ULONG]
+    hid.HidD_GetProductString.argtypes = [wintypes.HANDLE, ctypes.c_void_p, wintypes.ULONG]
     hid.HidD_GetProductString.restype = wintypes.BOOLEAN
-    hid.HidD_GetPreparsedData.argtypes = [wintypes.HANDLE,
-                                          POINTER(ctypes.c_void_p)]
+    hid.HidD_GetPreparsedData.argtypes = [wintypes.HANDLE, POINTER(ctypes.c_void_p)]
     hid.HidD_GetPreparsedData.restype = wintypes.BOOLEAN
     hid.HidD_FreePreparsedData.argtypes = [ctypes.c_void_p]
     hid.HidD_FreePreparsedData.restype = wintypes.BOOLEAN
     hid.HidP_GetCaps.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
     hid.HidP_GetCaps.restype = wintypes.LONG
     # 写 feature/report（probe_query 之类才会用到；声明无害）
-    hid.HidD_SetFeature.argtypes = [wintypes.HANDLE, ctypes.c_void_p,
-                                    wintypes.DWORD]
+    hid.HidD_SetFeature.argtypes = [wintypes.HANDLE, ctypes.c_void_p, wintypes.DWORD]
     hid.HidD_SetFeature.restype = wintypes.BOOLEAN
 
     # ---- SetupAPI ----
-    setupapi.SetupDiGetClassDevsW.argtypes = [ctypes.c_void_p, wintypes.LPCWSTR,
-                                              wintypes.HWND, wintypes.DWORD]
+    setupapi.SetupDiGetClassDevsW.argtypes = [
+        ctypes.c_void_p,
+        wintypes.LPCWSTR,
+        wintypes.HWND,
+        wintypes.DWORD,
+    ]
     setupapi.SetupDiGetClassDevsW.restype = wintypes.HANDLE
     setupapi.SetupDiEnumDeviceInterfaces.argtypes = [
-        wintypes.HANDLE, ctypes.c_void_p, ctypes.c_void_p, wintypes.DWORD,
-        ctypes.c_void_p]
+        wintypes.HANDLE,
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        ctypes.c_void_p,
+    ]
     setupapi.SetupDiEnumDeviceInterfaces.restype = wintypes.BOOL
     setupapi.SetupDiGetDeviceInterfaceDetailW.argtypes = [
-        wintypes.HANDLE, ctypes.c_void_p, ctypes.c_void_p, wintypes.DWORD,
-        POINTER(wintypes.DWORD), ctypes.c_void_p]
+        wintypes.HANDLE,
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        POINTER(wintypes.DWORD),
+        ctypes.c_void_p,
+    ]
     setupapi.SetupDiGetDeviceInterfaceDetailW.restype = wintypes.BOOL
     setupapi.SetupDiDestroyDeviceInfoList.argtypes = [wintypes.HANDLE]
     setupapi.SetupDiDestroyDeviceInfoList.restype = wintypes.BOOL
 
     # ---- kernel32 ----
     k32.CreateFileW.restype = wintypes.HANDLE
-    k32.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
-                                ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD,
-                                wintypes.HANDLE]
+    k32.CreateFileW.argtypes = [
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.HANDLE,
+    ]
     k32.CloseHandle.argtypes = [wintypes.HANDLE]
     k32.CloseHandle.restype = wintypes.BOOL
-    k32.ReadFile.argtypes = [wintypes.HANDLE, ctypes.c_void_p, wintypes.DWORD,
-                             POINTER(wintypes.DWORD), ctypes.c_void_p]
+    k32.ReadFile.argtypes = [
+        wintypes.HANDLE,
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        POINTER(wintypes.DWORD),
+        ctypes.c_void_p,
+    ]
     k32.ReadFile.restype = wintypes.BOOL
-    k32.WriteFile.argtypes = [wintypes.HANDLE, ctypes.c_void_p, wintypes.DWORD,
-                              POINTER(wintypes.DWORD), ctypes.c_void_p]
+    k32.WriteFile.argtypes = [
+        wintypes.HANDLE,
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        POINTER(wintypes.DWORD),
+        ctypes.c_void_p,
+    ]
     k32.WriteFile.restype = wintypes.BOOL
     k32.CreateEventW.restype = wintypes.HANDLE
-    k32.CreateEventW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.BOOL,
-                                 wintypes.LPCWSTR]
+    k32.CreateEventW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.BOOL, wintypes.LPCWSTR]
     k32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
     k32.WaitForSingleObject.restype = wintypes.DWORD
     k32.CancelIoEx.argtypes = [wintypes.HANDLE, ctypes.c_void_p]

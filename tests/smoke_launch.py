@@ -29,6 +29,7 @@
 
 退出码：0 = 通过，1 = 失败（失败原因打 stdout）。
 """
+
 from __future__ import annotations
 
 import argparse
@@ -55,8 +56,8 @@ LATE_STAGE = "图标已注册（NIM_ADD）"
 # 所以不能 \S+，要贪到末尾的 +Ns 之前，再 strip。
 _STAGE_RE = re.compile(r"boot:\s*(?P<stage>.+?)\s*\+\s*(?P<sec>[\d.]+)s")
 
-HARD_TIMEOUT_S = 60.0     # 最坏情况（首次蓝牙 CIM 25s）也够
-EARLY_BUDGET_S = 2.0      # 前面几步不该超过这个时间（相对 _BOOT_T0）
+HARD_TIMEOUT_S = 60.0  # 最坏情况（首次蓝牙 CIM 25s）也够
+EARLY_BUDGET_S = 2.0  # 前面几步不该超过这个时间（相对 _BOOT_T0）
 
 
 def _fail(msg: str) -> None:
@@ -96,11 +97,14 @@ def _find_stage(stages: dict[str, float], key: str) -> float | None:
 def _assert_no_orphan(pid: int) -> None:
     """收尾复核：确认刚才那个子进程真没了（WorkBuddy 环境铁律：删/杀完必复核）。"""
     try:
-        out = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/NH"],
-                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                             timeout=10).stdout.decode("utf-8", "replace")
+        out = subprocess.run(
+            ["tasklist", "/FI", f"PID eq {pid}", "/NH"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            timeout=10,
+        ).stdout.decode("utf-8", "replace")
     except Exception:
-        return                                     # 复核本身失败不阻塞（非关键路径）
+        return  # 复核本身失败不阻塞（非关键路径）
     if str(pid) in out:
         print(f"[warn] 冒烟子进程 {pid} 仍在运行，请手动确认")
 
@@ -112,9 +116,9 @@ def run_smoke(quick: bool = False) -> int:
     log_file = log_dir / "agent.log"
 
     env = dict(os.environ)
-    env["BATBAR_LOG_DIR"] = str(log_dir)      # 日志 + pid 都重定向到临时目录
-    env["BATBAR_SINGLETON_POPUP"] = "0"       # 不弹窗（无人值守）
-    env["BATBAR_DEBUG"] = "1"                 # 开 DEBUG，日志更全（boot 行照样有）
+    env["BATBAR_LOG_DIR"] = str(log_dir)  # 日志 + pid 都重定向到临时目录
+    env["BATBAR_SINGLETON_POPUP"] = "0"  # 不弹窗（无人值守）
+    env["BATBAR_DEBUG"] = "1"  # 开 DEBUG，日志更全（boot 行照样有）
     # 兜底：即使 venv 没做 editable install，也能 import 到包
     env["PYTHONPATH"] = str(ROOT / "src") + os.pathsep + env.get("PYTHONPATH", "")
 
@@ -133,8 +137,11 @@ def run_smoke(quick: bool = False) -> int:
 
     t0 = time.perf_counter()
     proc = subprocess.Popen(
-        cmd, cwd=str(ROOT), env=env,
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        cmd,
+        cwd=str(ROOT),
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
     )
 
     stages: dict[str, float] = {}
@@ -170,11 +177,14 @@ def run_smoke(quick: bool = False) -> int:
                 proc.wait(timeout=5)
             except Exception:
                 pass
-        if proc.poll() is None:                       # 还活着 → 强杀进程树
+        if proc.poll() is None:  # 还活着 → 强杀进程树
             try:
-                subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
-                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                               timeout=10)
+                subprocess.run(
+                    ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=10,
+                )
             except Exception:
                 pass
         _assert_no_orphan(proc.pid)
@@ -188,8 +198,8 @@ def run_smoke(quick: bool = False) -> int:
     if not ok:
         log = _read_log(log_file)
         _fail(
-            "启动未走完，缺阶段：" + ", ".join(s for s in need
-                                              if _find_stage(stages, s) is None)
+            "启动未走完，缺阶段："
+            + ", ".join(s for s in need if _find_stage(stages, s) is None)
             + f"\n--- agent.log 末尾 ---\n{log[-3000:]}"
         )
 
@@ -197,8 +207,7 @@ def run_smoke(quick: bool = False) -> int:
     for s in EARLY_STAGES:
         sec = _find_stage(stages, s)
         if sec is not None and sec > EARLY_BUDGET_S:
-            _fail(f"阶段「{s}」耗时 {sec:.2f}s 超预算 {EARLY_BUDGET_S}s"
-                  f"（不碰硬件的步不该慢）")
+            _fail(f"阶段「{s}」耗时 {sec:.2f}s 超预算 {EARLY_BUDGET_S}s（不碰硬件的步不该慢）")
 
     # 进程确实活着（能 kill 说明它一直在跑）
     print(f"\n[ok] 启动链完整走通（耗时 {time.perf_counter() - t0:.2f}s）")
@@ -218,8 +227,9 @@ def run_smoke(quick: bool = False) -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="batbar 黑盒冒烟测试")
-    ap.add_argument("--quick", action="store_true",
-                    help="只验「进程能起来 + 构造函数不炸」，不等托盘 NIM_ADD")
+    ap.add_argument(
+        "--quick", action="store_true", help="只验「进程能起来 + 构造函数不炸」，不等托盘 NIM_ADD"
+    )
     args = ap.parse_args()
     return run_smoke(quick=args.quick)
 

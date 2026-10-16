@@ -10,6 +10,7 @@
 PyInstaller onefile 会有**两个**进程：bootloader 父进程 + 真正的应用子进程。
 两个都要量，加起来才是用户看到的开销（父进程基本只做解压与等待，占用很小）。
 """
+
 from __future__ import annotations
 
 import ctypes
@@ -26,11 +27,16 @@ PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 
 class PROCESS_MEMORY_COUNTERS(ctypes.Structure):
     _fields_ = [
-        ("cb", wt.DWORD), ("PageFaultCount", wt.DWORD),
-        ("PeakWorkingSetSize", ctypes.c_size_t), ("WorkingSetSize", ctypes.c_size_t),
-        ("QuotaPeakPagedPoolUsage", ctypes.c_size_t), ("QuotaPagedPoolUsage", ctypes.c_size_t),
-        ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t), ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
-        ("PagefileUsage", ctypes.c_size_t), ("PeakPagefileUsage", ctypes.c_size_t),
+        ("cb", wt.DWORD),
+        ("PageFaultCount", wt.DWORD),
+        ("PeakWorkingSetSize", ctypes.c_size_t),
+        ("WorkingSetSize", ctypes.c_size_t),
+        ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+        ("QuotaPagedPoolUsage", ctypes.c_size_t),
+        ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+        ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+        ("PagefileUsage", ctypes.c_size_t),
+        ("PeakPagefileUsage", ctypes.c_size_t),
     ]
 
 
@@ -63,7 +69,9 @@ def measure(pid: int, seconds: float = 20.0) -> dict:
         used = _cpu_seconds(_ft(k1), _ft(k2)) + _cpu_seconds(_ft(u1), _ft(u2))
         wall = t2 - t1
         return {
-            "pid": pid, "wall": wall, "cpu_s": used,
+            "pid": pid,
+            "wall": wall,
+            "cpu_s": used,
             "pct_of_one_core": 100.0 * used / wall,
             "pct_of_all_cores": 100.0 * used / wall / os.cpu_count(),
             "working_set": pmc.WorkingSetSize,
@@ -75,8 +83,9 @@ def measure(pid: int, seconds: float = 20.0) -> dict:
 
 
 def pids_of(name: str) -> list[int]:
-    out = subprocess.run(["tasklist", "/FI", f"IMAGENAME eq {name}", "/NH", "/FO", "CSV"],
-                         capture_output=True, text=True).stdout
+    out = subprocess.run(
+        ["tasklist", "/FI", f"IMAGENAME eq {name}", "/NH", "/FO", "CSV"], capture_output=True, text=True
+    ).stdout
     res = []
     for line in out.splitlines():
         if name.lower() in line.lower():
@@ -98,24 +107,30 @@ def main() -> int:
 
     print(f"采样 {seconds:.0f} 秒 · 逻辑核心 {os.cpu_count()} 个 · 进程 {name} PID={pids}")
     print()
-    rows = [measure(p, seconds) for p in pids]      # 串行采样，避免互相干扰计时
+    rows = [measure(p, seconds) for p in pids]  # 串行采样，避免互相干扰计时
 
     MB = 1048576.0
-    print(f"{'PID':>8}{'工作集(MB)':>12}{'专用(MB)':>10}{'峰值(MB)':>10}"
-          f"{'CPU秒/采样':>12}{'单核%':>9}{'全核%':>8}")
+    print(
+        f"{'PID':>8}{'工作集(MB)':>12}{'专用(MB)':>10}{'峰值(MB)':>10}"
+        f"{'CPU秒/采样':>12}{'单核%':>9}{'全核%':>8}"
+    )
     for r in rows:
-        print(f"{r['pid']:>8}{r['working_set']/MB:>12.1f}{r['private']/MB:>10.1f}"
-              f"{r['peak_ws']/MB:>10.1f}{r['cpu_s']:>12.3f}"
-              f"{r['pct_of_one_core']:>9.3f}{r['pct_of_all_cores']:>8.3f}")
+        print(
+            f"{r['pid']:>8}{r['working_set'] / MB:>12.1f}{r['private'] / MB:>10.1f}"
+            f"{r['peak_ws'] / MB:>10.1f}{r['cpu_s']:>12.3f}"
+            f"{r['pct_of_one_core']:>9.3f}{r['pct_of_all_cores']:>8.3f}"
+        )
 
     tot_ws = sum(r["working_set"] for r in rows)
     tot_pr = sum(r["private"] for r in rows)
     tot_cpu = sum(r["cpu_s"] for r in rows)
     wall = rows[0]["wall"]
     print()
-    print(f"合计：工作集 {tot_ws/MB:.1f} MB · 专用(提交) {tot_pr/MB:.1f} MB · "
-          f"平均 CPU {100.0*tot_cpu/wall:.3f}%（单核口径）/ "
-          f"{100.0*tot_cpu/wall/os.cpu_count():.3f}%（全核口径）")
+    print(
+        f"合计：工作集 {tot_ws / MB:.1f} MB · 专用(提交) {tot_pr / MB:.1f} MB · "
+        f"平均 CPU {100.0 * tot_cpu / wall:.3f}%（单核口径）/ "
+        f"{100.0 * tot_cpu / wall / os.cpu_count():.3f}%（全核口径）"
+    )
     return 0
 
 

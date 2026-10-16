@@ -3,6 +3,7 @@
 不需要任何硬件。Fake 按预置队列吐出原始帧；若回显 request_id 不匹配会
 超时（测试里因此必须把回复做成 echo 请求 id 的形式——这正是 Solaar 的匹配逻辑）。
 """
+
 import struct
 import unittest
 
@@ -66,7 +67,7 @@ class TestSessionFindFeature(unittest.TestCase):
         self.assertFalse(long)
 
     def test_get_feature_error_gives_none(self):
-        t = ScriptedTransport(["ERR:01"])   # unsupported
+        t = ScriptedTransport(["ERR:01"])  # unsupported
         s = HidppSession(t)
         self.assertIsNone(s.find_feature(0x9999))
 
@@ -74,7 +75,7 @@ class TestSessionFindFeature(unittest.TestCase):
         t = ScriptedTransport([bytes([0x05])])
         s = HidppSession(t)
         s.find_feature(H.FEAT_UNIFIED_BATTERY)
-        idx2 = s.find_feature(H.FEAT_UNIFIED_BATTERY)   # 第二次不再发帧
+        idx2 = s.find_feature(H.FEAT_UNIFIED_BATTERY)  # 第二次不再发帧
         self.assertEqual(idx2, 0x05)
         self.assertEqual(len(t.writes), 1)
 
@@ -82,10 +83,12 @@ class TestSessionFindFeature(unittest.TestCase):
 class TestSessionReadBattery(unittest.TestCase):
     def _unified_ok(self):
         # 两次 ROOT 查询（unified 命中即停），第二次是特性页读
-        return ScriptedTransport([
-            bytes([0x05]),                       # unified idx=5
-            bytes([87, 4, 0x01, 0x00]),          # 0x1004 fn0x10 数据段
-        ])
+        return ScriptedTransport(
+            [
+                bytes([0x05]),  # unified idx=5
+                bytes([87, 4, 0x01, 0x00]),  # 0x1004 fn0x10 数据段
+            ]
+        )
 
     def test_reads_unified_battery(self):
         t = self._unified_ok()
@@ -102,7 +105,7 @@ class TestSessionReadBattery(unittest.TestCase):
         # writes[0]=ROOT.GetFeatures, writes[1]=电池读。检查第二帧的 function
         payload = t.writes[1][0]
         rid = struct.unpack("!H", payload[:2])[0]
-        self.assertEqual((rid >> 8) & 0xFF, 0x05)   # 特性索引来自 GetFeatures
+        self.assertEqual((rid >> 8) & 0xFF, 0x05)  # 特性索引来自 GetFeatures
         self.assertEqual(rid & 0xF0, 0x10)
 
     def test_error_frame_on_read_returns_none(self):
@@ -152,7 +155,7 @@ class TestSessionPing(unittest.TestCase):
         self.assertEqual(s.ping(), 4.2)
 
     def test_ping_timeout(self):
-        t = ScriptedTransport([])   # 无回复
+        t = ScriptedTransport([])  # 无回复
         s = HidppSession(t)
         self.assertIsNone(s.ping())
 
@@ -170,20 +173,19 @@ class TestSessionReadRegister(unittest.TestCase):
     def test_read_register_returns_data_section(self):
         t = ScriptedTransport([bytes([0x00, 0x01, 0x00])])
         s = HidppSession(t)
-        self.assertEqual(s.read_register(0x00, device_index=H.DEV_RECEIVER),
-                         bytes([0x00, 0x01, 0x00]))
+        self.assertEqual(s.read_register(0x00, device_index=H.DEV_RECEIVER), bytes([0x00, 0x01, 0x00]))
         payload, devnum, _long = t.writes[0]
-        self.assertEqual(payload[:2], bytes([0x81, 0x00]))   # 寄存器号没被 sw_id 掩掉
-        self.assertEqual(devnum, H.DEV_RECEIVER)             # 寻址接收器
+        self.assertEqual(payload[:2], bytes([0x81, 0x00]))  # 寄存器号没被 sw_id 掩掉
+        self.assertEqual(devnum, H.DEV_RECEIVER)  # 寻址接收器
         self.assertFalse(_long)
 
     def test_read_register_none_on_error_frame(self):
-        t = ScriptedTransport(["ERR:01"])   # 寄存器不支持 → 错误帧 → None
+        t = ScriptedTransport(["ERR:01"])  # 寄存器不支持 → 错误帧 → None
         s = HidppSession(t)
         self.assertIsNone(s.read_register(0x02, device_index=H.DEV_RECEIVER))
 
     def test_read_register_none_on_timeout(self):
-        t = ScriptedTransport([])           # 无回复 → None
+        t = ScriptedTransport([])  # 无回复 → None
         s = HidppSession(t)
         self.assertIsNone(s.read_register(0x02, device_index=H.DEV_RECEIVER))
 

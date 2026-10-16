@@ -18,6 +18,7 @@
 纯判定逻辑（`feed()`）与「弹通知」的副作用（`_deliver`）分离，前者可脱机
 单测，后者只在 agent 接线里被调用。
 """
+
 from __future__ import annotations
 
 import logging
@@ -26,10 +27,10 @@ import time
 
 log = logging.getLogger("batbar.lowbat")
 
-DEFAULT_THRESHOLD = 20      # 百分比：≤ 它算「低」（2026-10-12 用户拍板「低于 20 长显」）
-DEFAULT_RESET_GAP = 5       # 迟滞：回升到 threshold+gap 才重新布防
-DEFAULT_CONFIRM = 3         # 连续几次低读数才触发（防 0 帧毛刺）
-HEADPHONE_PREFIX = "耳机"    # 友好名命名规范「类别 品牌+型号」→ 耳机类以此开头
+DEFAULT_THRESHOLD = 20  # 百分比：≤ 它算「低」（2026-10-12 用户拍板「低于 20 长显」）
+DEFAULT_RESET_GAP = 5  # 迟滞：回升到 threshold+gap 才重新布防
+DEFAULT_CONFIRM = 3  # 连续几次低读数才触发（防 0 帧毛刺）
+HEADPHONE_PREFIX = "耳机"  # 友好名命名规范「类别 品牌+型号」→ 耳机类以此开头
 
 
 def threshold() -> int:
@@ -47,10 +48,11 @@ def toast_enabled() -> bool:
     return os.environ.get("BATBAR_LOWBAT_TOAST", "") == "1"
 
 
-def pick_display(snap: dict[str, int | None],
-                 wired_bases: set[str] | frozenset[str] = frozenset(),
-                 charging_names: set[str] | frozenset[str] = frozenset()) \
-        -> tuple[str, int] | None:
+def pick_display(
+    snap: dict[str, int | None],
+    wired_bases: set[str] | frozenset[str] = frozenset(),
+    charging_names: set[str] | frozenset[str] = frozenset(),
+) -> tuple[str, int] | None:
     """挑托盘图标要显示的那台设备：**所有设备里电量最低的一台**（2026-10-12 用户拍板）。
 
     排除项（纯函数，脱机可测）：
@@ -71,10 +73,11 @@ def pick_display(snap: dict[str, int | None],
     return best
 
 
-def pick_preferred(snap: dict[str, int | None],
-                   wired_bases: set[str] | frozenset[str] = frozenset(),
-                   charging_names: set[str] | frozenset[str] = frozenset()) \
-        -> tuple[str, int] | None:
+def pick_preferred(
+    snap: dict[str, int | None],
+    wired_bases: set[str] | frozenset[str] = frozenset(),
+    charging_names: set[str] | frozenset[str] = frozenset(),
+) -> tuple[str, int] | None:
     """无低电设备时挑「优先关注」的一台：**耳机优先**（2026-10-12 用户拍板）。
 
     耳机是「不盯着就容易突然没电」的设备（鼠标/键盘没电了随手换线就行），
@@ -85,10 +88,12 @@ def pick_preferred(snap: dict[str, int | None],
     return pick_display(hp, wired_bases, charging_names)
 
 
-def pick_low(snap: dict[str, int | None], thr: int,
-             wired_bases: set[str] | frozenset[str] = frozenset(),
-             charging_names: set[str] | frozenset[str] = frozenset()) \
-        -> tuple[str, int] | None:
+def pick_low(
+    snap: dict[str, int | None],
+    thr: int,
+    wired_bases: set[str] | frozenset[str] = frozenset(),
+    charging_names: set[str] | frozenset[str] = frozenset(),
+) -> tuple[str, int] | None:
     """从快照里挑「最该警告」的低电设备，返回 (剥后缀基名, pct)。
 
     判据：0 < pct ≤ thr 且非有线非充电（纯函数，脱机可测）。0% 排除——2.4G
@@ -107,9 +112,14 @@ class LowBatteryWatcher:
     feed() 每次拿到一次读数就调用一次，返回 True 表示「此刻应当弹一条通知」。
     """
 
-    def __init__(self, icon_getter=None, confirm: int = DEFAULT_CONFIRM,
-                 reset_gap: int = DEFAULT_RESET_GAP, wired_check=None,
-                 gate=None):
+    def __init__(
+        self,
+        icon_getter=None,
+        confirm: int = DEFAULT_CONFIRM,
+        reset_gap: int = DEFAULT_RESET_GAP,
+        wired_check=None,
+        gate=None,
+    ):
         # icon_getter: 无参函数 → 返回当前 pystray.Icon 或 None（延迟解耦，
         # 单测不需要托盘）。
         # wired_check: name -> bool；**只在即将弹的前一刻**调用一次实时复核
@@ -126,12 +136,11 @@ class LowBatteryWatcher:
         self._confirm = max(1, confirm)
         self._reset_gap = reset_gap
         self._thr = threshold()
-        self._misses: dict[str, int] = {}      # 设备名 -> 连续低读数计数
-        self._armed: dict[str, bool] = {}       # 设备名 -> 是否仍可触发（布防）
+        self._misses: dict[str, int] = {}  # 设备名 -> 连续低读数计数
+        self._armed: dict[str, bool] = {}  # 设备名 -> 是否仍可触发（布防）
         self._last_notify_ts: dict[str, float] = {}
 
-    def feed(self, name: str, pct: int | None, charging: bool = False,
-             wired: bool = False) -> bool:
+    def feed(self, name: str, pct: int | None, charging: bool = False, wired: bool = False) -> bool:
         """喂一次读数。返回 True = 应弹通知（本方法已顺手弹）。"""
         thr = self._thr
         # 读不到 / 充电 / 有线：撤销计数并（在明显不低时）重新布防，绝不弹。
@@ -156,7 +165,7 @@ class LowBatteryWatcher:
                             return False
                     except Exception:  # noqa: BLE001 - 复核失败按未有线处理
                         pass
-                self._armed[name] = False       # 单发：解除，等回升再布防
+                self._armed[name] = False  # 单发：解除，等回升再布防
                 self._misses[name] = 0
                 # 全屏/游戏门控（2026-10-13）：投递前问一句。被抑制时**仍算
                 # 已触发**（单发语义不变，不重复骚扰）—— 但也不补弹，理由见
@@ -212,8 +221,7 @@ _watcher: LowBatteryWatcher | None = None
 def get(icon_getter=None, wired_check=None, gate=None) -> LowBatteryWatcher:
     global _watcher
     if _watcher is None:
-        _watcher = LowBatteryWatcher(icon_getter=icon_getter,
-                                     wired_check=wired_check, gate=gate)
+        _watcher = LowBatteryWatcher(icon_getter=icon_getter, wired_check=wired_check, gate=gate)
     else:
         if icon_getter is not None and _watcher._icon_getter is None:
             _watcher._icon_getter = icon_getter

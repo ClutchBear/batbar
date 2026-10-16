@@ -1,4 +1,5 @@
 """bt_battery：JSON 解析与友好名映射（不依赖真实 PowerShell——注入假输出）。"""
+
 from __future__ import annotations
 
 import unittest
@@ -28,6 +29,7 @@ class Parse(unittest.TestCase):
     def _feed(self, json_text: str) -> B.BluetoothBattery:
         """绕过 subprocess：直接喂 ConvertTo-Json 的假输出。"""
         import json
+
         b = B.BluetoothBattery()
         data = json.loads(json_text)
         devs = {}
@@ -36,21 +38,23 @@ class Parse(unittest.TestCase):
                 devs[B.friendly(str(d.get("name") or "BT"))] = max(0, min(100, int(d["battery"])))
         b._devices = devs
         import time
+
         b._ts = time.monotonic()
         return b
 
     def test_array(self):
-        b = self._feed('[{"name":"LB Hi98C Pro 5.0","id":"BTHLE\\\\DEV_X","battery":93},'
-                       '{"name":"QCY Era 7 Hands-Free AG","id":"BTHENUM\\\\Y","battery":90}]')
-        self.assertEqual(b.all_devices(), {"键盘 LEOBOG Hi98C Pro": 93,
-                                           "耳机 QCY Era 7": 90})
+        b = self._feed(
+            '[{"name":"LB Hi98C Pro 5.0","id":"BTHLE\\\\DEV_X","battery":93},'
+            '{"name":"QCY Era 7 Hands-Free AG","id":"BTHENUM\\\\Y","battery":90}]'
+        )
+        self.assertEqual(b.all_devices(), {"键盘 LEOBOG Hi98C Pro": 93, "耳机 QCY Era 7": 90})
 
     def test_clamp(self):
         b = self._feed('[{"name":"X","battery":120}]')
         self.assertEqual(b.all_devices()["X"], 100)
 
     def test_empty(self):
-        b = self._feed('[]')
+        b = self._feed("[]")
         self.assertEqual(b.all_devices(), {})
 
 
@@ -106,15 +110,16 @@ class ConnJudge(unittest.TestCase):
         import shutil
         import subprocess
         import types
+
         self._saved = (shutil.which, subprocess.run)
         shutil.which = lambda _n: "powershell"
-        subprocess.run = lambda *a, **k: types.SimpleNamespace(
-            stdout=json_text, stderr="", returncode=0)
+        subprocess.run = lambda *a, **k: types.SimpleNamespace(stdout=json_text, stderr="", returncode=0)
         self.addCleanup(self._restore)
 
     def _restore(self):
         import shutil
         import subprocess
+
         shutil.which, subprocess.run = self._saved
 
     def test_parses_merged_classic_le_result(self):
@@ -125,8 +130,8 @@ class ConnJudge(unittest.TestCase):
         """
         self._fake_shell('{"E33312B589DA": true, "4142FFC2921C": false}')
         got = B.connected_macs(["E33312B589DA", "4142FFC2921C"], force=True)
-        self.assertTrue(got["E33312B589DA"])     # BLE 键盘：le 报在连
-        self.assertFalse(got["4142FFC2921C"])    # 经典耳机：确实没连
+        self.assertTrue(got["E33312B589DA"])  # BLE 键盘：le 报在连
+        self.assertFalse(got["4142FFC2921C"])  # 经典耳机：确实没连
 
     def test_winrt_true_still_works(self):
         """经典蓝牙耳机在连 → True。"""
@@ -147,8 +152,8 @@ class ConnJudge(unittest.TestCase):
     def test_ps_conn_script_wires_le_api(self):
         """契约：连接态 PS 脚本必须含 BLE 专用 API（否则 BLE 假阴性无人兜）。"""
         self.assertIn("BluetoothLEDevice", B._PS_CONN)
-        self.assertIn("BluetoothDevice", B._PS_CONN)   # 经典判据仍在
-        self.assertNotIn("_PS_HIDMACS", dir(B))        # hid 补证已删干净
+        self.assertIn("BluetoothDevice", B._PS_CONN)  # 经典判据仍在
+        self.assertNotIn("_PS_HIDMACS", dir(B))  # hid 补证已删干净
 
 
 class ForceRefresh(unittest.TestCase):
@@ -159,36 +164,38 @@ class ForceRefresh(unittest.TestCase):
     def test_force_refresh_bypasses_ttl(self):
         import time
         from unittest import mock
+
         b = B.BluetoothBattery()
         b._devices = {"旧": 1}
-        b._ts = time.monotonic()             # TTL 内：prewarm 会直接返回
+        b._ts = time.monotonic()  # TTL 内：prewarm 会直接返回
         calls = []
-        with mock.patch.object(b, "_run_query",
-                               lambda force_conn=False, quick=False:
-                               calls.append((force_conn, quick))):
-            b.prewarm()                      # TTL 内 → 不触发查询
-            b.force_refresh()                # 强刷 → 必查，且 force_conn=True
-            b.force_refresh(quick=True)      # bug 13：单枪快查透传
+        with mock.patch.object(
+            b, "_run_query", lambda force_conn=False, quick=False: calls.append((force_conn, quick))
+        ):
+            b.prewarm()  # TTL 内 → 不触发查询
+            b.force_refresh()  # 强刷 → 必查，且 force_conn=True
+            b.force_refresh(quick=True)  # bug 13：单枪快查透传
         self.assertEqual(calls, [(True, False), (True, True)])
 
     def test_run_query_forces_conn_query(self):
         import json
         import types
         from unittest import mock
+
         b = B.BluetoothBattery()
         b._shell = "powershell"
-        rows = [{"name": "QCY Era 7 Hands-Free AG", "mac": "84AC6098BBDC",
-                 "battery": 90}]
+        rows = [{"name": "QCY Era 7 Hands-Free AG", "mac": "84AC6098BBDC", "battery": 90}]
         seen = []
 
         def fake_conn(macs, force=False):
             seen.append((list(macs), force))
             return {"84AC6098BBDC": True}
 
-        fake_ps = lambda *a, **k: types.SimpleNamespace(
-            stdout=json.dumps(rows), stderr="", returncode=0)
-        with mock.patch.object(B.subprocess, "run", fake_ps), \
-             mock.patch.object(B, "connected_macs", fake_conn):
+        fake_ps = lambda *a, **k: types.SimpleNamespace(stdout=json.dumps(rows), stderr="", returncode=0)
+        with (
+            mock.patch.object(B.subprocess, "run", fake_ps),
+            mock.patch.object(B, "connected_macs", fake_conn),
+        ):
             b._run_query(force_conn=True)
         self.assertEqual(seen, [(["84AC6098BBDC"], True)])
         self.assertEqual(b._devices, {"耳机 QCY Era 7": 90})
@@ -207,17 +214,17 @@ class EmptyRetention(unittest.TestCase):
 
     def _mk(self, devs: dict) -> B.BluetoothBattery:
         import time
+
         b = B.BluetoothBattery()
         b._devices = dict(devs)
         b._ts = time.monotonic()
-        b._last_ok_ts = time.monotonic()      # 刚成功过 → 处于宽限期内
+        b._last_ok_ts = time.monotonic()  # 刚成功过 → 处于宽限期内
         return b
 
     def test_empty_keeps_last_list(self):
         b = self._mk({"耳机 QCY Era 7": 90, "键盘 LEOBOG Hi98C Pro": 99})
         b._accept({})
-        self.assertEqual(b._devices, {"耳机 QCY Era 7": 90,
-                                      "键盘 LEOBOG Hi98C Pro": 99})
+        self.assertEqual(b._devices, {"耳机 QCY Era 7": 90, "键盘 LEOBOG Hi98C Pro": 99})
 
     def test_many_empties_within_grace_keep_list(self):
         """宽限期内**多少次**空结果都保留（这正是旧实现翻车的地方）。"""
@@ -229,6 +236,7 @@ class EmptyRetention(unittest.TestCase):
     def test_stale_list_accepted_as_offline(self):
         """空结果持续超过宽限期 → 接受真·离线（否则断开也一直挂着旧值）。"""
         import time
+
         b = self._mk({"耳机 QCY Era 7": 90})
         b._last_ok_ts = time.monotonic() - B.EMPTY_GRACE - 1
         b._accept({})
@@ -255,11 +263,15 @@ class EmptyRetention(unittest.TestCase):
 
         def fake_run(*_a, **_k):
             import types
+
             return types.SimpleNamespace(stdout="", stderr="")
 
         from unittest import mock
-        with mock.patch.object(B.subprocess, "run", fake_run), \
-             mock.patch.object(B, "connected_macs", lambda *a, **k: {}):
+
+        with (
+            mock.patch.object(B.subprocess, "run", fake_run),
+            mock.patch.object(B, "connected_macs", lambda *a, **k: {}),
+        ):
             b._run_query()
         self.assertEqual(b._devices, {"耳机 QCY Era 7": 90})
 
@@ -278,10 +290,11 @@ class EmptyVerifyByWinRT(unittest.TestCase):
 
     def _mk(self, devs: dict) -> B.BluetoothBattery:
         import time
+
         b = B.BluetoothBattery()
         b._devices = dict(devs)
         b._ts = time.monotonic()
-        b._last_ok_ts = time.monotonic()      # 刚成功过 → 宽限期内
+        b._last_ok_ts = time.monotonic()  # 刚成功过 → 宽限期内
         b._mac_by_name = {"键盘 LEOBOG Hi98C Pro": "E33312B589DA"}
         return b
 
@@ -289,10 +302,10 @@ class EmptyVerifyByWinRT(unittest.TestCase):
         """宽限期内空表 + WinRT 复核全离线 → 立即清空（不等 180s）。"""
         import time
         from unittest import mock
+
         b = self._mk({"键盘 LEOBOG Hi98C Pro": 98})
         seen = []
-        fake = lambda macs, force=False: seen.append(
-            (list(macs), force)) or {"E33312B589DA": False}
+        fake = lambda macs, force=False: seen.append((list(macs), force)) or {"E33312B589DA": False}
         with mock.patch.object(B, "connected_macs", fake):
             b._accept({})
         self.assertEqual(b._devices, {})
@@ -302,15 +315,16 @@ class EmptyVerifyByWinRT(unittest.TestCase):
     def test_still_connected_keeps_list(self):
         """WinRT 说设备还在连 → 空表是 CIM 抖动 → 维持宽限保留列表。"""
         from unittest import mock
+
         b = self._mk({"键盘 LEOBOG Hi98C Pro": 98})
-        with mock.patch.object(B, "connected_macs",
-                               lambda *a, **k: {"E33312B589DA": True}):
+        with mock.patch.object(B, "connected_macs", lambda *a, **k: {"E33312B589DA": True}):
             b._accept({})
         self.assertEqual(b._devices, {"键盘 LEOBOG Hi98C Pro": 98})
 
     def test_conn_query_failed_keeps_list(self):
         """连接态问不出（失败/超时）= 未知 → fail-safe 维持宽限。"""
         from unittest import mock
+
         b = self._mk({"键盘 LEOBOG Hi98C Pro": 98})
         with mock.patch.object(B, "connected_macs", lambda *a, **k: {}):
             b._accept({})
@@ -329,31 +343,32 @@ class EmptyVerifyByWinRT(unittest.TestCase):
         import time
         import types
         from unittest import mock
+
         b = B.BluetoothBattery()
         b._shell = "pwsh-fake"
-        rows = [{"name": "LB Hi98C Pro 5.0 ", "mac": "E33312B589DA",
-                 "battery": 98}]
+        rows = [{"name": "LB Hi98C Pro 5.0 ", "mac": "E33312B589DA", "battery": 98}]
 
         def fake_run(*_a, **_k):
             return types.SimpleNamespace(stdout=json.dumps(rows), stderr="")
 
-        with mock.patch.object(B.subprocess, "run", fake_run), \
-             mock.patch.object(B, "connected_macs",
-                               lambda *a, **k: {"E33312B589DA": True}):
+        with (
+            mock.patch.object(B.subprocess, "run", fake_run),
+            mock.patch.object(B, "connected_macs", lambda *a, **k: {"E33312B589DA": True}),
+        ):
             b._run_query()
-        self.assertEqual(b._mac_by_name,
-                         {"键盘 LEOBOG Hi98C Pro": "E33312B589DA"})
+        self.assertEqual(b._mac_by_name, {"键盘 LEOBOG Hi98C Pro": "E33312B589DA"})
         self.assertEqual(b._devices, {"键盘 LEOBOG Hi98C Pro": 98})
 
         # 端到端：下一轮整表空（最后一台关机）+ WinRT 报离线 → 当场清空
-        b._last_ok_ts = time.monotonic()      # 确保还在宽限期内
+        b._last_ok_ts = time.monotonic()  # 确保还在宽限期内
 
         def fake_empty(*_a, **_k):
             return types.SimpleNamespace(stdout="", stderr="")
 
-        with mock.patch.object(B.subprocess, "run", fake_empty), \
-             mock.patch.object(B, "connected_macs",
-                               lambda *a, **k: {"E33312B589DA": False}):
+        with (
+            mock.patch.object(B.subprocess, "run", fake_empty),
+            mock.patch.object(B, "connected_macs", lambda *a, **k: {"E33312B589DA": False}),
+        ):
             b._run_query()
         self.assertEqual(b._devices, {})
 
@@ -371,10 +386,11 @@ class QuickQuery(unittest.TestCase):
     def _run_capture(self, b, **kw):
         import types
         from unittest import mock
+
         seen = []
 
         def fake_run(cmd, **_k):
-            seen.append(cmd[-1])          # PS 脚本全文
+            seen.append(cmd[-1])  # PS 脚本全文
             return types.SimpleNamespace(stdout="null", stderr="")
 
         with mock.patch.object(B.subprocess, "run", fake_run):
@@ -389,7 +405,7 @@ class QuickQuery(unittest.TestCase):
 
     def test_background_keeps_three_shots(self):
         b = self._mk()
-        scripts = self._run_capture(b)    # 后台预热 = 默认三枪
+        scripts = self._run_capture(b)  # 后台预热 = 默认三枪
         self.assertTrue(any("$tries = 3" in s for s in scripts))
 
 
@@ -400,15 +416,16 @@ class DropDisconnectedNow(unittest.TestCase):
 
     def _mk(self):
         import time
+
         b = B.BluetoothBattery()
         b._devices = {"耳机 QCY Era 7": 90, "键盘 LEOBOG Hi98C Pro": 98}
-        b._mac_by_name = {"耳机 QCY Era 7": "84AC6098BBDC",
-                          "键盘 LEOBOG Hi98C Pro": "E33312B589DA"}
+        b._mac_by_name = {"耳机 QCY Era 7": "84AC6098BBDC", "键盘 LEOBOG Hi98C Pro": "E33312B589DA"}
         b._ts = time.monotonic()
         return b
 
     def test_confirmed_offline_dropped(self):
         from unittest import mock
+
         b = self._mk()
         seen = []
 
@@ -424,28 +441,29 @@ class DropDisconnectedNow(unittest.TestCase):
 
     def test_partial_offline_drops_only_those(self):
         from unittest import mock
+
         b = self._mk()
         with mock.patch.object(
-                B, "connected_macs",
-                lambda macs, force=False: {"84AC6098BBDC": False,
-                                           "E33312B589DA": True}):
+            B, "connected_macs", lambda macs, force=False: {"84AC6098BBDC": False, "E33312B589DA": True}
+        ):
             dropped = b.drop_disconnected_now()
         self.assertEqual(dropped, ["耳机 QCY Era 7"])
         self.assertEqual(b._devices, {"键盘 LEOBOG Hi98C Pro": 98})
 
     def test_query_failed_noop(self):
         from unittest import mock
+
         b = self._mk()
         with mock.patch.object(B, "connected_macs", lambda *a, **k: {}):
             self.assertEqual(b.drop_disconnected_now(), [])
-        self.assertEqual(len(b._devices), 2)      # 原样保留
+        self.assertEqual(len(b._devices), 2)  # 原样保留
 
     def test_no_devices_or_no_mac_map_noop(self):
         b = self._mk()
         b._devices = {}
         self.assertEqual(b.drop_disconnected_now(), [])
         b._devices = {"神秘设备": 1}
-        b._mac_by_name = {}                       # 没有 MAC 可问
+        b._mac_by_name = {}  # 没有 MAC 可问
         self.assertEqual(b.drop_disconnected_now(), [])
         self.assertEqual(b._devices, {"神秘设备": 1})
 
@@ -459,46 +477,52 @@ class SyncNow(unittest.TestCase):
 
     def _mk(self):
         import time
+
         b = B.BluetoothBattery()
         # 耳机在列表里；键盘记得 MAC 但当前不在列表（之前断开被摘了）
         b._devices = {"耳机 QCY Era 7": 90}
-        b._mac_by_name = {"耳机 QCY Era 7": "84AC6098BBDC",
-                          "键盘 LEOBOG Hi98C Pro": "E33312B589DA"}
+        b._mac_by_name = {"耳机 QCY Era 7": "84AC6098BBDC", "键盘 LEOBOG Hi98C Pro": "E33312B589DA"}
         b._ts = time.monotonic()
         return b
 
     def test_adds_online_and_drops_offline_in_one_query(self):
         """耳机关机 + 键盘开机，同一次查询里一摘一加。"""
         from unittest import mock
+
         b = self._mk()
         seen = []
 
         def fake(macs, force=False):
             seen.append((sorted(macs), force))
-            return {"84AC6098BBDC": False,       # 耳机离线
-                    "E33312B589DA": True}         # 键盘上线
+            return {
+                "84AC6098BBDC": False,  # 耳机离线
+                "E33312B589DA": True,
+            }  # 键盘上线
 
-        with mock.patch.object(B, "connected_macs", fake), \
-             mock.patch.object(B.lastknown, "get",
-                               lambda n: (98, 0.0) if "LEOBOG" in n else None):
+        with (
+            mock.patch.object(B, "connected_macs", fake),
+            mock.patch.object(B.lastknown, "get", lambda n: (98, 0.0) if "LEOBOG" in n else None),
+        ):
             added, dropped = b.sync_now()
         self.assertEqual(dropped, ["耳机 QCY Era 7"])
         self.assertEqual(added, ["键盘 LEOBOG Hi98C Pro"])
         self.assertEqual(b._devices, {"键盘 LEOBOG Hi98C Pro": 98})  # lastknown 兜底
-        self.assertIn("键盘 LEOBOG Hi98C Pro", b._fast_add_protect)   # 闪回保护已挂
+        self.assertIn("键盘 LEOBOG Hi98C Pro", b._fast_add_protect)  # 闪回保护已挂
         # 只 spawn 一次查询，两个方向的 MAC 都在里面
         self.assertEqual(len(seen), 1)
         self.assertEqual(seen[0][0], ["84AC6098BBDC", "E33312B589DA"])
-        self.assertTrue(seen[0][1])               # force=True，不吃 15s 缓存
+        self.assertTrue(seen[0][1])  # force=True，不吃 15s 缓存
 
     def test_add_without_lastknown_gives_none(self):
         """上线设备没有历史电量 → 先给 None（真值随后 CIM 刷新）。"""
         from unittest import mock
+
         b = self._mk()
-        b._devices = {}                           # 列表空，只有键盘待上线
-        with mock.patch.object(B, "connected_macs",
-                               lambda macs, force=False: {"E33312B589DA": True}), \
-             mock.patch.object(B.lastknown, "get", lambda n: None):
+        b._devices = {}  # 列表空，只有键盘待上线
+        with (
+            mock.patch.object(B, "connected_macs", lambda macs, force=False: {"E33312B589DA": True}),
+            mock.patch.object(B.lastknown, "get", lambda n: None),
+        ):
             added, dropped = b.sync_now()
         self.assertEqual(added, ["键盘 LEOBOG Hi98C Pro"])
         self.assertEqual(dropped, [])
@@ -507,19 +531,25 @@ class SyncNow(unittest.TestCase):
     def test_already_connected_stays_no_double_add(self):
         """在列表 + 报在连 → 不动（不重复加、不摘）。"""
         from unittest import mock
+
         b = self._mk()
-        with mock.patch.object(B, "connected_macs",
-                               lambda macs, force=False: {
-                                   "84AC6098BBDC": True,   # 耳机在连
-                                   "E33312B589DA": False}):  # 键盘仍离线
+        with mock.patch.object(
+            B,
+            "connected_macs",
+            lambda macs, force=False: {
+                "84AC6098BBDC": True,  # 耳机在连
+                "E33312B589DA": False,
+            },
+        ):  # 键盘仍离线
             added, dropped = b.sync_now()
         self.assertEqual(added, [])
         self.assertEqual(dropped, [])
-        self.assertEqual(b._devices, {"耳机 QCY Era 7": 90})   # 原样
+        self.assertEqual(b._devices, {"耳机 QCY Era 7": 90})  # 原样
 
     def test_query_failed_noop(self):
         """连接态问不出（{}）→ 全不动（fail-open，不误摘不误加）。"""
         from unittest import mock
+
         b = self._mk()
         with mock.patch.object(B, "connected_macs", lambda *a, **k: {}):
             self.assertEqual(b.sync_now(), ([], []))
@@ -528,13 +558,13 @@ class SyncNow(unittest.TestCase):
     def test_partial_conn_unknown_mac_skipped(self):
         """某 MAC 没问到（不在返回里）→ 那台不动，其余照常和解。"""
         from unittest import mock
+
         b = self._mk()
         # 只返回耳机的连接态，键盘的 MAC 缺失
-        with mock.patch.object(B, "connected_macs",
-                               lambda macs, force=False: {"84AC6098BBDC": False}):
+        with mock.patch.object(B, "connected_macs", lambda macs, force=False: {"84AC6098BBDC": False}):
             added, dropped = b.sync_now()
         self.assertEqual(dropped, ["耳机 QCY Era 7"])
-        self.assertEqual(added, [])               # 键盘未知 → 不加
+        self.assertEqual(added, [])  # 键盘未知 → 不加
 
     def test_no_mac_map_noop(self):
         b = self._mk()
@@ -544,11 +574,11 @@ class SyncNow(unittest.TestCase):
     def test_device_without_mac_entry_preserved(self):
         """列表里有条目但 `_mac_by_name` 没有它的 MAC → 无法判定，保留不碰。"""
         from unittest import mock
+
         b = self._mk()
         b._devices = {"耳机 QCY Era 7": 90, "神秘设备": 50}
-        b._mac_by_name = {"耳机 QCY Era 7": "84AC6098BBDC"}   # 神秘设备无 MAC
-        with mock.patch.object(B, "connected_macs",
-                               lambda macs, force=False: {"84AC6098BBDC": True}):
+        b._mac_by_name = {"耳机 QCY Era 7": "84AC6098BBDC"}  # 神秘设备无 MAC
+        with mock.patch.object(B, "connected_macs", lambda macs, force=False: {"84AC6098BBDC": True}):
             added, dropped = b.sync_now()
         self.assertEqual((added, dropped), ([], []))
         self.assertEqual(b._devices, {"耳机 QCY Era 7": 90, "神秘设备": 50})
@@ -561,19 +591,19 @@ class PreserveFastAdds(unittest.TestCase):
 
     def _mk(self, protect_until_offset=100.0):
         import time
+
         b = B.BluetoothBattery()
-        b._devices = {"键盘 LEOBOG Hi98C Pro": 98}   # 快判刚加的（兜底值 98）
+        b._devices = {"键盘 LEOBOG Hi98C Pro": 98}  # 快判刚加的（兜底值 98）
         b._mac_by_name = {"键盘 LEOBOG Hi98C Pro": "E33312B589DA"}
-        b._fast_add_protect = {
-            "键盘 LEOBOG Hi98C Pro": time.monotonic() + protect_until_offset}
+        b._fast_add_protect = {"键盘 LEOBOG Hi98C Pro": time.monotonic() + protect_until_offset}
         b._ts = time.monotonic()
         return b
 
     def test_preserved_when_cim_misses_within_window(self):
         """保护期内 + CIM 本轮没扫到 → 沿用兜底值，不删。"""
         b = self._mk(protect_until_offset=100.0)
-        out = b._preserve_fast_adds({"耳机 QCY Era 7": 100})   # CIM 只有耳机
-        self.assertEqual(out["键盘 LEOBOG Hi98C Pro"], 98)     # 保住了
+        out = b._preserve_fast_adds({"耳机 QCY Era 7": 100})  # CIM 只有耳机
+        self.assertEqual(out["键盘 LEOBOG Hi98C Pro"], 98)  # 保住了
         self.assertEqual(out["耳机 QCY Era 7"], 100)
         self.assertIn("键盘 LEOBOG Hi98C Pro", b._fast_add_protect)  # 标记仍在
 
@@ -581,14 +611,14 @@ class PreserveFastAdds(unittest.TestCase):
         """CIM 本轮扫到了 → 保护失效，以 CIM 真实读数为准。"""
         b = self._mk(protect_until_offset=100.0)
         out = b._preserve_fast_adds({"键盘 LEOBOG Hi98C Pro": 95})  # CIM 真值 95
-        self.assertEqual(out["键盘 LEOBOG Hi98C Pro"], 95)     # CIM 覆盖兜底值
+        self.assertEqual(out["键盘 LEOBOG Hi98C Pro"], 95)  # CIM 覆盖兜底值
         self.assertNotIn("键盘 LEOBOG Hi98C Pro", b._fast_add_protect)  # 标记清了
 
     def test_removed_when_protection_expired(self):
         """保护期已过 + CIM 仍没扫到 → 移除（交常规逻辑判定）。"""
-        b = self._mk(protect_until_offset=-1.0)   # 已过期
+        b = self._mk(protect_until_offset=-1.0)  # 已过期
         out = b._preserve_fast_adds({"耳机 QCY Era 7": 100})
-        self.assertNotIn("键盘 LEOBOG Hi98C Pro", out)          # 被移除
+        self.assertNotIn("键盘 LEOBOG Hi98C Pro", out)  # 被移除
         self.assertNotIn("键盘 LEOBOG Hi98C Pro", b._fast_add_protect)
 
     def test_noop_without_protect_marks(self):
@@ -596,7 +626,7 @@ class PreserveFastAdds(unittest.TestCase):
         b = self._mk()
         b._fast_add_protect = {}
         devs = {"耳机 QCY Era 7": 100}
-        self.assertIs(b._preserve_fast_adds(devs), devs)       # 同一对象，未拷贝
+        self.assertIs(b._preserve_fast_adds(devs), devs)  # 同一对象，未拷贝
 
 
 class CachedDevicesFirstCall(unittest.TestCase):
@@ -607,7 +637,8 @@ class CachedDevicesFirstCall(unittest.TestCase):
     `agent.devices_snapshot()` 是被 pystray 菜单工厂**同步**调的，等于启动后
     第一次点开托盘菜单卡 4~5 秒；卡完仍无结果就返回空表（蓝牙条目整批消失）。
     """
-    WAIT = 0.15          # 把 _WAIT_FIRST 压到 0.15s，测试不用真等 2s
+
+    WAIT = 0.15  # 把 _WAIT_FIRST 压到 0.15s，测试不用真等 2s
 
     def _fresh(self) -> B.BluetoothBattery:
         b = B.BluetoothBattery()
@@ -618,28 +649,30 @@ class CachedDevicesFirstCall(unittest.TestCase):
         """冷缓存 + 没人预热 → 只触发后台预热，绝不在调用方线程跑查询。"""
         b = self._fresh()
         calls = []
-        with mock.patch.object(b, "prewarm", lambda: calls.append("prewarm")), \
-             mock.patch.object(b, "_refresh",
-                                    lambda: self.fail("首次调用不该同步跑 _refresh")), \
-             mock.patch.object(B, "_WAIT_FIRST", self.WAIT):
+        with (
+            mock.patch.object(b, "prewarm", lambda: calls.append("prewarm")),
+            mock.patch.object(b, "_refresh", lambda: self.fail("首次调用不该同步跑 _refresh")),
+            mock.patch.object(B, "_WAIT_FIRST", self.WAIT),
+        ):
             self.assertEqual({}, b.cached_devices())
         self.assertEqual(["prewarm"], calls)
 
     def test_waits_for_inflight_prewarm_but_bounded(self):
         """预热线程已在跑 → 等它，但**必须**在 _WAIT_FIRST 内返回。"""
         import time
+
         b = self._fresh()
         b._refreshing = True  # 假装有人在查（且一直查不出来）
         t0 = time.monotonic()
         with mock.patch.object(B, "_WAIT_FIRST", self.WAIT):
             self.assertEqual({}, b.cached_devices())
         elapsed = time.monotonic() - t0
-        self.assertLess(elapsed, self.WAIT + 0.5,
-                        f"等了 {elapsed:.2f}s，超过上限 —— 菜单又会被冻住")
+        self.assertLess(elapsed, self.WAIT + 0.5, f"等了 {elapsed:.2f}s，超过上限 —— 菜单又会被冻住")
 
     def test_falls_back_to_lastknown_instead_of_empty(self):
         """超时仍无结果 → 用 last-known 顶上，别让蓝牙条目整批消失。"""
         from batbar import lastknown
+
         lastknown.put("耳机 QCY Era 7", 82)
         lastknown.put("键盘 LEOBOG Hi98C Pro", 55)
         b = self._fresh()
@@ -651,6 +684,7 @@ class CachedDevicesFirstCall(unittest.TestCase):
     def test_no_fallback_when_real_data_exists(self):
         """已经有真数据 → 直接吃缓存，不掺 last-known（旧值不能盖真值）。"""
         from batbar import lastknown
+
         lastknown.put("耳机 QCY Era 7", 82)
         b = self._fresh()
         b._devices = {"耳机 QCY Era 7": 10}

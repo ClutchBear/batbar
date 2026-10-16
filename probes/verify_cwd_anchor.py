@@ -9,6 +9,7 @@
 注意：子进程用 `python -c` 执行，**没有 `__file__`**，
 所以 src 路径由父进程算好后经环境变量 `BATBAR_SRC` 传入。
 """
+
 from __future__ import annotations
 
 import os
@@ -17,7 +18,7 @@ import sys
 
 SRC = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"))
 
-CHILD = r'''
+CHILD = r"""
 import os, sys
 os.chdir(r"C:\Windows\System32")
 print("BEFORE:", os.getcwd(), flush=True)
@@ -28,11 +29,14 @@ print("AFTER :", os.getcwd(), flush=True)
 print("RET   :", got, flush=True)
 print("BASE  :", sys.base_prefix, flush=True)
 print("MATCH :", os.getcwd() == sys.base_prefix, flush=True)
-'''
+"""
 
 p = subprocess.run(
     [sys.executable, "-c", CHILD],
-    capture_output=True, text=True, encoding="utf-8", errors="replace",
+    capture_output=True,
+    text=True,
+    encoding="utf-8",
+    errors="replace",
     cwd=r"C:\Windows\System32",
     env={**os.environ, "BATBAR_SRC": SRC},
 )

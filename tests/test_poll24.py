@@ -2,6 +2,7 @@
 
 样本帧全部来自 2026-10-12 16:56 监听窗口实抓（probes/snap-listen2.log）。
 """
+
 import os
 import time
 import unittest
@@ -24,11 +25,11 @@ OTHER_41 = bytes.fromhex("13 41 24 00 0e 00 00 00 29 00 00 00 35 00 00 00 2b 00 
 class QueryFrame(unittest.TestCase):
     def test_layout(self):
         f = poll24.query_frame()
-        self.assertEqual(len(f), 20)                    # = OutputReportByteLength
-        self.assertEqual(f[0], 0x13)                    # reportID / magic
-        self.assertEqual(f[1], 0x4A)                    # getBattery opcode
+        self.assertEqual(len(f), 20)  # = OutputReportByteLength
+        self.assertEqual(f[0], 0x13)  # reportID / magic
+        self.assertEqual(f[1], 0x4A)  # getBattery opcode
         self.assertEqual(f[2], 0x01)
-        self.assertEqual(f[-1], 0x5E)                   # sum8: 13+4a+01
+        self.assertEqual(f[-1], 0x5E)  # sum8: 13+4a+01
         self.assertEqual(sum(f[:-1]) & 0xFF, f[-1])
 
     def test_matches_constant(self):
@@ -42,7 +43,7 @@ class ParseQueryResponse(unittest.TestCase):
 
     def test_corrupted_rejected(self):
         bad = bytearray(RESP_93)
-        bad[5] = 0x60                                   # 改电量不改校验
+        bad[5] = 0x60  # 改电量不改校验
         self.assertIsNone(dongle.parse_frame(bytes(bad)))
 
     def test_other_opcodes_ignored(self):
@@ -56,8 +57,8 @@ class ParseQueryResponse(unittest.TestCase):
 
     def test_pct_range_guard(self):
         bad = bytearray(RESP_93)
-        bad[5] = 0xFF                                   # 越界百分比
-        bad[-1] = (sum(bad[:8]) & 0xFF)                 # 校验补对，只剩越界
+        bad[5] = 0xFF  # 越界百分比
+        bad[-1] = sum(bad[:8]) & 0xFF  # 校验补对，只剩越界
         self.assertIsNone(dongle.parse_frame(bytes(bad)))
 
 
@@ -109,11 +110,13 @@ class Scan(unittest.TestCase):
 
     def _run_scan(self, respond: bool):
         """respond=True 模拟设备在窗口内回帧（frame_ts 前进）。"""
+
         def fake_poll(name):
             if respond:
                 dongle._stats.setdefault(name, dongle._new_stat())
                 dongle._stats[name]["frame_ts"] = time.time()
             return True
+
         with mock.patch.object(poll24, "poll_once", fake_poll):
             return poll24.scan([self.NAME])
 
@@ -129,8 +132,11 @@ class Scan(unittest.TestCase):
         # 「K87 完全关机还显示 2.4G」场景：旧帧不能当活证据）
         now = time.time()
         dongle._stats[self.NAME] = {
-            "battery": 90, "battery_ts": now - 999,
-            "frame_ts": now - 999, "sleeping": False, "sleep_ts": None,
+            "battery": 90,
+            "battery_ts": now - 999,
+            "frame_ts": now - 999,
+            "sleeping": False,
+            "sleep_ts": None,
         }
         result = self._run_scan(respond=False)
         self.assertEqual(result, {self.NAME: False})
@@ -155,6 +161,7 @@ class WindowOverlap(unittest.TestCase):
 
     这两条钉住两件事：等待次数与台数无关；重叠后判据仍然是"每台各自"的。
     """
+
     NAMES = ("键盘 迈从 K87", "鼠标 迈从 A5", "键盘 LEOBOG Hi98C Pro")
 
     def setUp(self):
@@ -170,15 +177,16 @@ class WindowOverlap(unittest.TestCase):
 
     def test_one_wait_window_regardless_of_device_count(self):
         waits = []
-        with mock.patch.object(poll24, "poll_once", lambda n: True), \
-             mock.patch.object(poll24.time, "sleep", lambda s: waits.append(s)):
+        with (
+            mock.patch.object(poll24, "poll_once", lambda n: True),
+            mock.patch.object(poll24.time, "sleep", lambda s: waits.append(s)),
+        ):
             poll24.scan(self.NAMES)
-        self.assertEqual([poll24.SETTLE], waits,
-                         f"等待窗口退化成每台一个了：{waits}")
+        self.assertEqual([poll24.SETTLE], waits, f"等待窗口退化成每台一个了：{waits}")
 
     def test_per_device_verdict_still_independent(self):
         """只有**自己**回了帧的那台判在线，别台的帧不能把它带成在线。"""
-        responding = {self.NAMES[1]}          # 只让第二台应答
+        responding = {self.NAMES[1]}  # 只让第二台应答
 
         def fake_poll(name):
             if name in responding:
@@ -189,9 +197,7 @@ class WindowOverlap(unittest.TestCase):
         with mock.patch.object(poll24, "poll_once", fake_poll):
             out = poll24.scan(self.NAMES)
 
-        self.assertEqual({self.NAMES[0]: False,
-                          self.NAMES[1]: True,
-                          self.NAMES[2]: False}, out)
+        self.assertEqual({self.NAMES[0]: False, self.NAMES[1]: True, self.NAMES[2]: False}, out)
 
 
 class SkipWhenGate(unittest.TestCase):
@@ -214,8 +220,10 @@ class SkipWhenGate(unittest.TestCase):
 
     def test_predicate_exception_treated_as_no_skip(self):
         """★ 判据自己炸了 → 按"不跳过"处理。宁可多扫一轮，也别永远不扫。"""
+
         def boom():
             raise RuntimeError("gate down")
+
         poll24.set_skip_when(boom)
         self.assertFalse(poll24._should_skip())
 

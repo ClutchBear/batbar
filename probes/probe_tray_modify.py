@@ -9,6 +9,7 @@
 逐个打印 Shell_NotifyIcon 的返回值 + GetLastError。托盘里会短暂出现一个
 名为 "batbar-probe" 的小图标（几秒后自动消失）。
 """
+
 from __future__ import annotations
 
 import ctypes
@@ -30,17 +31,20 @@ _orig_message = W.Icon._message
 
 def _spy_message(self, code, flags, **kwargs):
     """复刻 pystray 的发送逻辑，但把 Shell_NotifyIcon 的返回值捞出来。"""
-    r = W.win32.Shell_NotifyIcon(code, W.win32.NOTIFYICONDATAW(
-        cbSize=ctypes.sizeof(W.win32.NOTIFYICONDATAW),
-        hWnd=self._hwnd,
-        hID=id(self),
-        uFlags=flags,
-        **kwargs))
+    r = W.win32.Shell_NotifyIcon(
+        code,
+        W.win32.NOTIFYICONDATAW(
+            cbSize=ctypes.sizeof(W.win32.NOTIFYICONDATAW),
+            hWnd=self._hwnd,
+            hID=id(self),
+            uFlags=flags,
+            **kwargs,
+        ),
+    )
     err = kernel32.GetLastError()
     dt = time.monotonic() - _t0
     results.append((dt, code, int(r), err))
-    print(f"  +{dt:5.2f}s  code=0x{code:04X} flags=0x{flags:04X} "
-          f"-> 返回 {int(r)}  GetLastError={err}")
+    print(f"  +{dt:5.2f}s  code=0x{code:04X} flags=0x{flags:04X} -> 返回 {int(r)}  GetLastError={err}")
     return r
 
 
@@ -59,8 +63,12 @@ def _img(n: int | None) -> Image.Image:
 
 
 print("=== add（启动占位：--) ===")
-icon = pystray.Icon("batbar-probe", _img(None), "probe: 启动中…",
-                    pystray.Menu(pystray.MenuItem("退出", lambda *_: icon.stop())))
+icon = pystray.Icon(
+    "batbar-probe",
+    _img(None),
+    "probe: 启动中…",
+    pystray.Menu(pystray.MenuItem("退出", lambda *_: icon.stop())),
+)
 icon.run_detached()
 time.sleep(0.12)
 

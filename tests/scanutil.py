@@ -14,6 +14,7 @@
 同时保留 `has_text()` 给那些「动作型」检查用（比如 `socket.socket(` 这种
 调用写法），它们的语义不在 import 语句里。
 """
+
 from __future__ import annotations
 
 import ast

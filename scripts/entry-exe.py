@@ -9,6 +9,7 @@
     源码运行    python -m batbar.agent
     打包后      batbar.exe
 """
+
 from batbar.agent import main
 
 if __name__ == "__main__":

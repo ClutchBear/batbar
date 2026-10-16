@@ -28,6 +28,7 @@ http.client / ssl`。PyInstaller 是**静态扫描** import 语句的 —— 不
 等模块仍在包内，而它们依赖的 `ssl`/`http.client` 被砍了 —— 哪天走到那条路径
 就是 ModuleNotFoundError。从源码断链才干净。）
 """
+
 from __future__ import annotations
 
 import logging
@@ -37,12 +38,12 @@ from pathlib import Path
 
 log = logging.getLogger("batbar.applog")
 
-APP_DIR = "batbar"               # 回退目录名（源码运行时的 %LOCALAPPDATA%\batbar）
+APP_DIR = "batbar"  # 回退目录名（源码运行时的 %LOCALAPPDATA%\batbar）
 ENV_DEBUG = "BATBAR_DEBUG"
 #: 单独重定向日志目录（测试 / 便携部署）。完整落盘策略见 `paths.py`。
 ENV_DIR = "BATBAR_LOG_DIR"
 
-DEFAULT_MAX_BYTES = 1 << 20    # 1 MB
+DEFAULT_MAX_BYTES = 1 << 20  # 1 MB
 DEFAULT_BACKUPS = 2
 _FMT = "%(asctime)s %(name)s %(levelname)s %(message)s"
 
@@ -50,7 +51,7 @@ _FMT = "%(asctime)s %(name)s %(levelname)s %(message)s"
 # 开 -v 时几秒就能把 1 MB 日志滚没，真正有用的 batbar.* 记录反而被冲掉。
 NOISY_LOGGERS = ("PIL", "PIL.Image", "PIL.PngImagePlugin", "urllib3", "asyncio")
 
-_MARK = "_batbar_app_handler"     # 给本模块装的 handler 打标记，便于幂等替换
+_MARK = "_batbar_app_handler"  # 给本模块装的 handler 打标记，便于幂等替换
 
 
 class RotatingFileHandler(logging.FileHandler):
@@ -61,8 +62,15 @@ class RotatingFileHandler(logging.FileHandler):
     `logging.handlers`。
     """
 
-    def __init__(self, filename, mode: str = "a", encoding: str | None = None,
-                 delay: bool = False, max_bytes: int = 0, backups: int = 0) -> None:
+    def __init__(
+        self,
+        filename,
+        mode: str = "a",
+        encoding: str | None = None,
+        delay: bool = False,
+        max_bytes: int = 0,
+        backups: int = 0,
+    ) -> None:
         super().__init__(filename, mode=mode, encoding=encoding, delay=delay)
         self.max_bytes = max_bytes
         self.backup_count = backups
@@ -72,7 +80,7 @@ class RotatingFileHandler(logging.FileHandler):
         if self.stream is not None:
             try:
                 self.stream.close()
-            except Exception:                       # noqa: BLE001
+            except Exception:  # noqa: BLE001
                 pass
             self.stream = None
 
@@ -111,7 +119,7 @@ class RotatingFileHandler(logging.FileHandler):
                 self.stream.seek(0, 2)
                 if self.stream.tell() + len(msg) >= self.max_bytes:
                     self._rotate()
-        except Exception:                           # noqa: BLE001
+        except Exception:  # noqa: BLE001
             pass
         super().emit(record)
 
@@ -134,11 +142,15 @@ def debug_enabled(verbose: bool = False) -> bool:
     return os.environ.get(ENV_DEBUG, "").strip() not in ("", "0", "false", "no")
 
 
-def setup(name: str = "agent", verbose: bool = False, *,
-          log_dir: str | os.PathLike[str] | None = None,
-          max_bytes: int = DEFAULT_MAX_BYTES,
-          backups: int = DEFAULT_BACKUPS,
-          to_console: bool = True) -> Path | None:
+def setup(
+    name: str = "agent",
+    verbose: bool = False,
+    *,
+    log_dir: str | os.PathLike[str] | None = None,
+    max_bytes: int = DEFAULT_MAX_BYTES,
+    backups: int = DEFAULT_BACKUPS,
+    to_console: bool = True,
+) -> Path | None:
     """装好 root logger 的文件 + 控制台输出。
 
     Returns:
@@ -158,7 +170,7 @@ def setup(name: str = "agent", verbose: bool = False, *,
             root.removeHandler(h)
             try:
                 h.close()
-            except Exception:              # noqa: BLE001
+            except Exception:  # noqa: BLE001
                 pass
 
     path: Path | None = None
@@ -169,22 +181,23 @@ def setup(name: str = "agent", verbose: bool = False, *,
     try:
         d.mkdir(parents=True, exist_ok=True)
         path = d / f"{name}.log"
-        fh = RotatingFileHandler(
-            path, max_bytes=max_bytes, backups=backups, encoding="utf-8")
+        fh = RotatingFileHandler(path, max_bytes=max_bytes, backups=backups, encoding="utf-8")
         fh.setFormatter(fmt)
         fh.setLevel(level)
         setattr(fh, _MARK, True)
         root.addHandler(fh)
-    except Exception as exc:               # noqa: BLE001 - 日志失败不该致命
+    except Exception as exc:  # noqa: BLE001 - 日志失败不该致命
         log.warning("日志文件不可用（%s）：%s —— 仅输出到控制台", d, exc)
         path = None
 
     # 静默启动（pythonw / agent-hidden.vbs）时 stdout 与 stderr 都是 None，
     # 此时装 StreamHandler 会在 emit 时炸 —— 直接不装。
     stream = sys.stdout if sys.stdout is not None else sys.stderr
-    if to_console and stream is not None and not any(
-            getattr(h, _MARK, False) and isinstance(h, logging.StreamHandler)
-            for h in root.handlers):
+    if (
+        to_console
+        and stream is not None
+        and not any(getattr(h, _MARK, False) and isinstance(h, logging.StreamHandler) for h in root.handlers)
+    ):
         sh = logging.StreamHandler(stream)
         sh.setFormatter(fmt)
         sh.setLevel(level)

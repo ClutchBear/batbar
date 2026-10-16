@@ -9,6 +9,7 @@
 
 用法：先在设备**开着**时跑一次（基线），关掉设备后再跑一次（对照）。
 """
+
 import json
 import subprocess
 import time
@@ -70,9 +71,14 @@ ConvertTo-Json -InputObject $out -Compress
 """
 
 t0 = time.perf_counter()
-r = subprocess.run(["powershell", "-NoProfile", "-Command", _PS],
-                   capture_output=True, text=True, timeout=90,
-                   encoding="utf-8", errors="replace")
+r = subprocess.run(
+    ["powershell", "-NoProfile", "-Command", _PS],
+    capture_output=True,
+    text=True,
+    timeout=90,
+    encoding="utf-8",
+    errors="replace",
+)
 t1 = time.perf_counter()
 
 print("耗时 %.2fs" % (t1 - t0))
@@ -87,10 +93,17 @@ except json.JSONDecodeError:
 if isinstance(data, dict):
     data = [data]
 
-print("\n%-14s %-26s %-5s %-5s %-12s %-12s" %
-      ("MAC", "NAME", "pnp", "hid", "classic", "le"))
+print("\n%-14s %-26s %-5s %-5s %-12s %-12s" % ("MAC", "NAME", "pnp", "hid", "classic", "le"))
 print("-" * 80)
 for d in data:
-    print("%-14s %-26s %-5s %-5s %-12s %-12s" % (
-        d.get("mac", ""), (d.get("name", "") or "")[:24],
-        d.get("pnp"), d.get("hid"), d.get("classic"), d.get("le")))
+    print(
+        "%-14s %-26s %-5s %-5s %-12s %-12s"
+        % (
+            d.get("mac", ""),
+            (d.get("name", "") or "")[:24],
+            d.get("pnp"),
+            d.get("hid"),
+            d.get("classic"),
+            d.get("le"),
+        )
+    )

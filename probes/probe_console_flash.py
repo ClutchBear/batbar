@@ -28,9 +28,13 @@ def shell_process_running():
     否则每采样一次就给自己弹一个窗，把观测污染掉。
     """
     try:
-        out = subprocess.run(["tasklist", "/FO", "CSV", "/NH"],
-                             capture_output=True, text=True, errors="replace",
-                             creationflags=CREATE_NO_WINDOW)
+        out = subprocess.run(
+            ["tasklist", "/FO", "CSV", "/NH"],
+            capture_output=True,
+            text=True,
+            errors="replace",
+            creationflags=CREATE_NO_WINDOW,
+        )
     except OSError:
         return None
     text = (out.stdout or "").lower()
@@ -66,15 +70,14 @@ def snapshot():
 def probe(mode, extra_kwargs):
     shell = shutil.which("pwsh") or shutil.which("powershell")
     before = snapshot()
-    kwargs = dict(stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                  text=True, encoding="utf-8", errors="replace")
+    kwargs = dict(
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace"
+    )
     kwargs.update(extra_kwargs)
-    proc = subprocess.Popen(
-        [shell, "-NoProfile", "-Command", "Start-Sleep -Milliseconds 2600"],
-        **kwargs)
+    proc = subprocess.Popen([shell, "-NoProfile", "-Command", "Start-Sleep -Milliseconds 2600"], **kwargs)
     seen = {}
     shell_seen = False
-    for _ in range(5):                # 采样 5 轮，覆盖 MSIX 激活的慢路径
+    for _ in range(5):  # 采样 5 轮，覆盖 MSIX 激活的慢路径
         time.sleep(0.7)
         for h, v in snapshot().items():
             if h not in before:
@@ -117,8 +120,7 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except Exception as exc:                                  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         with open(OUT, "w", encoding="utf-8") as fh:
-            json.dump({"error": "%s: %s" % (type(exc).__name__, exc)}, fh,
-                      ensure_ascii=False, indent=2)
+            json.dump({"error": "%s: %s" % (type(exc).__name__, exc)}, fh, ensure_ascii=False, indent=2)
         raise SystemExit(1)

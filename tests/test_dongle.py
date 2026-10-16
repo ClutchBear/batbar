@@ -1,4 +1,5 @@
 """dongle.py 单测：帧解析用**本机真实抓到的字节**，离线判定覆盖三重保险。"""
+
 from __future__ import annotations
 
 import os
@@ -27,37 +28,39 @@ class ParseFrame(unittest.TestCase):
     def test_backlight_frames(self):
         # 用户目击：02:47:59 灯灭的瞬间来的就是 02 00
         self.assertEqual(
-            dongle.parse_frame(hexb("13 0a 01 00 04 02 00 00 00 00 00 00 00 00 "
-                                    "00 00 00 00 00 24")), ("backlight", 0))
+            dongle.parse_frame(hexb("13 0a 01 00 04 02 00 00 00 00 00 00 00 00 00 00 00 00 00 24")),
+            ("backlight", 0),
+        )
         self.assertEqual(
-            dongle.parse_frame(hexb("13 0a 01 00 04 02 01 00 00 00 00 00 00 00 "
-                                    "00 00 00 00 00 25")), ("backlight", 1))
+            dongle.parse_frame(hexb("13 0a 01 00 04 02 01 00 00 00 00 00 00 00 00 00 00 00 00 25")),
+            ("backlight", 1),
+        )
 
     def test_handshake_frame(self):
         self.assertEqual(
-            dongle.parse_frame(hexb("13 0a 01 00 04 07 00 00 00 00 00 00 00 00 "
-                                    "00 00 00 00 00 29")), ("handshake", 0))
+            dongle.parse_frame(hexb("13 0a 01 00 04 07 00 00 00 00 00 00 00 00 00 00 00 00 00 29")),
+            ("handshake", 0),
+        )
 
     def test_bad_checksum_rejected(self):
         # 把 92% 那帧的校验位改错，必须拒收（这是过滤通道噪声的关键）
-        bad = bytearray(hexb("13 0a 01 00 04 05 5c 01 00 00 00 00 00 00 00 00 "
-                             "00 00 00 84"))
+        bad = bytearray(hexb("13 0a 01 00 04 05 5c 01 00 00 00 00 00 00 00 00 00 00 00 84"))
         bad[-1] ^= 0xFF
         self.assertIsNone(dongle.parse_frame(bytes(bad)))
 
     def test_wrong_magic_rejected(self):
         # 标准 HID 报文（键盘 boot 协议）混进来时必须被忽略
         self.assertIsNone(dongle.parse_frame(bytes(20)))
-        self.assertIsNone(dongle.parse_frame(hexb("01 00 00 00 00 00 00 00 00 00 "
-                                                  "00 00 00 00 00 00 00 00 00 00")))
+        self.assertIsNone(
+            dongle.parse_frame(hexb("01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"))
+        )
 
     def test_short_frame_rejected(self):
         self.assertIsNone(dongle.parse_frame(hexb("13 0a 01 00 04 05 5c")))
 
     def test_unknown_type_passes_through(self):
         # chk = 13+0a+01+00+04+09+11+00 = 3c
-        good = dongle.parse_frame(hexb("13 0a 01 00 04 09 11 00 00 00 00 00 00 "
-                                       "00 00 00 00 00 00 3c"))
+        good = dongle.parse_frame(hexb("13 0a 01 00 04 09 11 00 00 00 00 00 00 00 00 00 00 00 00 3c"))
         self.assertEqual(good, ("other", 0x11))
 
     def test_battery_out_of_range_rejected(self):
@@ -76,15 +79,16 @@ class OfflineLogic(unittest.TestCase):
     def setUp(self):
         dongle._stats.clear()
         from batbar import poll24
+
         poll24.reset()
 
     def tearDown(self):
         dongle._stats.clear()
         from batbar import poll24
+
         poll24.reset()
 
-    def _seed(self, name: str, frame_sec: float | None,
-              sleeping: bool = False):
+    def _seed(self, name: str, frame_sec: float | None, sleeping: bool = False):
         now = time.time()
         dongle._stats[name] = {
             "battery": 93 if frame_sec is not None else None,
@@ -97,6 +101,7 @@ class OfflineLogic(unittest.TestCase):
     def _scan_result(self, name: str, online: bool, *, ago: float = 3.0):
         """伪造「最近一轮扫描」的结论（扫描时刻 = now - ago）。"""
         from batbar import poll24
+
         with poll24._lock:
             poll24._online[name] = online
             poll24._scanned_at[name] = time.time() - ago
@@ -160,15 +165,16 @@ class SleepState(unittest.TestCase):
     def setUp(self):
         dongle._stats.clear()
         from batbar import poll24
+
         poll24.reset()
 
     def tearDown(self):
         dongle._stats.clear()
         from batbar import poll24
+
         poll24.reset()
 
-    def _seed(self, name: str, frame_sec: float | None,
-              sleeping: bool = False):
+    def _seed(self, name: str, frame_sec: float | None, sleeping: bool = False):
         now = time.time()
         dongle._stats[name] = {
             "battery": 93 if frame_sec is not None else None,
@@ -180,6 +186,7 @@ class SleepState(unittest.TestCase):
 
     def _scan_online(self, name: str):
         from batbar import poll24
+
         with poll24._lock:
             poll24._online[name] = True
             poll24._scanned_at[name] = time.time() - 30.0
@@ -221,6 +228,7 @@ class SleepState(unittest.TestCase):
 class Targets(unittest.TestCase):
     def test_map_is_shared_source(self):
         from batbar import receiver24
+
         self.assertIs(receiver24.KNOWN_RECEIVERS, dongle.TARGETS)
         self.assertEqual(dongle.TARGETS[(0x3554, 0xFA09)], "键盘 LEOBOG Hi98C Pro")
 
@@ -258,10 +266,10 @@ class WatchScheduling(unittest.TestCase):
 
         class _FakeThread:
             def is_alive(self):
-                return True                  # 「已有人在听」
+                return True  # 「已有人在听」
 
             def start(self):
-                pass                        # target 已在构造时同步跑过
+                pass  # target 已在构造时同步跑过
 
         class _Stop:
             def __init__(self, limit):
@@ -279,29 +287,26 @@ class WatchScheduling(unittest.TestCase):
                 pass
 
         def fake_thread(target=None, args=(), name=None, daemon=None):
-            target(*args)                    # 同步执行，免线程竞态
+            target(*args)  # 同步执行，免线程竞态
             return _FakeThread()
 
-        saved = (dongle._open_targets, dongle._watch_one, dongle._stop,
-                 threading.Thread, ctypes.windll)
+        saved = (dongle._open_targets, dongle._watch_one, dongle._stop, threading.Thread, ctypes.windll)
         dongle._open_targets = lambda: open_result
         dongle._watch_one = lambda h, n: started.append((h, n))
         dongle._stop = _Stop(rounds)
         threading.Thread = fake_thread
         ctypes.windll = types.SimpleNamespace(
-            kernel32=types.SimpleNamespace(
-                CloseHandle=lambda h: closed.append(h)))
+            kernel32=types.SimpleNamespace(CloseHandle=lambda h: closed.append(h))
+        )
         try:
             dongle._watch()
         finally:
-            (dongle._open_targets, dongle._watch_one, dongle._stop,
-             threading.Thread, ctypes.windll) = saved
+            (dongle._open_targets, dongle._watch_one, dongle._stop, threading.Thread, ctypes.windll) = saved
         return started, closed
 
     def test_each_target_gets_one_thread(self):
         started, _ = self._run([(0xAAA1, "LEOBOG 键盘"), (0xAAA2, "迈从键盘")])
-        self.assertEqual(sorted(n for _h, n in started),
-                         ["LEOBOG 键盘", "迈从键盘"])
+        self.assertEqual(sorted(n for _h, n in started), ["LEOBOG 键盘", "迈从键盘"])
 
     def test_existing_target_handle_closed_not_reopened(self):
         # 枚举结果恒定跑 3 轮：只准起一次线程，后两轮必须把多余句柄关掉

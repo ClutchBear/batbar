@@ -11,6 +11,7 @@
 所以 `_menu_items()` 在 `not self._ready` 时必须返回静态清单，一个硬件
 读取都不许发生；`_ready` 置位后再由 `_menu_ready()` 异步换真实清单。
 """
+
 from __future__ import annotations
 
 import unittest
@@ -59,8 +60,7 @@ class _FakeIcon:
         return None
 
 
-def _build(ready: bool, snap=None, snapshot_raises: bool = False,
-           shown: bool = True):
+def _build(ready: bool, snap=None, snapshot_raises: bool = False, shown: bool = True):
     """造一个最小 Agent 并跑 `_build_tray()`，返回 (agent, 捕获物)。
 
     `shown` = 托盘是否已注册（`_tray_shown`）。首次菜单构建发生在 NIM_ADD
@@ -85,8 +85,10 @@ def _build(ready: bool, snap=None, snapshot_raises: bool = False,
     a._is_charging = lambda _n: False
     a._refresh_from_tracked = lambda: None
     if snapshot_raises:
+
         def boom():
             raise AssertionError("启动阶段菜单读了硬件（会把图标一起拖住）")
+
         a.devices_snapshot = boom
     else:
         a.devices_snapshot = lambda: dict(snap or {})
@@ -98,9 +100,10 @@ def _build(ready: bool, snap=None, snapshot_raises: bool = False,
         cap["menu"] = menu
         return cap["icon"]
 
-    with mock.patch.object(pystray, "Icon", make_icon), \
-            mock.patch.object(A.threading, "Thread",
-                              lambda *args, **kwargs: mock.Mock()):
+    with (
+        mock.patch.object(pystray, "Icon", make_icon),
+        mock.patch.object(A.threading, "Thread", lambda *args, **kwargs: mock.Mock()),
+    ):
         A.Agent._build_tray(a)
     return a, cap
 
@@ -175,8 +178,8 @@ class BootMenuShown(unittest.TestCase):
 
     def test_menu_is_static_before_tray_shown(self):
         a, cap = _build(ready=True, shown=False, snapshot_raises=True)
-        texts = _popup_texts(cap)                # 弹出也不许去读硬件
-        self.assertIn("启动中", texts)          # 仍是静态清单
+        texts = _popup_texts(cap)  # 弹出也不许去读硬件
+        self.assertIn("启动中", texts)  # 仍是静态清单
         self.assertNotIn("立即刷新  ", texts)
 
     def test_menu_reads_snapshot_after_shown(self):
@@ -204,6 +207,7 @@ def _fake_popup_icon(update_raises: bool = False):
     —— pystray `_base.Icon` 就是这么写的（`self._menu = value;
     self.update_menu()`），钩子的「赋值即重建」正是靠它。
     """
+
     class FakeIcon:
         def __init__(self):
             self.updates = 0
@@ -257,9 +261,11 @@ def _simulate_pystray_build(menu) -> None:
 
 def _one_item_factory(calls: list):
     """一个「每次调用都记账」的菜单工厂（供钩子测试用）。"""
+
     def factory():
         calls.append(1)
         return [pystray.MenuItem("设备 A", None)]
+
     return factory
 
 
@@ -289,7 +295,7 @@ class MenuRefreshOnPopup(unittest.TestCase):
     def test_hook_ignores_other_messages(self):
         icon = self._icon()
         A._install_menu_refresh(icon, _one_item_factory([]))
-        icon.dispatch(0x0201)                               # WM_LBUTTONDOWN
+        icon.dispatch(0x0201)  # WM_LBUTTONDOWN
         self.assertEqual(icon.updates, 0)
 
     def test_hook_is_idempotent(self):
@@ -297,8 +303,7 @@ class MenuRefreshOnPopup(unittest.TestCase):
         A._install_menu_refresh(icon, _one_item_factory([]))
         once = icon._message_handlers[self.WM_NOTIFY]
         A._install_menu_refresh(icon, _one_item_factory([]))
-        self.assertIs(icon._message_handlers[self.WM_NOTIFY], once,
-                      "重复安装不许叠加包装")
+        self.assertIs(icon._message_handlers[self.WM_NOTIFY], once, "重复安装不许叠加包装")
 
     def test_hook_survives_update_failure(self):
         icon = self._icon(update_raises=True)
@@ -307,10 +312,12 @@ class MenuRefreshOnPopup(unittest.TestCase):
 
     def test_hook_without_handlers_table_is_noop(self):
         """pystray 换了内部结构（没有分发表）→ 只告警，不许让托盘起不来。"""
+
         class Bare:
             def update_menu(self):
                 pass
-        A._install_menu_refresh(Bare(), _one_item_factory([]))          # 不抛
+
+        A._install_menu_refresh(Bare(), _one_item_factory([]))  # 不抛
 
 
 class MenuBuiltOncePerPopup(unittest.TestCase):
@@ -350,11 +357,10 @@ class MenuBuiltOncePerPopup(unittest.TestCase):
         calls: list = []
         m = pystray.Menu(_one_item_factory(calls))
         self.assertEqual(calls, [], "构造本身不求值")
-        bool(m)                                  # _create_menu 第 ① 步
+        bool(m)  # _create_menu 第 ① 步
         self.assertEqual(len(calls), 1)
-        list(m)                                  # _create_menu 第 ② 步
-        self.assertEqual(len(calls), 2,
-                         "pystray 改了？一次构建访问 items 的次数变了")
+        list(m)  # _create_menu 第 ② 步
+        self.assertEqual(len(calls), 2, "pystray 改了？一次构建访问 items 的次数变了")
 
     def test_concrete_menu_does_not_reinvoke_factory(self):
         """交给 pystray 具体 tuple 后，它内部访问多少回都不再重跑工厂。"""
@@ -399,11 +405,12 @@ class MenuBuiltOncePerPopup(unittest.TestCase):
         """
         a, cap = _build(ready=False, snapshot_raises=True)
         self.assertIsInstance(cap["menu"], pystray.Menu)
-        inner = cap["menu"]._items          # 私有字段：只有它能区分「具体 tuple」和「一个 callable」
+        inner = cap["menu"]._items  # 私有字段：只有它能区分「具体 tuple」和「一个 callable」
         self.assertGreater(len(inner), 1)
         self.assertTrue(
             all(isinstance(i, pystray.MenuItem) for i in inner),
-            "初始菜单里必须都是具体 MenuItem，不能只剩一个 callable")
+            "初始菜单里必须都是具体 MenuItem，不能只剩一个 callable",
+        )
 
 
 class StandaloneLoopDelegates(unittest.TestCase):
@@ -442,18 +449,24 @@ class StandaloneLoopDelegates(unittest.TestCase):
                 return None
 
         from batbar import state as S
-        with mock.patch.object(S, "BatteryPoller", FakePoller), \
-                mock.patch.object(A.time, "sleep", lambda _s: None):
+
+        with (
+            mock.patch.object(S, "BatteryPoller", FakePoller),
+            mock.patch.object(A.time, "sleep", lambda _s: None),
+        ):
             A.Agent._standalone_loop(a)
         self.assertEqual(calls, [(None, False)])
 
     def test_tip_for_has_single_call_site(self):
         """`_tip_for` 只许被 `_apply_icon` 调用（防止别处再拼出设备名）。"""
         from pathlib import Path
-        src = (Path(__file__).resolve().parents[1]
-               / "src" / "batbar" / "agent.py").read_text(encoding="utf-8")
-        self.assertEqual(src.count("self._tip_for("), 2,
-                         "新增了 _tip_for 调用点？托盘 tooltip 必须只有一个来源")
+
+        src = (Path(__file__).resolve().parents[1] / "src" / "batbar" / "agent.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertEqual(
+            src.count("self._tip_for("), 2, "新增了 _tip_for 调用点？托盘 tooltip 必须只有一个来源"
+        )
 
 
 class WarmLoopResetsIcon(unittest.TestCase):
@@ -497,7 +510,7 @@ class WarmLoopResetsIcon(unittest.TestCase):
         a._icon = object()
         a._last_icon = I.IconSpec(None, False, 32, no_devices=True)
         a._last_warn = None
-        a._ticks = 1                      # 避开 % 4 == 0 的定期重绘
+        a._ticks = 1  # 避开 % 4 == 0 的定期重绘
         a._ready = True
         a._icon_target = lambda: None
         calls: list = []
@@ -531,12 +544,12 @@ class BootTooltipEndsOnFirstRound(unittest.TestCase):
         a = object.__new__(A.Agent)
         a._running = True
         a._icon = object()
-        a._last_icon = I.IconSpec(None, False, 32, no_devices=True)   # 启动占位图
+        a._last_icon = I.IconSpec(None, False, 32, no_devices=True)  # 启动占位图
         a._last_tooltip = "启动中…"
         a._last_warn = None
         a._ticks = 0
         a._ready = ready
-        a._icon_target = lambda: None          # 空快照 → 选不出目标
+        a._icon_target = lambda: None  # 空快照 → 选不出目标
         a._menu_ready = lambda: None
         a._probe_mouse = lambda: None
         a._feed_snapshot = lambda: None
@@ -668,6 +681,7 @@ class IconReaddOnChange(unittest.TestCase):
     @staticmethod
     def _png(n: int) -> bytes:
         from batbar import icons as I
+
         return I.render_icon(I.IconSpec(n, False, 32, light_taskbar=False))
 
     def test_change_triggers_readd(self):
@@ -690,7 +704,7 @@ class IconReaddOnChange(unittest.TestCase):
         icon.toggles.clear()
         self.assertTrue(A.Agent._set_icon(a, png, "鼠标: 90%"))
         self.assertEqual(icon.toggles, [])
-        self.assertEqual(icon.icon_sets, 2)      # 仍重发了一次图标
+        self.assertEqual(icon.icon_sets, 2)  # 仍重发了一次图标
 
     def test_tooltip_only_change_still_readds(self):
         """只有文案变（`--` → 「未发现设备」）也要重新注册，否则文案不刷新。"""
@@ -746,6 +760,7 @@ class IconUpdateSerialized(unittest.TestCase):
     @staticmethod
     def _png() -> bytes:
         from batbar import icons as I
+
         return I.render_icon(I.IconSpec(90, False, 32, light_taskbar=False))
 
     def test_set_icon_runs_inside_lock(self):
@@ -767,8 +782,7 @@ class IconUpdateSerialized(unittest.TestCase):
 
         a._icon = Probe()
         self.assertTrue(A.Agent._set_icon(a, self._png(), "t"))
-        self.assertTrue(seen.get("locked"),
-                        "icon 赋值必须发生在 _icon_lock 保护区内")
+        self.assertTrue(seen.get("locked"), "icon 赋值必须发生在 _icon_lock 保护区内")
 
     def test_set_icon_without_tray_returns_false(self):
         a = object.__new__(A.Agent)
@@ -800,7 +814,7 @@ class IconUpdateSerialized(unittest.TestCase):
             try:
                 for _ in range(40):
                     A.Agent._set_icon(a, png, "t")
-            except Exception as exc:       # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001
                 errs.append(exc)
 
         threads = [th.Thread(target=worker) for _ in range(4)]
@@ -826,6 +840,7 @@ class CwdAnchor(unittest.TestCase):
     def test_anchors_to_base_prefix_by_default(self):
         """默认锚到 `sys.base_prefix`，且必须**真的**调 os.chdir。"""
         import sys
+
         with mock.patch.object(A.os, "chdir") as chdir:
             got = A.anchor_cwd()
         chdir.assert_called_once()
@@ -836,6 +851,7 @@ class CwdAnchor(unittest.TestCase):
     def test_explicit_target_wins(self):
         """测试可注入目标（本轮靠它在不真改 cwd 的前提下验证）。"""
         import tempfile
+
         with tempfile.TemporaryDirectory() as d:
             with mock.patch.object(A.os, "chdir") as chdir:
                 A.anchor_cwd(d)
@@ -851,12 +867,11 @@ class CwdAnchor(unittest.TestCase):
     def test_chdir_failure_never_raises(self):
         """os.chdir 自己炸了也只能咽下去 —— 锚定失败不是致命错误。"""
         with mock.patch.object(A.os, "chdir", side_effect=OSError("denied")):
-            A.anchor_cwd()          # 不抛即通过
+            A.anchor_cwd()  # 不抛即通过
 
     def test_returns_something_even_if_getcwd_breaks(self):
         """getcwd 也炸时仍要返回 str，调用方无需防空。"""
-        with mock.patch.object(A.os, "chdir"), \
-                mock.patch.object(A.os, "getcwd", side_effect=OSError("gone")):
+        with mock.patch.object(A.os, "chdir"), mock.patch.object(A.os, "getcwd", side_effect=OSError("gone")):
             got = A.anchor_cwd("C:/Windows")
         self.assertIsInstance(got, str)
 
@@ -866,15 +881,15 @@ class CwdAnchor(unittest.TestCase):
         用源码文本比对而不是跑 main()：main 会真的起托盘、真的占单实例锁。
         """
         from pathlib import Path
-        src = (Path(__file__).resolve().parents[1]
-               / "src" / "batbar" / "agent.py").read_text(encoding="utf-8")
-        self.assertEqual(src.count("anchor_cwd()"), 1,
-                         "main() 里应恰有一处 anchor_cwd() 调用")
+
+        src = (Path(__file__).resolve().parents[1] / "src" / "batbar" / "agent.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertEqual(src.count("anchor_cwd()"), 1, "main() 里应恰有一处 anchor_cwd() 调用")
         body = src.split("def main():", 1)[1]
         i_anchor = body.index("anchor_cwd()")
         i_parse = body.index("ap.parse_args()")
-        self.assertLess(i_anchor, i_parse,
-                        "anchor_cwd() 必须在 ap.parse_args() 之前")
+        self.assertLess(i_anchor, i_parse, "anchor_cwd() 必须在 ap.parse_args() 之前")
 
     # ---------- frozen（PyInstaller）分支 ----------
 
@@ -887,11 +902,14 @@ class CwdAnchor(unittest.TestCase):
         """
         import os
         import sys
+
         fake_exe = os.path.join("X:" + os.sep, "Apps", "batbar", "batbar.exe")
-        with mock.patch.object(sys, "frozen", True, create=True), \
-                mock.patch.object(sys, "executable", fake_exe), \
-                mock.patch.object(A.os.path, "isdir", return_value=True), \
-                mock.patch.object(A.os, "chdir") as chdir:
+        with (
+            mock.patch.object(sys, "frozen", True, create=True),
+            mock.patch.object(sys, "executable", fake_exe),
+            mock.patch.object(A.os.path, "isdir", return_value=True),
+            mock.patch.object(A.os, "chdir") as chdir,
+        ):
             A.anchor_cwd()
         chdir.assert_called_once()
         self.assertEqual(chdir.call_args[0][0], os.path.dirname(fake_exe))
@@ -900,14 +918,18 @@ class CwdAnchor(unittest.TestCase):
     def test_frozen_exe_dir_unusable_is_not_fatal(self):
         """frozen 下锚定失败同样只能咽下去 —— 打包后更不能起不来。"""
         import sys
-        with mock.patch.object(sys, "frozen", True, create=True), \
-                mock.patch.object(A.os, "chdir", side_effect=OSError("nope")):
-            A.anchor_cwd()          # 不抛即通过
+
+        with (
+            mock.patch.object(sys, "frozen", True, create=True),
+            mock.patch.object(A.os, "chdir", side_effect=OSError("nope")),
+        ):
+            A.anchor_cwd()  # 不抛即通过
 
     def test_explicit_target_beats_frozen_default(self):
         """显式注入永远优先，否则 frozen 环境里没法做测试注入。"""
         import sys
         import tempfile
+
         with mock.patch.object(sys, "frozen", True, create=True):
             with tempfile.TemporaryDirectory() as d:
                 with mock.patch.object(A.os, "chdir") as chdir:
@@ -929,27 +951,30 @@ class ConsoleAttach(unittest.TestCase):
     def test_false_when_attach_fails(self):
         """没有父控制台（双击运行）→ False，且绝不抛。"""
         import sys
+
         with mock.patch.object(sys, "stdout", None):
             self.assertFalse(A.attach_parent_console(attach=False))
 
     def test_success_path_never_raises(self):
         """附加成功要去开 `CONOUT$`：环境不给也必须咽下去。"""
         import sys
+
         with mock.patch.object(sys, "stdout", None):
-            A.attach_parent_console(attach=True)      # 不抛即通过
+            A.attach_parent_console(attach=True)  # 不抛即通过
 
     def test_called_before_log_setup_in_main(self):
         """必须先于 `applog.setup()`：安装器靠 stdout 是否为 None 决定装不装
         控制台 handler，晚了就永远没有控制台输出。"""
         from pathlib import Path
-        src = (Path(__file__).resolve().parents[1]
-               / "src" / "batbar" / "agent.py").read_text(encoding="utf-8")
+
+        src = (Path(__file__).resolve().parents[1] / "src" / "batbar" / "agent.py").read_text(
+            encoding="utf-8"
+        )
         self.assertEqual(src.count("attach_parent_console()"), 1)
         body = src.split("def main():", 1)[1]
         # 用完整的调用形式匹配 —— 注释里也写着 applog.setup()，只匹配函数名
         # 会命中注释（这个坑在 test_migrate 里已经踩过一次）
-        self.assertLess(body.index("attach_parent_console()"),
-                        body.index("path = applog.setup("))
+        self.assertLess(body.index("attach_parent_console()"), body.index("path = applog.setup("))
 
 
 class ConsoleEncoding(unittest.TestCase):
@@ -964,6 +989,7 @@ class ConsoleEncoding(unittest.TestCase):
     def test_no_print_uses_non_gbk_chars(self):
         """src/ 里所有 print() 行只能出现 GBK 能编码的字符。"""
         from pathlib import Path
+
         src_dir = Path(__file__).resolve().parents[1] / "src"
         bad = []
         for p in sorted(src_dir.rglob("*.py")):
@@ -986,6 +1012,7 @@ class ConsoleEncoding(unittest.TestCase):
     def test_crash_hook_logs_traceback(self):
         """未捕获异常必须留下现场（windowed exe 里 traceback 本来无处可去）。"""
         import sys
+
         old = sys.excepthook
         try:
             A.install_crash_log()
@@ -1003,11 +1030,12 @@ class ConsoleEncoding(unittest.TestCase):
         """excepthook 必须在 `applog.setup()` **之后**装：之前装的话日志还没有
         文件 handler，写进去也丢。"""
         from pathlib import Path
-        src = (Path(__file__).resolve().parents[1]
-               / "src" / "batbar" / "agent.py").read_text(encoding="utf-8")
+
+        src = (Path(__file__).resolve().parents[1] / "src" / "batbar" / "agent.py").read_text(
+            encoding="utf-8"
+        )
         body = src.split("def main():", 1)[1]
-        self.assertLess(body.index("path = applog.setup("),
-                        body.index("install_crash_log()"))
+        self.assertLess(body.index("path = applog.setup("), body.index("install_crash_log()"))
 
 
 if __name__ == "__main__":

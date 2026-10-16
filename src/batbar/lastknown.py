@@ -14,6 +14,7 @@
 （绿色模式），源码运行 = `%LOCALAPPDATA%\\batbar\\last-known.json`；任何 I/O 失败都静默降级
 （只丢 memory，不影响主流程）。测试可用 BATBAR_LASTKNOWN 重定向到临时目录。
 """
+
 from __future__ import annotations
 
 import json
@@ -28,7 +29,7 @@ _ENV = "BATBAR_LASTKNOWN"
 _DIRNAME = "batbar"
 _FILENAME = "last-known.json"
 
-_mem: dict[str, tuple[int, float]] | None = None   # 内存缓存（懒加载）
+_mem: dict[str, tuple[int, float]] | None = None  # 内存缓存（懒加载）
 
 
 def path() -> Path:
@@ -68,8 +69,8 @@ def _save() -> None:
         obj = {n: {"pct": v[0], "ts": v[1]} for n, v in (_mem or {}).items()}
         tmp = p.with_suffix(".tmp")
         tmp.write_text(json.dumps(obj, ensure_ascii=False), encoding="utf-8")
-        tmp.replace(p)          # 原子替换，避免写一半被断电
-    except Exception as exc:    # noqa: BLE001
+        tmp.replace(p)  # 原子替换，避免写一半被断电
+    except Exception as exc:  # noqa: BLE001
         log.debug("last-known save failed: %s", exc)
 
 

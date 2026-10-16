@@ -35,6 +35,7 @@ batbar 全程不联网（`test_no_listener.py` 已证零监听），这 9 MB 纯
 * 动态检查必须在**子进程**里做：pytest 同一个进程里跑了几百个用例，谁知道
   哪个依赖已经 `import socket` 了 —— 在本进程断言 `sys.modules` 是假阳性。
 """
+
 from __future__ import annotations
 
 import subprocess
@@ -103,9 +104,21 @@ class RuntimeNoHeavyImports(unittest.TestCase):
     #: 是纯 Python、不碰 ssl，属于正常且无法避免的 —— 前缀匹配会把它误判成违规，
     #: 然后要么有人为了"修"它去禁用 pathlib，要么直接把这条守卫删掉，两种都比
     #: 没有守卫糟。
-    NAMES = ("logging.handlers", "ssl", "_ssl", "socket", "_socket",
-             "smtplib", "http.client", "urllib.request",
-             "ftplib", "imaplib", "poplib", "telnetlib", "requests")
+    NAMES = (
+        "logging.handlers",
+        "ssl",
+        "_ssl",
+        "socket",
+        "_socket",
+        "smtplib",
+        "http.client",
+        "urllib.request",
+        "ftplib",
+        "imaplib",
+        "poplib",
+        "telnetlib",
+        "requests",
+    )
 
     CHECK = (
         "import sys;"
@@ -118,12 +131,16 @@ class RuntimeNoHeavyImports(unittest.TestCase):
         env_src = str(root / "src")
         proc = subprocess.run(
             [sys.executable, "-c", self.CHECK],
-            capture_output=True, text=True, cwd=str(root),
-            env={"PATH": __import__("os").environ.get("PATH", ""),
-                 "PYTHONPATH": env_src,
-                 "SYSTEMROOT": __import__("os").environ.get("SYSTEMROOT", ""),
-                 "TEMP": __import__("os").environ.get("TEMP", ""),
-                 "TMP": __import__("os").environ.get("TMP", "")},
+            capture_output=True,
+            text=True,
+            cwd=str(root),
+            env={
+                "PATH": __import__("os").environ.get("PATH", ""),
+                "PYTHONPATH": env_src,
+                "SYSTEMROOT": __import__("os").environ.get("SYSTEMROOT", ""),
+                "TEMP": __import__("os").environ.get("TEMP", ""),
+                "TMP": __import__("os").environ.get("TMP", ""),
+            },
             check=False,
         )
         if proc.returncode != 0:
@@ -132,9 +149,9 @@ class RuntimeNoHeavyImports(unittest.TestCase):
 
     def test_heavy_modules_absent(self):
         present = self._run()
-        self.assertEqual([], present,
-                         "这些模块又被拖进来了（多半是有人改回 logging.handlers）："
-                         + ", ".join(present))
+        self.assertEqual(
+            [], present, "这些模块又被拖进来了（多半是有人改回 logging.handlers）：" + ", ".join(present)
+        )
 
     def test_check_is_not_vacuous(self):
         """阳性对照：走**同一段** CHECK，只是开头多一句 `import logging.handlers`。
@@ -146,15 +163,18 @@ class RuntimeNoHeavyImports(unittest.TestCase):
         mutated = "import logging.handlers;" + self.CHECK
         proc = subprocess.run(
             [sys.executable, "-c", mutated],
-            capture_output=True, text=True, cwd=str(root),
-            env={"PATH": __import__("os").environ.get("PATH", ""),
-                 "PYTHONPATH": str(root / "src"),
-                 "SYSTEMROOT": __import__("os").environ.get("SYSTEMROOT", "")},
+            capture_output=True,
+            text=True,
+            cwd=str(root),
+            env={
+                "PATH": __import__("os").environ.get("PATH", ""),
+                "PYTHONPATH": str(root / "src"),
+                "SYSTEMROOT": __import__("os").environ.get("SYSTEMROOT", ""),
+            },
             check=False,
         )
         self.assertEqual(0, proc.returncode, f"阳性对照自己没跑起来：{proc.stderr}")
-        self.assertIn("logging.handlers", proc.stdout,
-                      "CHECK 抓不到已经 import 的模块 —— 守卫是假的")
+        self.assertIn("logging.handlers", proc.stdout, "CHECK 抓不到已经 import 的模块 —— 守卫是假的")
 
 
 class HashlibWithoutOpenSSL(unittest.TestCase):
@@ -176,26 +196,36 @@ class HashlibWithoutOpenSSL(unittest.TestCase):
 
     def test_hash_backends_are_builtin(self):
         missing = [m for m in self.BUILTINS if m not in sys.builtin_module_names]
-        self.assertEqual([], missing,
-                         "这些哈希后端不再是内置模块 —— 排除 _hashlib 的前提没了，"
-                         "必须恢复 _hashlib + libcrypto，否则 import random 会炸")
+        self.assertEqual(
+            [],
+            missing,
+            "这些哈希后端不再是内置模块 —— 排除 _hashlib 的前提没了，"
+            "必须恢复 _hashlib + libcrypto，否则 import random 会炸",
+        )
 
     def test_hashlib_works_without_openssl(self):
         """阳性对照兼可行性验证：把 _hashlib 屏蔽掉，hashlib/random 仍可用。"""
         code = (
             "import sys, importlib, hashlib;"
-            "sys.modules['_hashlib'] = None;"          # 让 import _hashlib 抛 ImportError
+            "sys.modules['_hashlib'] = None;"  # 让 import _hashlib 抛 ImportError
             "importlib.reload(hashlib);"
             "print(hashlib.sha256(b'abc').hexdigest());"
             "import random; random.random(); print('random-ok')"
         )
-        proc = subprocess.run([sys.executable, "-c", code], capture_output=True,
-                              text=True, check=False,
-                              env={"SYSTEMROOT": __import__("os").environ.get("SYSTEMROOT", "")})
+        proc = subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True,
+            text=True,
+            check=False,
+            env={"SYSTEMROOT": __import__("os").environ.get("SYSTEMROOT", "")},
+        )
         self.assertEqual(0, proc.returncode, f"无 OpenSSL 的 hashlib 跑不起来：{proc.stderr}")
         out = proc.stdout.split()
-        self.assertEqual("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
-                         out[0], "sha256 结果不对（降级路径没生效？）")
+        self.assertEqual(
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+            out[0],
+            "sha256 结果不对（降级路径没生效？）",
+        )
         self.assertIn("random-ok", out)
 
 

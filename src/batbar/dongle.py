@@ -68,6 +68,7 @@ LEOBOG 抓包写的）；若迈从帧格式不同，收不到帧时按「新目�
 两个毛病：① 开机后 90s 内不管在不在都显示；② 需要 feature24 转记假活帧
 才能不被误杀（那个假设已被证伪）。扫描制直接问设备本人，判据单一。
 """
+
 from __future__ import annotations
 
 import ctypes
@@ -86,7 +87,7 @@ log = logging.getLogger("batbar.dongle")
 # receiver24.KNOWN_RECEIVERS 直接引用它。
 TARGETS: dict[tuple[int, int], str] = {
     (0x3554, 0xFA09): "键盘 LEOBOG Hi98C Pro",
-    (0x05AC, 0x024F): "键盘 迈从 K87",   # K87 的 2.4G 接收器（与其 BLE 节点同 VID/PID）
+    (0x05AC, 0x024F): "键盘 迈从 K87",  # K87 的 2.4G 接收器（与其 BLE 节点同 VID/PID）
 }
 
 # 有线（USB 数据线）形态专属 VID/PID —— 2026-10-12 22:10 探针实测：
@@ -102,9 +103,9 @@ WIRED_TARGETS: dict[tuple[int, int], str] = {
 FRAME_LEN = 20
 _MAGIC = bytes((0x13, 0x0A, 0x01, 0x00, 0x04))
 
-T_BACKLIGHT = 0x02      # A: 1=灯亮 0=灯灭（用户目击确认）
-T_BATTERY = 0x05        # A: 电量%（无滤波 ADC，实测在真值 ±2 内抖动）
-T_HANDSHAKE = 0x07      # A: 恒 0，用途不明
+T_BACKLIGHT = 0x02  # A: 1=灯亮 0=灯灭（用户目击确认）
+T_BATTERY = 0x05  # A: 电量%（无滤波 ADC，实测在真值 ±2 内抖动）
+T_HANDSHAKE = 0x07  # A: 恒 0，用途不明
 
 
 def parse_frame(data: bytes) -> tuple[str, int] | None:
@@ -136,8 +137,7 @@ def parse_frame(data: bytes) -> tuple[str, int] | None:
         return ("other", a)
     # 命令应答帧形：[0]=0x13(reportID/magic) [1]=0x4a(getBattery 回显)
     # [2]=total [3]=current [4]=0x02(数据类型) [5]=电量% [6]=充电标志
-    if (data[0] == 0x13 and data[1] == 0x4A and data[2] == 0x01
-            and data[4] == 0x02):
+    if data[0] == 0x13 and data[1] == 0x4A and data[2] == 0x01 and data[4] == 0x02:
         if (sum(data[:8]) & 0xFF) != data[FRAME_LEN - 1]:
             return None
         a = data[5]
@@ -166,8 +166,7 @@ _paths: dict[str, str] = {}
 
 
 def _new_stat() -> dict:
-    return {"battery": None, "battery_ts": None, "frame_ts": None,
-            "sleeping": False, "sleep_ts": None}
+    return {"battery": None, "battery_ts": None, "frame_ts": None, "sleeping": False, "sleep_ts": None}
 
 
 def _open_targets() -> list[tuple[int, str]]:
@@ -182,34 +181,35 @@ def _open_targets() -> list[tuple[int, str]]:
     不同接收器是不同 collection，各读各的互不干扰 —— 所以这里对每个
     目标各开一个句柄是安全的，但调用方必须保证同一目标不重开（见 _watch）。
     """
-    setupapi = ctypes.windll.setupapi         # type: ignore[attr-defined]
-    hid = ctypes.windll.hid                   # type: ignore[attr-defined]
-    k32 = ctypes.windll.kernel32              # type: ignore[attr-defined]
+    setupapi = ctypes.windll.setupapi  # type: ignore[attr-defined]
+    hid = ctypes.windll.hid  # type: ignore[attr-defined]
+    k32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
 
     # ★ 签名一律走共享模块（幂等）—— 三模块共用同一套声明，杜绝 argtypes
     #   互相覆盖（2026-10-13 黑盒冒烟测试抓到的真 bug，见 win32ctypes 头注）。
     w32.ensure_argtypes()
     guid = w32.hid_guid()
-    hdev = setupapi.SetupDiGetClassDevsW(byref(guid), None, None,
-                                         w32.DIGCF_PRESENT | w32.DIGCF_DEVICEINTERFACE)
+    hdev = setupapi.SetupDiGetClassDevsW(
+        byref(guid), None, None, w32.DIGCF_PRESENT | w32.DIGCF_DEVICEINTERFACE
+    )
     if not hdev or hdev == w32.invalid_handle():
         return []
 
     out: list[tuple[int, str]] = []
-    seen: set[str] = set()                  # 同一目标多个路径只留第一个句柄
+    seen: set[str] = set()  # 同一目标多个路径只留第一个句柄
     i = 0
     while True:
         ifd = w32.IFD()
-        ifd.cbSize = ctypes.sizeof(w32.IFD)   # 不设 → 第一条就枚举失败
-        if not setupapi.SetupDiEnumDeviceInterfaces(hdev, None, byref(guid), i,
-                                                    byref(ifd)):
+        ifd.cbSize = ctypes.sizeof(w32.IFD)  # 不设 → 第一条就枚举失败
+        if not setupapi.SetupDiEnumDeviceInterfaces(hdev, None, byref(guid), i, byref(ifd)):
             break
         i += 1
         det = w32.DETAIL()
-        det.cbSize = 8                        # x64 对齐后必须是 8
+        det.cbSize = 8  # x64 对齐后必须是 8
         size = wintypes.DWORD(ctypes.sizeof(w32.DETAIL))
         if not setupapi.SetupDiGetDeviceInterfaceDetailW(
-                hdev, byref(ifd), byref(det), size, byref(size), None):
+            hdev, byref(ifd), byref(det), size, byref(size), None
+        ):
             continue
         up = det.DevicePath.upper()
         hit = None
@@ -220,9 +220,15 @@ def _open_targets() -> list[tuple[int, str]]:
         if not hit:
             continue
         # 只读打开 —— 绝不申请写权限，本模块不往设备写一个字节
-        h = k32.CreateFileW(det.DevicePath, w32.GENERIC_READ,
-                            w32.FILE_SHARE_READ | w32.FILE_SHARE_WRITE, None,
-                            w32.OPEN_EXISTING, 0, 0)
+        h = k32.CreateFileW(
+            det.DevicePath,
+            w32.GENERIC_READ,
+            w32.FILE_SHARE_READ | w32.FILE_SHARE_WRITE,
+            None,
+            w32.OPEN_EXISTING,
+            0,
+            0,
+        )
         if not h or h == w32.invalid_handle():
             continue
         pp = ctypes.c_void_p()
@@ -233,14 +239,14 @@ def _open_targets() -> list[tuple[int, str]]:
         hid.HidP_GetCaps(pp, byref(caps))
         hid.HidD_FreePreparsedData(pp)
         if caps.UsagePage == 0xFF02 and caps.InputReportByteLength >= FRAME_LEN:
-            if hit in seen:                 # 同目标第二条第路径：句柄还回去
+            if hit in seen:  # 同目标第二条第路径：句柄还回去
                 k32.CloseHandle(h)
                 continue
             seen.add(hit)
             out.append((h, hit))
             with _lock:
                 _paths[hit] = det.DevicePath
-            continue                        # 不 break：继续枚举下一个目标
+            continue  # 不 break：继续枚举下一个目标
         k32.CloseHandle(h)
     setupapi.SetupDiDestroyDeviceInfoList(hdev)
     return out
@@ -263,7 +269,7 @@ def _record(name: str, kind: str, value: int) -> None:
         # 休眠/唤醒状态：type=02 是唯一权威来源（A=0 休眠、A=1 唤醒）。
         # 电量帧只在键盘活动时出现（keybeat 实测），所以收到它也说明醒着。
         if kind == "backlight":
-            st["sleeping"] = (value == 0)
+            st["sleeping"] = value == 0
             st["sleep_ts"] = now
         elif kind == "battery":
             st["sleeping"] = False
@@ -273,14 +279,15 @@ def _record(name: str, kind: str, value: int) -> None:
             st["battery_ts"] = now
         try:
             from . import lastknown
+
             lastknown.put(name, value)
-        except Exception as exc:              # noqa: BLE001 - 存档失败不影响主链路
+        except Exception as exc:  # noqa: BLE001 - 存档失败不影响主链路
             log.debug("lastknown put %s failed: %s", name, exc)
         log.debug("2.4G 实时电量 %s = %d%%", name, value)
-    for cb in _frame_cbs:                     # 帧到 → 让 UI 立即重算（电量/休眠切换）
+    for cb in _frame_cbs:  # 帧到 → 让 UI 立即重算（电量/休眠切换）
         try:
             cb(name, kind, value)
-        except Exception as exc:              # noqa: BLE001 - 回调失败不影响收帧
+        except Exception as exc:  # noqa: BLE001 - 回调失败不影响收帧
             log.debug("dongle frame cb: %s", exc)
 
 
@@ -298,8 +305,8 @@ def _watch_one(handle, name: str) -> None:
 
     句柄由调度线程 _watch 转交，本函数退出时负责关句柄 + 清 _stats。
     """
-    k32 = ctypes.windll.kernel32              # type: ignore[attr-defined]
-    w32.ensure_argtypes()                     # 幂等；保证 ReadFile/CloseHandle 签名已声明
+    k32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+    w32.ensure_argtypes()  # 幂等；保证 ReadFile/CloseHandle 签名已声明
     # ★ 单读者原则：HID 每个 collection 只有一条输入队列，多个句柄会
     #   互相抢帧（实测：两个监听器并存时两边都收不全）。同一目标的句柄
     #   全程只有本线程持有这一个（调度线程的重枚举结果会立刻关掉多余的）。
@@ -312,18 +319,18 @@ def _watch_one(handle, name: str) -> None:
                 log.debug("ReadFile err=%s（设备拔出？）", k32.GetLastError())
                 break
             if n.value:
-                got = parse_frame(bytes(buf[:n.value]))
+                got = parse_frame(bytes(buf[: n.value]))
                 if got:
                     _record(name, got[0], got[1])
-    except Exception as exc:                  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         log.debug("dongle read loop: %s", exc)
     finally:
         try:
             k32.CloseHandle(handle)
-        except Exception:                     # noqa: BLE001
+        except Exception:  # noqa: BLE001
             pass
         with _lock:
-            _stats.pop(name, None)            # 断开后清干净，避免拿旧状态判离线
+            _stats.pop(name, None)  # 断开后清干净，避免拿旧状态判离线
         log.info("2.4G 监听结束: %s", name)
 
 
@@ -335,29 +342,28 @@ def _watch() -> None:
     ⚠️ 每轮枚举对**已有活跃线程**的目标，拿到的句柄必须立刻 CloseHandle：
     那是同一 collection 的第二个句柄，留着就违反单读者原则（互抢帧）。
     """
-    k32 = ctypes.windll.kernel32              # type: ignore[attr-defined]
-    w32.ensure_argtypes()                     # 幂等；CloseHandle 签名
+    k32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+    w32.ensure_argtypes()  # 幂等；CloseHandle 签名
     threads: dict[str, threading.Thread] = {}
     while not _stop.is_set():
         try:
             targets = _open_targets()
-        except Exception as exc:              # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
             log.debug("dongle open failed: %s", exc)
             targets = []
         for h, name in targets:
             t = threads.get(name)
             if t is not None and t.is_alive():
-                k32.CloseHandle(h)            # 已有人听，多余的句柄立刻还回去
+                k32.CloseHandle(h)  # 已有人听，多余的句柄立刻还回去
                 continue
             log.info("2.4G 监听开始: %s", name)
-            _touch(name)                      # 登记目标（poll24 按 _stats 决定扫谁）
-            t = threading.Thread(target=_watch_one, args=(h, name),
-                                 name=f"batbar-24g-{name}", daemon=True)
+            _touch(name)  # 登记目标（poll24 按 _stats 决定扫谁）
+            t = threading.Thread(target=_watch_one, args=(h, name), name=f"batbar-24g-{name}", daemon=True)
             threads[name] = t
             t.start()
         for dead in [n for n, t in threads.items() if not t.is_alive()]:
-            threads.pop(dead, None)           # 已拔出的设备，字典项清掉
-        _stop.wait(10.0)                      # 热插拔检测周期
+            threads.pop(dead, None)  # 已拔出的设备，字典项清掉
+        _stop.wait(10.0)  # 热插拔检测周期
 
 
 def start() -> None:
@@ -451,13 +457,14 @@ def is_offline(name: str) -> bool:
     一次扫描时刻 → 在线，不等下一轮扫描（「任何时候来一帧立即复活」）。
     """
     from . import poll24
+
     with _lock:
         st = _stats.get(name)
     if st and st.get("sleeping"):
         return True
     scanned_ts = poll24.scanned_at(name)
     if scanned_ts is None:
-        return True                          # 还没扫过 → 先按不在
+        return True  # 还没扫过 → 先按不在
     if st and st.get("frame_ts") and st["frame_ts"] > scanned_ts:
-        return False                         # 扫描后又推来帧 = 被敲醒，立即复活
+        return False  # 扫描后又推来帧 = 被敲醒，立即复活
     return not poll24.online(name)

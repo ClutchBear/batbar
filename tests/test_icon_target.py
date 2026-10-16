@@ -11,6 +11,7 @@
 Agent 实例用 `object.__new__` 造（不跑 __init__：那会去碰硬件/注册主题监听），
 只打桩 devices_snapshot / _tracked_name。
 """
+
 from __future__ import annotations
 
 import time
@@ -40,8 +41,7 @@ class IconTarget(unittest.TestCase):
 
     def test_low_device_wins_and_goes_red(self):
         """② 低电长显：50/100/19 → 显示 19 且变红（阈值 20）。"""
-        a = _fake_agent({"耳机 西圣 XISEM-Air": 50, "耳机 QCY Era 7": 100,
-                         "键盘 迈从 K87 (2.4G)": 19})
+        a = _fake_agent({"耳机 西圣 XISEM-Air": 50, "耳机 QCY Era 7": 100, "键盘 迈从 K87 (2.4G)": 19})
         self.assertEqual(a._icon_target(), ("键盘 迈从 K87 (2.4G)", 19, True))
 
     def test_lowest_of_several_low(self):
@@ -51,8 +51,7 @@ class IconTarget(unittest.TestCase):
 
     def test_no_low_device_prefers_headphone(self):
         """③ 无低电设备 → 优先显示电量最低的**耳机**（不看阈值）。"""
-        a = _fake_agent({"耳机 QCY Era 7": 100, "耳机 西圣 XISEM-Air": 50,
-                         "鼠标 罗技 G304": 30})
+        a = _fake_agent({"耳机 QCY Era 7": 100, "耳机 西圣 XISEM-Air": 50, "鼠标 罗技 G304": 30})
         self.assertEqual(a._icon_target(), ("耳机 西圣 XISEM-Air", 50, False))
 
     def test_no_headphone_falls_to_lowest_device(self):
@@ -64,11 +63,9 @@ class IconTarget(unittest.TestCase):
     def test_wired_only_keyboard_shown(self):
         """用户实测场景：只插键盘（有线 100%）、接收器没插 → 图标显示键盘，
         不再回落成跟踪源的问号。"""
-        with mock.patch.object(R, "wired_bases",
-                               lambda *a, **k: {"键盘 LEOBOG Hi98C Pro"}):
+        with mock.patch.object(R, "wired_bases", lambda *a, **k: {"键盘 LEOBOG Hi98C Pro"}):
             a = _fake_agent({"键盘 LEOBOG Hi98C Pro (有线)": 100})
-            self.assertEqual(a._icon_target(),
-                             ("键盘 LEOBOG Hi98C Pro (有线)", 100, False))
+            self.assertEqual(a._icon_target(), ("键盘 LEOBOG Hi98C Pro (有线)", 100, False))
 
     def test_low_beats_headphone_preference(self):
         """低电长显优先于耳机偏好：键盘 19% 比耳机 50% 更该显示。"""
@@ -83,30 +80,28 @@ class IconTarget(unittest.TestCase):
 
     def test_manual_overrides_low(self):
         """① 手动窗口内：即使有低电设备，也先显示用户点的那台。"""
-        a = _fake_agent({"耳机 A": 5, "鼠标 罗技 G304": 90},
-                        manual="鼠标 罗技 G304",
-                        until=time.monotonic() + 30)
+        a = _fake_agent(
+            {"耳机 A": 5, "鼠标 罗技 G304": 90}, manual="鼠标 罗技 G304", until=time.monotonic() + 30
+        )
         self.assertEqual(a._icon_target(), ("鼠标 罗技 G304", 90, False))
 
     def test_sticky_never_expires(self):
         """粘住模式（默认）：`_manual_until=inf`，多久都不回退到低电设备。
         （2026-10-12 修「勾了 LEOBOG 十几秒后图标自己跳回耳机」）"""
-        a = _fake_agent({"耳机 A": 5, "鼠标 罗技 G304": 90},
-                        manual="鼠标 罗技 G304", until=float("inf"))
+        a = _fake_agent({"耳机 A": 5, "鼠标 罗技 G304": 90}, manual="鼠标 罗技 G304", until=float("inf"))
         self.assertEqual(a._icon_target(), ("鼠标 罗技 G304", 90, False))
 
     def test_manual_window_expired_falls_back_to_low(self):
         """显式设了窗口（BATBAR_MANUAL_TTL）且过期 → 回退低电设备。"""
-        a = _fake_agent({"耳机 A": 5, "鼠标 罗技 G304": 90},
-                        manual="鼠标 罗技 G304",
-                        until=time.monotonic() - 1)
+        a = _fake_agent(
+            {"耳机 A": 5, "鼠标 罗技 G304": 90}, manual="鼠标 罗技 G304", until=time.monotonic() - 1
+        )
         self.assertEqual(a._icon_target(), ("耳机 A", 5, True))
 
     def test_manual_device_gone_ignored(self):
         """手动那台已从快照消失（拔了/断连）→ 不硬撑，回退自动规则。
         粘住模式下同样成立：靠的是「m in snap」判据，与窗口是否到期无关。"""
-        a = _fake_agent({"耳机 A": 5}, manual="鼠标 罗技 G304",
-                        until=float("inf"))
+        a = _fake_agent({"耳机 A": 5}, manual="鼠标 罗技 G304", until=float("inf"))
         self.assertEqual(a._icon_target(), ("耳机 A", 5, True))
 
     def test_zero_and_none_excluded(self):
@@ -142,11 +137,11 @@ class ManualTtl(unittest.TestCase):
         a._tracked = "24G:键盘 LEOBOG Hi98C Pro"
         a._bt_misses = 0
         a._tracked_name = lambda: "键盘 LEOBOG Hi98C Pro (有线)"
-        a._icon = None                       # 不触发刷新线程
+        a._icon = None  # 不触发刷新线程
         with mock.patch.object(A.threading, "Thread") as th:
             A.Agent._set_tracked(a, a._tracked)
         self.assertEqual(a._manual_until, float("inf"))
-        th.assert_not_called()               # 粘住 = 不排回退定时器
+        th.assert_not_called()  # 粘住 = 不排回退定时器
 
     def test_set_tracked_with_window(self):
         """显式设窗口（BATBAR_MANUAL_TTL）→ _manual_until 有限且排回退线程。"""
@@ -155,16 +150,16 @@ class ManualTtl(unittest.TestCase):
         a._bt_misses = 0
         a._tracked_name = lambda: "鼠标 罗技 G304"
         a._icon = None
-        with mock.patch.object(A, "MANUAL_TTL", 10.0), \
-             mock.patch.object(A.threading, "Thread") as th:
+        with mock.patch.object(A, "MANUAL_TTL", 10.0), mock.patch.object(A.threading, "Thread") as th:
             A.Agent._set_tracked(a, "hidpp")
         self.assertLess(a._manual_until, float("inf"))
-        th.assert_called_once()              # 窗口模式排了回退定时器
+        th.assert_called_once()  # 窗口模式排了回退定时器
 
     def test_threshold_default_is_20(self):
         """用户需求「低于 20 的设备长显」。"""
         with mock.patch.dict("os.environ", {}, clear=False):
             import os
+
             os.environ.pop("BATBAR_LOWBAT_THRESHOLD", None)
             self.assertEqual(LB.threshold(), 20)
 
@@ -193,6 +188,7 @@ class IconApply(unittest.TestCase):
 
     def test_applied_updates_cache(self):
         """托盘就绪 → 返回 True 并写入缓存（缓存的是选源结果，不是跟踪源）。"""
+
         class FakeIcon:
             def __init__(self):
                 self.icon = None
@@ -202,7 +198,7 @@ class IconApply(unittest.TestCase):
         a._icon = FakeIcon()
         self.assertTrue(a._apply_icon(90, False))
         self.assertIsNotNone(a._last_icon)
-        self.assertEqual(a._last_icon.percent, 50)      # 耳机优先，非跟踪源的 90
+        self.assertEqual(a._last_icon.percent, 50)  # 耳机优先，非跟踪源的 90
         self.assertFalse(a._last_icon.warning)
 
 
@@ -220,34 +216,29 @@ class MenuCheck(unittest.TestCase):
 
     def test_check_follows_icon(self):
         """图标显示西圣 50 → 对勾该在它身上（不是跟踪源的罗技）。"""
-        a = self._agent({"耳机 QCY Era 7": 100, "耳机 西圣 XISEM-Air": 50,
-                         "鼠标 罗技 G304": 90})
+        a = self._agent({"耳机 QCY Era 7": 100, "耳机 西圣 XISEM-Air": 50, "鼠标 罗技 G304": 90})
         self.assertEqual(a._icon_display_name(), "耳机 西圣 XISEM-Air")
-        self.assertEqual(a._key_for_name(a._icon_display_name()),
-                         "BT:耳机 西圣 XISEM-Air")
+        self.assertEqual(a._key_for_name(a._icon_display_name()), "BT:耳机 西圣 XISEM-Air")
 
     def test_check_follows_low_device(self):
         """低电长显优先：键盘 19% → 对勾在键盘。"""
         a = self._agent({"耳机 西圣 XISEM-Air": 50, "键盘 迈从 K87 (2.4G)": 19})
-        self.assertEqual(a._key_for_name(a._icon_display_name()),
-                         "24G:键盘 迈从 K87")
+        self.assertEqual(a._key_for_name(a._icon_display_name()), "24G:键盘 迈从 K87")
 
     def test_check_falls_to_lowest_device(self):
         """无低电、无耳机 → ④ 兜底显示快照里读数最低的那台（不再是跟踪源），
         对勾跟过去 —— 图标与列表永远同源。"""
         a = self._agent({"鼠标 罗技 G304": 90, "键盘 迈从 K87 (2.4G)": 80})
         self.assertEqual(a._icon_display_name(), "键盘 迈从 K87 (2.4G)")
-        self.assertEqual(a._key_for_name("键盘 迈从 K87 (2.4G)"),
-                         "24G:键盘 迈从 K87")
+        self.assertEqual(a._key_for_name("键盘 迈从 K87 (2.4G)"), "24G:键盘 迈从 K87")
 
     def test_key_for_name_variants(self):
         self.assertEqual(A.Agent._key_for_name(None, "鼠标 罗技 G304"), "hidpp")
-        self.assertEqual(A.Agent._key_for_name(None, "键盘 迈从 K87 (2.4G)"),
-                         "24G:键盘 迈从 K87")
-        self.assertEqual(A.Agent._key_for_name(None, "键盘 LEOBOG Hi98C Pro (有线)"),
-                         "24G:键盘 LEOBOG Hi98C Pro")
-        self.assertEqual(A.Agent._key_for_name(None, "耳机 QCY Era 7"),
-                         "BT:耳机 QCY Era 7")
+        self.assertEqual(A.Agent._key_for_name(None, "键盘 迈从 K87 (2.4G)"), "24G:键盘 迈从 K87")
+        self.assertEqual(
+            A.Agent._key_for_name(None, "键盘 LEOBOG Hi98C Pro (有线)"), "24G:键盘 LEOBOG Hi98C Pro"
+        )
+        self.assertEqual(A.Agent._key_for_name(None, "耳机 QCY Era 7"), "BT:耳机 QCY Era 7")
 
 
 class SnapshotCoherence(unittest.TestCase):
@@ -267,8 +258,7 @@ class SnapshotCoherence(unittest.TestCase):
     def test_explicit_snap_skips_second_read(self):
         """传了 snap 就绝不能再碰 devices_snapshot（这里让它一调就炸）。"""
         a = _fake_agent({"耳机 A": 50})
-        a.devices_snapshot = lambda: (_ for _ in ()).throw(
-            AssertionError("不该二次读快照"))
+        a.devices_snapshot = lambda: (_ for _ in ()).throw(AssertionError("不该二次读快照"))
         self.assertEqual(a._icon_target({"耳机 A": 50}), ("耳机 A", 50, False))
         self.assertEqual(a._icon_display_name({"耳机 A": 50}), "耳机 A")
 
@@ -283,10 +273,10 @@ class SnapshotCoherence(unittest.TestCase):
 
         a = _fake_agent({})
         a.devices_snapshot = snap
-        s = snap()                                   # 菜单构建的第一次读取
+        s = snap()  # 菜单构建的第一次读取
         self.assertEqual(a._icon_display_name(s), "耳机 QCY Era 7")
         self.assertEqual(a._icon_target(s), ("耳机 QCY Era 7", 100, False))
-        self.assertEqual(len(calls), 1)              # 传 snap 后零次额外读取
+        self.assertEqual(len(calls), 1)  # 传 snap 后零次额外读取
 
 
 class TrackedNameWired(unittest.TestCase):
@@ -303,28 +293,24 @@ class TrackedNameWired(unittest.TestCase):
 
     def test_wired_suffix_when_plugged(self):
         with mock.patch.object(R, "is_wired", lambda n, **k: True):
-            self.assertEqual(self._a("24G:键盘 迈从 K87")._tracked_name(),
-                             "键盘 迈从 K87 (有线)")
+            self.assertEqual(self._a("24G:键盘 迈从 K87")._tracked_name(), "键盘 迈从 K87 (有线)")
 
     def test_24g_suffix_when_not_plugged(self):
         with mock.patch.object(R, "is_wired", lambda n, **k: False):
-            self.assertEqual(self._a("24G:键盘 迈从 K87")._tracked_name(),
-                             "键盘 迈从 K87 (2.4G)")
+            self.assertEqual(self._a("24G:键盘 迈从 K87")._tracked_name(), "键盘 迈从 K87 (2.4G)")
 
     def test_is_wired_error_falls_back_to_24g(self):
-        with mock.patch.object(R, "is_wired",
-                               lambda n, **k: (_ for _ in ()).throw(OSError)):
-            self.assertEqual(self._a("24G:键盘 迈从 K87")._tracked_name(),
-                             "键盘 迈从 K87 (2.4G)")
+        with mock.patch.object(R, "is_wired", lambda n, **k: (_ for _ in ()).throw(OSError)):
+            self.assertEqual(self._a("24G:键盘 迈从 K87")._tracked_name(), "键盘 迈从 K87 (2.4G)")
 
 
 class IconApplyNoDevices(unittest.TestCase):
     """tgt=None 时的图标与 tooltip（2026-10-12 用户报两处不合理）：
 
-      * 全拔掉 → tooltip「鼠标 罗技 未知」误导（跟踪源那台根本不在）→
-        应显示「未发现设备」；
-      * 有条目但全读不出（关机充电伪 None / 毛刺 0）→ 不许回落跟踪源
-        （跟踪源未必在快照里，正是「托盘显示耳机、列表却没有」的裂缝）。
+    * 全拔掉 → tooltip「鼠标 罗技 未知」误导（跟踪源那台根本不在）→
+      应显示「未发现设备」；
+    * 有条目但全读不出（关机充电伪 None / 毛刺 0）→ 不许回落跟踪源
+      （跟踪源未必在快照里，正是「托盘显示耳机、列表却没有」的裂缝）。
     """
 
     def setUp(self):
@@ -337,10 +323,10 @@ class IconApplyNoDevices(unittest.TestCase):
         a._last_icon = None
         a._last_tooltip = ""
         a._last_raw = (None, False)
-        a._ready = ready                     # 默认「启动后」态（已跑过一轮采集）
-        a._icon = object()                   # 让 _set_icon 桩返回 True 即可
+        a._ready = ready  # 默认「启动后」态（已跑过一轮采集）
+        a._icon = object()  # 让 _set_icon 桩返回 True 即可
         cap = {}
-        a._set_icon = lambda png, tip: (cap.update(png=png, tip=tip) or True)
+        a._set_icon = lambda png, tip: cap.update(png=png, tip=tip) or True
         a._is_charging = lambda name: False
         return a, cap
 
@@ -382,7 +368,7 @@ class BootIcon(unittest.TestCase):
         a._ready = False
         a._icon = object()
         cap = {}
-        a._set_icon = lambda png, tip: (cap.update(png=png, tip=tip) or True)
+        a._set_icon = lambda png, tip: cap.update(png=png, tip=tip) or True
         a._is_charging = lambda name: False
         return a, cap
 
@@ -392,19 +378,24 @@ class BootIcon(unittest.TestCase):
         桩掉 devices_snapshot（真读蓝牙要 4~25s）——它一旦被调用就是 bug。
         """
         from batbar import icons as I
+
         a, cap = self._agent({})
 
         def boom(*_a, **_k):
             raise AssertionError("首帧不许读快照（会把托盘拖成几秒空白）")
+
         a.devices_snapshot = boom
         self.assertTrue(a._paint_boot())
         self.assertEqual(cap["tip"], "启动中…")
         self.assertTrue(a._last_icon.no_devices)
         self.assertEqual(
             cap["png"],
-            I.render_icon(I.IconSpec(None, False, A.ICON_SIZE,
-                                     light_taskbar=a._last_icon.light_taskbar,
-                                     no_devices=True)))
+            I.render_icon(
+                I.IconSpec(
+                    None, False, A.ICON_SIZE, light_taskbar=a._last_icon.light_taskbar, no_devices=True
+                )
+            ),
+        )
 
     def test_before_any_reading_shows_dash_not_question(self):
         """启动阶段快照里是幽灵条目（读不出值）→ 画 "--" 而不是 "?"。"""
@@ -433,6 +424,7 @@ class BootIcon(unittest.TestCase):
 
         def boom(*_a, **_k):
             raise AssertionError("首帧不该等蓝牙全量快照")
+
         a.devices_snapshot = boom
         self.assertTrue(a._refresh_from_tracked())
         self.assertEqual(a._last_icon.percent, 90)
@@ -483,13 +475,14 @@ class ManualRefreshForcesBT(unittest.TestCase):
         import types
 
         from batbar import poll24 as P
+
         a = object.__new__(A.Agent)
         calls = []
         a._push_fresh_read = lambda: calls.append("push")
         a._bt_battery = lambda: types.SimpleNamespace(
             sync_now=lambda: calls.append("sync") or ([], []),
-            force_refresh=lambda quick=False: calls.append(
-                ("bt", quick)))
+            force_refresh=lambda quick=False: calls.append(("bt", quick)),
+        )
         a._repaint = lambda: calls.append("redraw")
         with mock.patch.object(P, "scan_now", lambda: calls.append("scan")):
             a._manual_refresh()
@@ -497,8 +490,8 @@ class ManualRefreshForcesBT(unittest.TestCase):
         # 蓝牙步与 2.4G 步是并行线程，内部相对顺序不锁死。
         self.assertEqual(calls[0], "push")
         self.assertEqual(calls[-1], "redraw")
-        self.assertIn("sync", calls)                # 双向快判（bug 15）
-        self.assertIn(("bt", True), calls)          # CIM 单枪快查
+        self.assertIn("sync", calls)  # 双向快判（bug 15）
+        self.assertIn(("bt", True), calls)  # CIM 单枪快查
         self.assertIn("scan", calls)
         self.assertGreaterEqual(calls.count("redraw"), 3)  # 每步都即时重绘
 
@@ -507,18 +500,18 @@ class ManualRefreshForcesBT(unittest.TestCase):
         import types
 
         from batbar import poll24 as P
+
         a = object.__new__(A.Agent)
         calls = []
         a._push_fresh_read = lambda: None
         a._bt_battery = lambda: types.SimpleNamespace(
-            sync_now=lambda: (_ for _ in ()).throw(
-                RuntimeError("usb busy")),
-            force_refresh=lambda quick=False: (_ for _ in ()).throw(
-                RuntimeError("timeout")))
+            sync_now=lambda: (_ for _ in ()).throw(RuntimeError("usb busy")),
+            force_refresh=lambda quick=False: (_ for _ in ()).throw(RuntimeError("timeout")),
+        )
         a._repaint = lambda: calls.append("redraw")
         with mock.patch.object(P, "scan_now", lambda: calls.append("scan")):
             a._manual_refresh()
-        self.assertIn("scan", calls)                # 2.4G 不受蓝牙故障牵连
+        self.assertIn("scan", calls)  # 2.4G 不受蓝牙故障牵连
         self.assertGreaterEqual(calls.count("redraw"), 3)
 
 

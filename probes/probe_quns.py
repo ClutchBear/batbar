@@ -3,6 +3,7 @@
 用途：确认 ① 函数能否调到；② 当前（非全屏）返回什么；③ 各枚举值语义。
 纯只读，不改任何系统状态。
 """
+
 import ctypes
 from ctypes import wintypes
 
@@ -31,7 +32,7 @@ print("\n连续 3 次：")
 for i in range(3):
     s = ctypes.c_int(-1)
     hr = f(ctypes.byref(s))
-    print(f"  #{i+1} hr={hr:#010x} state={s.value} ({NAMES.get(s.value,'?')})")
+    print(f"  #{i + 1} hr={hr:#010x} state={s.value} ({NAMES.get(s.value, '?')})")
 
 # 拿当前前台窗口做个对照（看有没有全屏窗口）
 user32 = ctypes.windll.user32
@@ -46,8 +47,10 @@ if hwnd:
     user32.GetWindowRect(hwnd, ctypes.byref(rc))
     sw = user32.GetSystemMetrics(0)
     sh = user32.GetSystemMetrics(1)
-    print(f"  窗口矩形 = ({rc.left},{rc.top})-({rc.right},{rc.bottom})  "
-          f"尺寸 {rc.right-rc.left}x{rc.bottom-rc.top}")
+    print(
+        f"  窗口矩形 = ({rc.left},{rc.top})-({rc.right},{rc.bottom})  "
+        f"尺寸 {rc.right - rc.left}x{rc.bottom - rc.top}"
+    )
     print(f"  主屏 = {sw}x{sh}")
-    full = (rc.left <= 0 and rc.top <= 0 and rc.right >= sw and rc.bottom >= sh)
+    full = rc.left <= 0 and rc.top <= 0 and rc.right >= sw and rc.bottom >= sh
     print(f"  占满主屏？ {'是' if full else '否'}")

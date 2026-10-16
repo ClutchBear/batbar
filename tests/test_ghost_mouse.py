@@ -17,6 +17,7 @@
   2. `_tracked_read()` 不把 percent=None 的 info 写进 `_last_info`；
   3. `_on_notify()` 同理（但消息照常转发）。
 """
+
 from __future__ import annotations
 
 import types
@@ -30,6 +31,7 @@ def _sess_returning(info):
     class Sess:
         def read_battery(self):
             return info
+
     return Sess()
 
 
@@ -68,8 +70,7 @@ class TrackedReadRejectsNullPercent(unittest.TestCase):
 
     def test_null_percent_info_not_cached(self):
         a = self._agent()
-        a._ensure_device = lambda: _sess_returning(
-            types.SimpleNamespace(percent=None, charging=False))
+        a._ensure_device = lambda: _sess_returning(types.SimpleNamespace(percent=None, charging=False))
         pct, chg, st = A.Agent._tracked_read(a)
         self.assertIsNone(pct)
         self.assertEqual(st, "sleeping")
@@ -77,8 +78,7 @@ class TrackedReadRejectsNullPercent(unittest.TestCase):
 
     def test_real_reading_cached(self):
         a = self._agent()
-        a._ensure_device = lambda: _sess_returning(
-            types.SimpleNamespace(percent=77, charging=True))
+        a._ensure_device = lambda: _sess_returning(types.SimpleNamespace(percent=77, charging=True))
         pct, chg, st = A.Agent._tracked_read(a)
         self.assertEqual((pct, chg, st), (77, True, "ok"))
         self.assertEqual(a._last_info.percent, 77)
@@ -93,14 +93,12 @@ class NotifyRejectsNullPercent(unittest.TestCase):
 
     def test_null_percent_notify_not_cached(self):
         a = self._agent()
-        A.Agent._on_notify(a, types.SimpleNamespace(
-            percent=None, charging=False, source="0x1000"))
+        A.Agent._on_notify(a, types.SimpleNamespace(percent=None, charging=False, source="0x1000"))
         self.assertIsNone(a._last_info)
 
     def test_real_notify_cached(self):
         a = self._agent()
-        A.Agent._on_notify(a, types.SimpleNamespace(
-            percent=55, charging=False, source="0x1000"))
+        A.Agent._on_notify(a, types.SimpleNamespace(percent=55, charging=False, source="0x1000"))
         self.assertEqual(a._last_info.percent, 55)
 
 

@@ -4,6 +4,7 @@
   短帧 = [0x10, devnum] + 5 字节 data
   data = [feature_index_hi | swid 高字节, function<<4 | swid 低字节, params...]
 """
+
 import struct
 import unittest
 
@@ -20,9 +21,9 @@ class TestEncode(unittest.TestCase):
         # 功能号占高 nibble，sw_id 永远只覆盖低 nibble（bit3 置位约定）
         payload = H.encode_feature_request(0x01, 0x00, 7)
         rid = struct.unpack("!H", payload)[0]
-        self.assertEqual(rid & 0xF0, 0x00)   # function 位
-        self.assertEqual(rid & 0x0F, 0x07)   # sw_id
-        self.assertEqual(rid >> 8, 0x01)     # feature index 回显
+        self.assertEqual(rid & 0xF0, 0x00)  # function 位
+        self.assertEqual(rid & 0x0F, 0x07)  # sw_id
+        self.assertEqual(rid >> 8, 0x01)  # feature index 回显
 
     def test_feature_request_with_params(self):
         payload = H.encode_feature_request(0x00, 0x00, 1, struct.pack("!H", H.FEAT_UNIFIED_BATTERY))
@@ -39,7 +40,7 @@ class TestWriteFrame(unittest.TestCase):
     def test_short_frame_total_7_bytes(self):
         payload = H.encode_feature_request(0x05, 0x00, 3)
         frame = H.build_write_frame(H.DEV_RECEIVER, payload)
-        self.assertEqual(len(frame), 7)               # 1 rid + 1 devnum + 5 data
+        self.assertEqual(len(frame), 7)  # 1 rid + 1 devnum + 5 data
         self.assertEqual(frame[0], H.REPORT_ID_SHORT)
         self.assertEqual(frame[1], H.DEV_RECEIVER)
 
@@ -77,14 +78,14 @@ class TestParseInput(unittest.TestCase):
         # 回显 request_id 在 payload[1:3]，错误码在 payload[3]
         self.assertEqual(H.frame_error(bytes([0x8F, 0x05, 0x13, 0x01])), 0x01)  # HID++1.0 错误
         self.assertEqual(H.frame_error(bytes([0xFF, 0x05, 0x13, 0x03])), 0x03)  # HID++2.0 错误
-        self.assertIsNone(H.frame_error(bytes([0x05, 0x13, 0x48, 0x00])))        # 正常回复
+        self.assertIsNone(H.frame_error(bytes([0x05, 0x13, 0x48, 0x00])))  # 正常回复
         self.assertIsNone(H.frame_error(b""))
 
     def test_notification_detection(self):
         # sw_id ∈ 0x08..0x0F（bit3 恒置位）；请求回复回显该字节，通知帧不置 bit3
-        self.assertTrue(H.is_notification(bytes([0x05, 0x04])))         # 通知：低 nibble < 8
-        self.assertFalse(H.is_notification(bytes([0x05, 0x1B])))        # 请求回复（function=0x10, sw_id=0x0B）
-        self.assertFalse(H.is_notification(bytes([0x05, 0x0B])))        # 请求回复（function=0x00, sw_id=0x0B）
+        self.assertTrue(H.is_notification(bytes([0x05, 0x04])))  # 通知：低 nibble < 8
+        self.assertFalse(H.is_notification(bytes([0x05, 0x1B])))  # 请求回复（function=0x10, sw_id=0x0B）
+        self.assertFalse(H.is_notification(bytes([0x05, 0x0B])))  # 请求回复（function=0x00, sw_id=0x0B）
         self.assertFalse(H.is_notification(b""))
 
     def test_frame_accessors(self):
@@ -104,7 +105,7 @@ class TestBatteryParsers(unittest.TestCase):
 
     def test_unified_battery_zero_discharge_falls_back_to_approx(self):
         info = H.parse_unified_battery(bytes([0, 8, 0x03, 0x00]))
-        self.assertEqual(info.percent, 100)     # FULL 档 → 100
+        self.assertEqual(info.percent, 100)  # FULL 档 → 100
         self.assertTrue(info.charging)
 
     def test_unified_battery_critical_and_empty(self):
@@ -142,7 +143,9 @@ class TestBatteryParsers(unittest.TestCase):
         payload = bytes([0x09, 0x00, 85, 4, 1, 0])
         self.assertIsNone(H.parse_notification_battery(payload, 0x05, H.FEAT_UNIFIED_BATTERY))
         # 命中特性索引 + function=0 → 解析
-        info = H.parse_notification_battery(bytes([0x05, 0x00, 85, 4, 0x01, 0x00]), 0x05, H.FEAT_UNIFIED_BATTERY)
+        info = H.parse_notification_battery(
+            bytes([0x05, 0x00, 85, 4, 0x01, 0x00]), 0x05, H.FEAT_UNIFIED_BATTERY
+        )
         self.assertEqual(info.percent, 85)
 
     def test_percent_property_mapping(self):

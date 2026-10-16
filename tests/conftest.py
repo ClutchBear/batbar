@@ -15,6 +15,7 @@ exe 所在目录（= 发布目录），搬迁逻辑随即把这份**测试数据
     `bt_battery._accept()` → `lastknown.put()` 这种间接路径），所以在顶层一次性
     重定向 `lastknown` 的落点。
 """
+
 from __future__ import annotations
 
 import pytest

@@ -6,6 +6,7 @@
   3. 蓝牙兜底：agent 定期跑 PowerShell 读 BTHENUM 电量属性，结果透传给本状态机
   4. 变化检测：percent/charging 变化或跨 5% 档位 → dirty → 触发重新渲染图标
 """
+
 from __future__ import annotations
 
 import logging
@@ -89,10 +90,12 @@ class BatteryPoller:
         self._mark_dirty()
 
     def _hidpp_alive(self) -> bool:
-        return (self.state.info is not None
-                and not self.state.sleeping
-                and self.state.info.source != "bluetooth"
-                and (self._now() - self.state.last_ok_ts) < POLL_SLEEPING * 2)
+        return (
+            self.state.info is not None
+            and not self.state.sleeping
+            and self.state.info.source != "bluetooth"
+            and (self._now() - self.state.last_ok_ts) < POLL_SLEEPING * 2
+        )
 
     # ---- 同步模式（Windows 直跑） ----
     def due(self) -> bool:

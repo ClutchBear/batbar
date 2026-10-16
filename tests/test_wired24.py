@@ -6,6 +6,7 @@
                                                   [8]=0x5a=90%  [9]=0x10=充电中
 同刻 2.4G 通道也报 90%，两条链路互证。
 """
+
 from __future__ import annotations
 
 import unittest
@@ -34,12 +35,12 @@ class ParseWired(unittest.TestCase):
 
     def test_bad_header_rejected(self):
         raw = bytearray(REAL_ACK)
-        raw[1] = 0x4A                      # 不是 87 应答
+        raw[1] = 0x4A  # 不是 87 应答
         self.assertIsNone(W.parse_wired(bytes(raw)))
 
     def test_out_of_range_rejected(self):
         raw = bytearray(REAL_ACK)
-        raw[8] = 0xFF                      # 255% 显然不是电量
+        raw[8] = 0xFF  # 255% 显然不是电量
         self.assertIsNone(W.parse_wired(bytes(raw)))
 
     def test_short_frame_rejected(self):
@@ -52,8 +53,7 @@ class State(unittest.TestCase):
 
     def test_plugged_and_reading(self):
         with W._lock:
-            W._state["键盘 迈从 K87"] = {"path": "x", "featlen": 520,
-                                        "pct": 90, "charging": True, "ts": 0.0}
+            W._state["键盘 迈从 K87"] = {"path": "x", "featlen": 520, "pct": 90, "charging": True, "ts": 0.0}
         self.assertTrue(W.plugged("键盘 迈从 K87"))
         self.assertEqual(W.battery("键盘 迈从 K87"), 90)
         self.assertTrue(W.charging("键盘 迈从 K87"))
@@ -67,23 +67,26 @@ class State(unittest.TestCase):
         """关机档 + 数据线：主控不上电，电量计固定回 0（探针实测 `…00 10`）。
         这不是真实电量，battery() 必须转 None → 菜单显示 "?"，不误导成 0%。"""
         with W._lock:
-            W._state["键盘 迈从 K87"] = {"path": "x", "featlen": 520,
-                                        "pct": 0, "charging": True, "ts": 0.0}
+            W._state["键盘 迈从 K87"] = {"path": "x", "featlen": 520, "pct": 0, "charging": True, "ts": 0.0}
         self.assertIsNone(W.battery("键盘 迈从 K87"))
-        self.assertTrue(W.plugged("键盘 迈从 K87"))     # 仍在充电，⚡ 照给
+        self.assertTrue(W.plugged("键盘 迈从 K87"))  # 仍在充电，⚡ 照给
 
     def test_zero_not_charging_is_real(self):
         """0% 但没在充电（真耗干了）：是真实读数，原样返回 0。"""
         with W._lock:
-            W._state["键盘 迈从 K87"] = {"path": "x", "featlen": 520,
-                                        "pct": 0, "charging": False, "ts": 0.0}
+            W._state["键盘 迈从 K87"] = {"path": "x", "featlen": 520, "pct": 0, "charging": False, "ts": 0.0}
         self.assertEqual(W.battery("键盘 迈从 K87"), 0)
 
     def test_read_failed_keeps_plugged(self):
         """插着但这一枪没读到：plugged 仍为真、电量 None（不冒充读数）。"""
         with W._lock:
-            W._state["键盘 迈从 K87"] = {"path": "x", "featlen": 520,
-                                        "pct": None, "charging": False, "ts": 0.0}
+            W._state["键盘 迈从 K87"] = {
+                "path": "x",
+                "featlen": 520,
+                "pct": None,
+                "charging": False,
+                "ts": 0.0,
+            }
         self.assertTrue(W.plugged("键盘 迈从 K87"))
         self.assertIsNone(W.battery("键盘 迈从 K87"))
 
@@ -99,6 +102,7 @@ class SharedArgtypes(unittest.TestCase):
 
     def _skip_nonwin(self):
         import sys
+
         if not sys.platform.startswith("win"):
             self.skipTest("Windows only")
 
@@ -108,21 +112,21 @@ class SharedArgtypes(unittest.TestCase):
         import ctypes
         from batbar import receiver24 as R
         from batbar import wired24 as W
-        W._declare(ctypes.windll.setupapi, ctypes.windll.hid,
-                   ctypes.windll.kernel32)
-        R.enumerate_receivers()          # 修前这里抛 ArgumentError
+
+        W._declare(ctypes.windll.setupapi, ctypes.windll.hid, ctypes.windll.kernel32)
+        R.enumerate_receivers()  # 修前这里抛 ArgumentError
 
     def test_shared_fn_argtypes_are_typeless(self):
         """共享函数的指针参数必须是无类型的 c_void_p。"""
         self._skip_nonwin()
         import ctypes
         from batbar import wired24 as W
+
         hid = ctypes.windll.hid
         W._declare(ctypes.windll.setupapi, hid, ctypes.windll.kernel32)
         for fn in ("HidD_GetAttributes", "HidP_GetCaps", "HidD_GetHidGuid"):
             for arg in getattr(hid, fn).argtypes or ():
-                self.assertIs(arg, ctypes.c_void_p,
-                              f"{fn} 的指针参数绑了具体结构体，会覆盖其它模块的声明")
+                self.assertIs(arg, ctypes.c_void_p, f"{fn} 的指针参数绑了具体结构体，会覆盖其它模块的声明")
 
 
 class LeobogWired(unittest.TestCase):
@@ -134,8 +138,7 @@ class LeobogWired(unittest.TestCase):
     """
 
     # 实测 LEOBOG 有线应答（截前 20 字节）
-    LEOBOG_ACK = bytes.fromhex(
-        "06 87 00 00 01 00 02 00 64 10 00 00 00 00 00 00 00 00 00 00")
+    LEOBOG_ACK = bytes.fromhex("06 87 00 00 01 00 02 00 64 10 00 00 00 00 00 00 00 00 00 00")
 
     def test_parse_leobog_sample(self):
         self.assertEqual(W.parse_wired(self.LEOBOG_ACK), (100, True))
@@ -143,8 +146,8 @@ class LeobogWired(unittest.TestCase):
     def test_wired_target_registered(self):
         """258A:010C 必须在 WIRED_TARGETS 里，且映射到 LEOBOG 友好名。"""
         from batbar.dongle import TARGETS, WIRED_TARGETS
-        self.assertEqual(WIRED_TARGETS.get((0x258A, 0x010C)),
-                         "键盘 LEOBOG Hi98C Pro")
+
+        self.assertEqual(WIRED_TARGETS.get((0x258A, 0x010C)), "键盘 LEOBOG Hi98C Pro")
         # 它不能同时在 TARGETS（2.4G 接收器表）里——那是 3554:FA09
         self.assertNotIn((0x258A, 0x010C), TARGETS)
 
@@ -153,6 +156,7 @@ class LeobogWired(unittest.TestCase):
         否则 plugged()/wired_bases() 与 dongle 帧统计对不上 key，
         插线的 LEOBOG 会被当成两台设备。"""
         from batbar.dongle import TARGETS, WIRED_TARGETS
+
         leobog_24g = TARGETS[(0x3554, 0xFA09)]
         leobog_wired = WIRED_TARGETS[(0x258A, 0x010C)]
         self.assertEqual(leobog_24g, leobog_wired)

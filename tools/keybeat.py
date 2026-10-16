@@ -30,6 +30,7 @@ type=05 的电量帧到底是不是敲键催出来的？ type=02 的背光帧在
     听到【长响】= 按提示敲 N 下；【两短响】= 立刻停手离开键盘。
     Ctrl+C 可提前结束，已抓到的帧照样出报告。
 """
+
 from __future__ import annotations
 
 import argparse
@@ -49,11 +50,11 @@ _MAGIC = bytes((0x13, 0x0A, 0x01, 0x00, 0x04))
 T_BACKLIGHT, T_BATTERY, T_HANDSHAKE = 0x02, 0x05, 0x07
 
 _lock = threading.Lock()
-_frames: list[tuple[float, str, str]] = []      # (自 t0 的秒数, kind, 可读值)
+_frames: list[tuple[float, str, str]] = []  # (自 t0 的秒数, kind, 可读值)
 _t0 = time.perf_counter()
 _handle = None
 _stop = threading.Event()
-_link_ok = False                                 # 是否真的拿到了 HID 句柄
+_link_ok = False  # 是否真的拿到了 HID 句柄
 _link_err = ""
 _plan: list["Ev"] = []
 
@@ -70,14 +71,23 @@ def stamp() -> str:
 
 # ──────────────────────────  HID 只读监听  ──────────────────────────
 
+
 class _GUID(ctypes.Structure):
-    _fields_ = [("Data1", wintypes.DWORD), ("Data2", ctypes.c_ushort),
-                ("Data3", ctypes.c_ushort), ("Data4", ctypes.c_ubyte * 8)]
+    _fields_ = [
+        ("Data1", wintypes.DWORD),
+        ("Data2", ctypes.c_ushort),
+        ("Data3", ctypes.c_ushort),
+        ("Data4", ctypes.c_ubyte * 8),
+    ]
 
 
 class _IFD(ctypes.Structure):
-    _fields_ = [("cbSize", wintypes.DWORD), ("InterfaceClassGuid", _GUID),
-                ("Flags", wintypes.DWORD), ("Reserved", ctypes.c_ulonglong)]
+    _fields_ = [
+        ("cbSize", wintypes.DWORD),
+        ("InterfaceClassGuid", _GUID),
+        ("Flags", wintypes.DWORD),
+        ("Reserved", ctypes.c_ulonglong),
+    ]
 
 
 class _DETAIL(ctypes.Structure):
@@ -86,73 +96,95 @@ class _DETAIL(ctypes.Structure):
 
 class _CAPS(ctypes.Structure):
     """HIDP_CAPS —— 字段顺序照 MSDN，错一位就读到垃圾长度。"""
-    _fields_ = [("Usage", ctypes.c_ushort), ("UsagePage", ctypes.c_ushort),
-                ("InputReportByteLength", ctypes.c_ushort),
-                ("OutputReportByteLength", ctypes.c_ushort),
-                ("FeatureReportByteLength", ctypes.c_ushort),
-                ("Reserved", ctypes.c_ushort * 17),
-                ("NumberLinkCollectionNodes", ctypes.c_ushort),
-                ("NumberInputButtonCaps", ctypes.c_ushort),
-                ("NumberInputValueCaps", ctypes.c_ushort),
-                ("NumberInputDataIndices", ctypes.c_ushort),
-                ("NumberOutputButtonCaps", ctypes.c_ushort),
-                ("NumberOutputValueCaps", ctypes.c_ushort),
-                ("NumberOutputDataIndices", ctypes.c_ushort),
-                ("NumberFeatureButtonCaps", ctypes.c_ushort),
-                ("NumberFeatureValueCaps", ctypes.c_ushort),
-                ("NumberFeatureDataIndices", ctypes.c_ushort)]
+
+    _fields_ = [
+        ("Usage", ctypes.c_ushort),
+        ("UsagePage", ctypes.c_ushort),
+        ("InputReportByteLength", ctypes.c_ushort),
+        ("OutputReportByteLength", ctypes.c_ushort),
+        ("FeatureReportByteLength", ctypes.c_ushort),
+        ("Reserved", ctypes.c_ushort * 17),
+        ("NumberLinkCollectionNodes", ctypes.c_ushort),
+        ("NumberInputButtonCaps", ctypes.c_ushort),
+        ("NumberInputValueCaps", ctypes.c_ushort),
+        ("NumberInputDataIndices", ctypes.c_ushort),
+        ("NumberOutputButtonCaps", ctypes.c_ushort),
+        ("NumberOutputValueCaps", ctypes.c_ushort),
+        ("NumberOutputDataIndices", ctypes.c_ushort),
+        ("NumberFeatureButtonCaps", ctypes.c_ushort),
+        ("NumberFeatureValueCaps", ctypes.c_ushort),
+        ("NumberFeatureDataIndices", ctypes.c_ushort),
+    ]
 
 
 def _open_target():
     """找到已知接收器的 0xFF02 输入接口，只读打开。返回 (handle, 友好名)。"""
-    setupapi = ctypes.windll.setupapi            # type: ignore[attr-defined]
-    hid = ctypes.windll.hid                      # type: ignore[attr-defined]
-    k32 = ctypes.windll.kernel32                 # type: ignore[attr-defined]
+    setupapi = ctypes.windll.setupapi  # type: ignore[attr-defined]
+    hid = ctypes.windll.hid  # type: ignore[attr-defined]
+    k32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
 
     guid = _GUID()
     hid.HidD_GetHidGuid.argtypes = [POINTER(_GUID)]
     hid.HidD_GetHidGuid(byref(guid))
     setupapi.SetupDiGetClassDevsW.restype = wintypes.HANDLE
-    setupapi.SetupDiGetClassDevsW.argtypes = [POINTER(_GUID), wintypes.LPCWSTR,
-                                              wintypes.HWND, wintypes.DWORD]
+    setupapi.SetupDiGetClassDevsW.argtypes = [POINTER(_GUID), wintypes.LPCWSTR, wintypes.HWND, wintypes.DWORD]
     hdev = setupapi.SetupDiGetClassDevsW(byref(guid), None, None, 0x02 | 0x10)
     if not hdev or hdev == ctypes.c_void_p(-1).value:
         return None, None
 
     setupapi.SetupDiEnumDeviceInterfaces.argtypes = [
-        wintypes.HANDLE, ctypes.c_void_p, POINTER(_GUID), wintypes.DWORD,
-        POINTER(_IFD)]
+        wintypes.HANDLE,
+        ctypes.c_void_p,
+        POINTER(_GUID),
+        wintypes.DWORD,
+        POINTER(_IFD),
+    ]
     setupapi.SetupDiEnumDeviceInterfaces.restype = wintypes.BOOL
     setupapi.SetupDiGetDeviceInterfaceDetailW.argtypes = [
-        wintypes.HANDLE, POINTER(_IFD), POINTER(_DETAIL), wintypes.DWORD,
-        POINTER(wintypes.DWORD), ctypes.c_void_p]
+        wintypes.HANDLE,
+        POINTER(_IFD),
+        POINTER(_DETAIL),
+        wintypes.DWORD,
+        POINTER(wintypes.DWORD),
+        ctypes.c_void_p,
+    ]
     setupapi.SetupDiGetDeviceInterfaceDetailW.restype = wintypes.BOOL
-    hid.HidD_GetPreparsedData.argtypes = [wintypes.HANDLE,
-                                          POINTER(ctypes.c_void_p)]
+    hid.HidD_GetPreparsedData.argtypes = [wintypes.HANDLE, POINTER(ctypes.c_void_p)]
     hid.HidP_GetCaps.argtypes = [ctypes.c_void_p, POINTER(_CAPS)]
     hid.HidD_FreePreparsedData.argtypes = [ctypes.c_void_p]
     k32.CreateFileW.restype = wintypes.HANDLE
-    k32.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
-                                ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD,
-                                wintypes.HANDLE]
+    k32.CreateFileW.argtypes = [
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.HANDLE,
+    ]
     k32.CloseHandle.argtypes = [wintypes.HANDLE]
-    k32.ReadFile.argtypes = [wintypes.HANDLE, ctypes.c_void_p, wintypes.DWORD,
-                             POINTER(wintypes.DWORD), ctypes.c_void_p]
+    k32.ReadFile.argtypes = [
+        wintypes.HANDLE,
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        POINTER(wintypes.DWORD),
+        ctypes.c_void_p,
+    ]
 
     found = (None, None)
     i = 0
     while True:
         ifd = _IFD()
-        ifd.cbSize = ctypes.sizeof(_IFD)         # 不设 → 第一条就枚举失败
-        if not setupapi.SetupDiEnumDeviceInterfaces(hdev, None, byref(guid), i,
-                                                    byref(ifd)):
+        ifd.cbSize = ctypes.sizeof(_IFD)  # 不设 → 第一条就枚举失败
+        if not setupapi.SetupDiEnumDeviceInterfaces(hdev, None, byref(guid), i, byref(ifd)):
             break
         i += 1
         det = _DETAIL()
-        det.cbSize = 8                           # x64 对齐后必须是 8
+        det.cbSize = 8  # x64 对齐后必须是 8
         size = wintypes.DWORD(ctypes.sizeof(_DETAIL))
         if not setupapi.SetupDiGetDeviceInterfaceDetailW(
-                hdev, byref(ifd), byref(det), size, byref(size), None):
+            hdev, byref(ifd), byref(det), size, byref(size), None
+        ):
             continue
         up = det.DevicePath.upper()
         hit = None
@@ -186,7 +218,7 @@ def parse_frame(data: bytes) -> tuple[str, str] | None:
     """解析一帧 -> (kind, 可读值)。帧头不符或 sum8 校验失败返回 None。"""
     if len(data) < FRAME_LEN or bytes(data[:5]) != _MAGIC:
         return None
-    if (sum(data[:8]) & 0xFF) != data[FRAME_LEN - 1]:   # 校验位在最后一字节
+    if (sum(data[:8]) & 0xFF) != data[FRAME_LEN - 1]:  # 校验位在最后一字节
         return None
     t, a = data[5], data[6]
     if t == T_BATTERY:
@@ -209,10 +241,10 @@ def _reader() -> None:
     if sys.platform != "win32":
         _link_err = "非 Windows 平台"
         return
-    k32 = ctypes.windll.kernel32                 # type: ignore[attr-defined]
+    k32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
     try:
         _handle, name = _open_target()
-    except Exception as exc:                     # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         _handle, name, _link_err = None, None, str(exc)
     if not _handle:
         _link_err = _link_err or "没找到接收器（或被其他进程独占）"
@@ -228,26 +260,31 @@ def _reader() -> None:
                 _link_err = f"ReadFile 失败 err={k32.GetLastError()}（拔了？）"
                 break
             if n.value:
-                got = parse_frame(bytes(buf[:n.value]))
+                got = parse_frame(bytes(buf[: n.value]))
                 if got:
                     push(now_rel(), got[0], got[1])
     finally:
         try:
             k32.CloseHandle(_handle)
-        except Exception:                        # noqa: BLE001
+        except Exception:  # noqa: BLE001
             pass
 
 
 # ───────────────── 提醒：声音 + 闪烁 + 标题 ─────────────────
 
+
 class _FLASHWINFO(ctypes.Structure):
-    _fields_ = [("cbSize", wintypes.UINT), ("hwnd", wintypes.HWND),
-                ("dwFlags", wintypes.DWORD), ("uCount", wintypes.UINT),
-                ("dwTimeout", wintypes.DWORD)]
+    _fields_ = [
+        ("cbSize", wintypes.UINT),
+        ("hwnd", wintypes.HWND),
+        ("dwFlags", wintypes.DWORD),
+        ("uCount", wintypes.UINT),
+        ("dwTimeout", wintypes.DWORD),
+    ]
 
 
 _sound = True
-_idle = 30.0          # 驱动里「休眠」滑块的秒数（判读对照用）
+_idle = 30.0  # 驱动里「休眠」滑块的秒数（判读对照用）
 
 
 def _beep(freq: int, ms: int) -> None:
@@ -256,18 +293,18 @@ def _beep(freq: int, ms: int) -> None:
         return
     try:
         import winsound
-        threading.Thread(target=winsound.Beep, args=(freq, ms),
-                         daemon=True).start()
-    except Exception:                            # noqa: BLE001
+
+        threading.Thread(target=winsound.Beep, args=(freq, ms), daemon=True).start()
+    except Exception:  # noqa: BLE001
         pass
 
 
 def alert(title: str, *, long_ring: bool = True) -> None:
     """三路提醒。你可能在别的窗口里，光打印看不见，所以：
 
-      · 长响 880Hz        = 现在开始敲
-      · 两短响 1568/1245  = 立刻停手（这个区分最重要，手不离开就测不出静默）
-      · 任务栏闪烁 + 控制台标题会把当前指令顶出来
+    · 长响 880Hz        = 现在开始敲
+    · 两短响 1568/1245  = 立刻停手（这个区分最重要，手不离开就测不出静默）
+    · 任务栏闪烁 + 控制台标题会把当前指令顶出来
     """
     print(f"\n>>> {title}\n", flush=True)
     if sys.platform == "win32":
@@ -278,11 +315,11 @@ def alert(title: str, *, long_ring: bool = True) -> None:
                 f = _FLASHWINFO()
                 f.cbSize = ctypes.sizeof(f)
                 f.hwnd = hwnd
-                f.dwFlags = 0x00000003          # FLASHW_CAPTION | FLASHW_TRAY
+                f.dwFlags = 0x00000003  # FLASHW_CAPTION | FLASHW_TRAY
                 f.uCount = 5
                 f.dwTimeout = 0
                 ctypes.windll.user32.FlashWindowEx(byref(f))
-        except Exception:                        # noqa: BLE001
+        except Exception:  # noqa: BLE001
             pass
     if long_ring:
         _beep(880, 320)
@@ -294,10 +331,11 @@ def alert(title: str, *, long_ring: bool = True) -> None:
 
 # ──────────────────────────  时间轴方案  ──────────────────────────
 
+
 @dataclass
 class Ev:
-    t: float            # 相对启动的秒
-    kind: str           # press | stop | note
+    t: float  # 相对启动的秒
+    kind: str  # press | stop | note
     text: str
 
 
@@ -329,12 +367,12 @@ PLANS: dict[str, list[Ev]] = {
 def build_plan(args) -> list[Ev]:
     if getattr(args, "at", None):
         last = float(args.at[-1])
-        return ([Ev(float(t), "press", f"敲 {args.taps} 下") for t in args.at]
-                + [Ev(last + args.tail, "note", "观察结束")])
+        return [Ev(float(t), "press", f"敲 {args.taps} 下") for t in args.at] + [
+            Ev(last + args.tail, "note", "观察结束")
+        ]
     if getattr(args, "every", None) is not None:
         rounds = args.rounds or 5
-        evs = [Ev(i * args.every, "press", f"敲 {args.taps} 下")
-               for i in range(rounds)]
+        evs = [Ev(i * args.every, "press", f"敲 {args.taps} 下") for i in range(rounds)]
         evs.append(Ev(rounds * args.every, "stop", "停手！观察收尾"))
         evs.append(Ev(rounds * args.every + args.tail, "note", "观察结束"))
         return evs
@@ -343,8 +381,7 @@ def build_plan(args) -> list[Ev]:
 
 # ──────────────────────────  报告  ──────────────────────────
 
-_KIND_CN = {"battery": "电量", "backlight": "背光", "handshake": "握手",
-            "other": "其他"}
+_KIND_CN = {"battery": "电量", "backlight": "背光", "handshake": "握手", "other": "其他"}
 
 
 def render_report(plan: list[Ev], desc: str, idle_sec: float = 30.0) -> str:
@@ -367,50 +404,62 @@ def render_report(plan: list[Ev], desc: str, idle_sec: float = 30.0) -> str:
         tail = "；".join(win) if win else "（无）"
         lines.append(f"| +{e.t:.0f}s | {e.text} | {tail} |")
 
-    lines += ["", "## 二、原始帧流", "",
-              "| 相对时刻 | 绝对时刻 | 距上一帧 | 类型 | 值 |",
-              "|---|---|---|---|---|"]
+    lines += [
+        "",
+        "## 二、原始帧流",
+        "",
+        "| 相对时刻 | 绝对时刻 | 距上一帧 | 类型 | 值 |",
+        "|---|---|---|---|---|",
+    ]
     prev = None
     for rel, kind, text in frames:
         gap = "—" if prev is None else f"{rel - prev:.1f}s"
         prev = rel
-        lines.append(f"| +{rel:.2f}s | {stamp_rel(rel)} | {gap} | "
-                     f"{_KIND_CN.get(kind, kind)} | {text} |")
+        lines.append(f"| +{rel:.2f}s | {stamp_rel(rel)} | {gap} | {_KIND_CN.get(kind, kind)} | {text} |")
 
     # 自动判读：把「敲键 → 电量帧」的因果直接算出来，省得人肉对
     press_ts = [e.t for e in plan if e.kind == "press"]
     bat = [(r, v) for r, k, v in frames if k == "battery"]
     lines += ["", "## 三、自动判读", ""]
     if not frames:
-        lines.append("- **全程零帧。** 可能：① 托盘程序没退（抢帧）；"
-                     "② 接收器不在目标接口上；③ 键盘真的关机了。")
+        lines.append(
+            "- **全程零帧。** 可能：① 托盘程序没退（抢帧）；② 接收器不在目标接口上；③ 键盘真的关机了。"
+        )
     else:
         after = [b for b in bat if any(0 <= b[0] - p <= 10 for p in press_ts)]
-        lines.append(f"- 电量帧共 {len(bat)} 条，其中 **{len(after)} 条**"
-                     f"紧跟在敲键指令后 10 秒内。")
+        lines.append(f"- 电量帧共 {len(bat)} 条，其中 **{len(after)} 条**紧跟在敲键指令后 10 秒内。")
         if bat and len(after) == len(bat):
-            lines.append("  - ⇒ **电量帧只在键盘活动时出现**；静默期拿不到新读数，"
-                         "这是事件驱动通道的正常表现（不是 bug）。")
+            lines.append(
+                "  - ⇒ **电量帧只在键盘活动时出现**；静默期拿不到新读数，"
+                "这是事件驱动通道的正常表现（不是 bug）。"
+            )
         elif bat and not after:
             lines.append("  - ⇒ 电量帧与敲键**无关**，大概率是键盘自发周期上报。")
         stops = [e.t for e in plan if e.kind == "stop"]
         if stops:
             idle = stops[0]
             silent = [r for r, _k, _v in frames if r > idle + 15]
-            lines.append(f"- 停手 15 秒后又来 {len(silent)} 帧"
-                         + (f"，最后一次在 +{max(silent):.0f}s。"
-                            if silent else
-                            "，**完全静默** —— 支持「关机/深睡 ⇒ 零流量」判据。"))
+            lines.append(
+                f"- 停手 15 秒后又来 {len(silent)} 帧"
+                + (
+                    f"，最后一次在 +{max(silent):.0f}s。"
+                    if silent
+                    else "，**完全静默** —— 支持「关机/深睡 ⇒ 零流量」判据。"
+                )
+            )
             # 对照驱动里的「休眠」滑块：停手后第一条背光灭帧应该 ≈ 设定值
-            bl_off = [r for r, k, v in frames
-                      if k == "backlight" and r > idle and "灭" in v]
+            bl_off = [r for r, k, v in frames if k == "backlight" and r > idle and "灭" in v]
             if bl_off:
                 d = bl_off[0] - idle
-                lines.append(f"- 停手 → 背光灭帧延迟 **{d:.1f}s**"
-                             f"（驱动休眠设定 {idle_sec:g}s，偏差 {d - idle_sec:+.1f}s）。")
+                lines.append(
+                    f"- 停手 → 背光灭帧延迟 **{d:.1f}s**"
+                    f"（驱动休眠设定 {idle_sec:g}s，偏差 {d - idle_sec:+.1f}s）。"
+                )
             elif any(k == "backlight" for _r, k, _v in frames):
-                lines.append(f"- 停手后 {idle_sec:g}s 内**没有**背光灭帧 ——"
-                             "要么休眠上报不走这条通道，要么延迟明显大于设定值，值得注意。")
+                lines.append(
+                    f"- 停手后 {idle_sec:g}s 内**没有**背光灭帧 ——"
+                    "要么休眠上报不走这条通道，要么延迟明显大于设定值，值得注意。"
+                )
     return "\n".join(lines) + "\n"
 
 
@@ -425,22 +474,17 @@ def main() -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # 中文窗必需
 
-    ap = argparse.ArgumentParser(
-        description="键盘节拍助手：按时间表敲键，并把 HID 帧对齐到同一时间轴")
+    ap = argparse.ArgumentParser(description="键盘节拍助手：按时间表敲键，并把 HID 帧对齐到同一时间轴")
     ap.add_argument("--plan", choices=sorted(PLANS), default="wake")
-    ap.add_argument("--at", type=float, nargs="+", metavar="SEC",
-                    help="自定义敲键时刻（秒，可多个）")
+    ap.add_argument("--at", type=float, nargs="+", metavar="SEC", help="自定义敲键时刻（秒，可多个）")
     ap.add_argument("--every", type=float, metavar="SEC", help="每隔几秒敲一次")
     ap.add_argument("--rounds", type=int, default=5, help="配合 --every，敲几轮")
     ap.add_argument("--taps", type=int, default=5, help="每次敲几下（默认 5）")
-    ap.add_argument("--tail", type=float, default=60,
-                    help="最后一次敲键后再观察多少秒（默认 60）")
+    ap.add_argument("--tail", type=float, default=60, help="最后一次敲键后再观察多少秒（默认 60）")
     ap.add_argument("--out", default="_tmp", help="报告输出目录")
-    ap.add_argument("--idle", type=float, default=30,
-                    help="驱动「休眠」滑块的秒数，判读对照用（默认 30）")
+    ap.add_argument("--idle", type=float, default=30, help="驱动「休眠」滑块的秒数，判读对照用（默认 30）")
     ap.add_argument("--no-sound", action="store_true", help="静音，只闪烁提醒")
-    ap.add_argument("--selftest", action="store_true",
-                    help="自检：不接 HID、加速时间轴、喂合成帧")
+    ap.add_argument("--selftest", action="store_true", help="自检：不接 HID、加速时间轴、喂合成帧")
     args = ap.parse_args()
     _sound = not args.no_sound
     _idle = args.idle
@@ -449,9 +493,13 @@ def main() -> int:
     speed = 0.02 if args.selftest else 1.0
 
     _plan = build_plan(args)
-    desc = ("自定义时刻 " + ", ".join(f"{t:g}s" for t in args.at) if args.at else
-            f"每 {args.every:g}s × {args.rounds} 轮"
-            if args.every is not None else args.plan)
+    desc = (
+        "自定义时刻 " + ", ".join(f"{t:g}s" for t in args.at)
+        if args.at
+        else f"每 {args.every:g}s × {args.rounds} 轮"
+        if args.every is not None
+        else args.plan
+    )
 
     print("=" * 66)
     print(" keybeat —— 键盘节拍助手")
@@ -461,10 +509,14 @@ def main() -> int:
     print("=" * 66)
 
     if args.selftest:
-        threading.Thread(target=lambda: [push(0.4, "battery", "电量 93%"),
-                                         push(1.6, "backlight", "背光 亮"),
-                                         push(20.3, "battery", "电量 93%")],
-                         daemon=True).start()
+        threading.Thread(
+            target=lambda: [
+                push(0.4, "battery", "电量 93%"),
+                push(1.6, "backlight", "背光 亮"),
+                push(20.3, "battery", "电量 93%"),
+            ],
+            daemon=True,
+        ).start()
     else:
         threading.Thread(target=_reader, daemon=True).start()
         time.sleep(1.0)
@@ -482,9 +534,8 @@ def main() -> int:
                 left = end - time.perf_counter()
                 if left <= 0:
                     break
-                if left <= 3:                    # 最后 3 秒倒计时，好把手放上键盘
-                    print(f"\r  ... {left:4.1f}s 后：{e.text[:24]}",
-                          end="", flush=True)
+                if left <= 3:  # 最后 3 秒倒计时，好把手放上键盘
+                    print(f"\r  ... {left:4.1f}s 后：{e.text[:24]}", end="", flush=True)
                     time.sleep(0.1)
                 else:
                     time.sleep(min(0.25, max(0.05, left - 3)))

@@ -8,6 +8,7 @@
 
 全 stdlib、无需 Windows（纯逻辑层不碰 ctypes）。
 """
+
 from __future__ import annotations
 
 import os
@@ -55,8 +56,7 @@ class DontDisturbClassifier(unittest.TestCase):
 
     def test_state_name(self):
         self.assertEqual(F.state_name(F.QUNS_BUSY), "BUSY")
-        self.assertEqual(F.state_name(F.QUNS_ACCEPTS_NOTIFICATIONS),
-                         "ACCEPTS_NOTIFICATIONS")
+        self.assertEqual(F.state_name(F.QUNS_ACCEPTS_NOTIFICATIONS), "ACCEPTS_NOTIFICATIONS")
         self.assertEqual(F.state_name(None), "None")
         self.assertIn("999", F.state_name(999))
 
@@ -66,8 +66,7 @@ class ModeParsing(unittest.TestCase):
 
     def test_auto_default(self):
         self.assertEqual(F.parse_mode(""), F.MODE_AUTO)
-        self.assertEqual(F.parse_mode(None) if False else F.MODE_AUTO,
-                         F.MODE_AUTO)
+        self.assertEqual(F.parse_mode(None) if False else F.MODE_AUTO, F.MODE_AUTO)
 
     def test_off_variants(self):
         for v in ("off", "OFF", " 0 ", "false", "no", "disable", "disabled"):
@@ -106,10 +105,10 @@ class GateHysteresis(unittest.TestCase):
     def test_needs_enter_streak_to_activate(self):
         g = self._gate(enter_streak=3, exit_streak=5)
         self.assertFalse(g.active)
-        self.assertFalse(g.sample(F.QUNS_BUSY, 0.0))    # 1
-        self.assertFalse(g.sample(F.QUNS_BUSY, 1.0))    # 2
-        self.assertFalse(g.active)                      # 还差一次
-        self.assertTrue(g.sample(F.QUNS_BUSY, 2.0))     # 3 → 翻面
+        self.assertFalse(g.sample(F.QUNS_BUSY, 0.0))  # 1
+        self.assertFalse(g.sample(F.QUNS_BUSY, 1.0))  # 2
+        self.assertFalse(g.active)  # 还差一次
+        self.assertTrue(g.sample(F.QUNS_BUSY, 2.0))  # 3 → 翻面
         self.assertTrue(g.active)
 
     def test_single_spike_does_not_activate(self):
@@ -118,7 +117,7 @@ class GateHysteresis(unittest.TestCase):
         g.sample(F.QUNS_BUSY, 0.0)
         g.sample(F.QUNS_ACCEPTS_NOTIFICATIONS, 0.1)
         self.assertFalse(g.active)
-        self.assertEqual(g._busy_streak, 0)   # 计数器已复位
+        self.assertEqual(g._busy_streak, 0)  # 计数器已复位
 
     def test_exit_needs_more_streak_than_enter(self):
         """★ 进得快出得慢：进 3 次，出要 5 次。"""
@@ -152,14 +151,14 @@ class GateHysteresis(unittest.TestCase):
         g.sample(F.QUNS_BUSY, 0.0)
         self.assertTrue(g.active)
         g.sample(None, 1.0)
-        self.assertTrue(g.sample(None, 2.0))       # 2 次 None → 退出
+        self.assertTrue(g.sample(None, 2.0))  # 2 次 None → 退出
         self.assertFalse(g.active)
 
     def test_sample_returns_true_only_on_flip(self):
         g = self._gate(enter_streak=2, exit_streak=2)
         self.assertFalse(g.sample(F.QUNS_BUSY, 0.0))
-        self.assertTrue(g.sample(F.QUNS_BUSY, 1.0))     # 翻面
-        self.assertFalse(g.sample(F.QUNS_BUSY, 2.0))    # 已在态内，不重复报
+        self.assertTrue(g.sample(F.QUNS_BUSY, 1.0))  # 翻面
+        self.assertFalse(g.sample(F.QUNS_BUSY, 2.0))  # 已在态内，不重复报
         self.assertFalse(g.sample(F.QUNS_BUSY, 3.0))
 
     def test_since_updates_on_flip(self):
@@ -226,6 +225,7 @@ class AgentWiring(unittest.TestCase):
     def test_agent_has_gate_and_helpers(self):
         import inspect
         from batbar import agent as A
+
         self.assertTrue(hasattr(A.Agent, "_fs_poll_loop"))
         self.assertTrue(hasattr(A.Agent, "_in_dont_disturb"))
         self.assertTrue(hasattr(A.Agent, "_gate_notify"))
@@ -236,6 +236,7 @@ class AgentWiring(unittest.TestCase):
     def test_poll_loop_started_in_run(self):
         import inspect
         from batbar import agent as A
+
         src = inspect.getsource(A.Agent.run)
         self.assertIn("_fs_poll_loop", src)
 
@@ -243,6 +244,7 @@ class AgentWiring(unittest.TestCase):
         """_lowbat_init 必须把门控接进状态机（否则 toast 不受全屏约束）。"""
         import inspect
         from batbar import agent as A
+
         src = inspect.getsource(A.Agent._lowbat_init)
         self.assertIn("gate=", src)
 
@@ -250,6 +252,7 @@ class AgentWiring(unittest.TestCase):
         """_bt_warm_loop 必须查门控并跳过本轮硬件读取。"""
         import inspect
         from batbar import agent as A
+
         src = inspect.getsource(A.Agent._bt_warm_loop)
         self.assertIn("_in_dont_disturb", src)
 
@@ -257,6 +260,7 @@ class AgentWiring(unittest.TestCase):
         """poll24 的跳过判据必须被注入（否则 2.4G 扫描照跑）。"""
         import inspect
         from batbar import agent as A
+
         src = inspect.getsource(A.Agent.run)
         self.assertIn("set_skip_when", src)
 
@@ -264,16 +268,20 @@ class AgentWiring(unittest.TestCase):
         """没有 _fs_gate（未初始化）时不得报错，且当作"不打扰"。"""
         import sys
         import os
+
         sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
         from batbar import agent as A
+
         a = object.__new__(A.Agent)
-        self.assertFalse(a._in_dont_disturb())      # 缺 _fs_gate → False
+        self.assertFalse(a._in_dont_disturb())  # 缺 _fs_gate → False
 
     def test_in_dont_disturb_reflects_gate(self):
         import sys
         import os
+
         sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
         from batbar import agent as A
+
         a = object.__new__(A.Agent)
         a._fs_gate = F.FullscreenGate(mode=F.MODE_ON)
         self.assertTrue(a._in_dont_disturb())
@@ -283,8 +291,10 @@ class AgentWiring(unittest.TestCase):
     def test_gate_notify_counts_suppression(self):
         import sys
         import os
+
         sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
         from batbar import agent as A
+
         a = object.__new__(A.Agent)
         a._fs_skip_toast = 0
         a._fs_gate = F.FullscreenGate(mode=F.MODE_ON)

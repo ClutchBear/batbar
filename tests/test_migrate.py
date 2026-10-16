@@ -14,6 +14,7 @@
 外加两条源码级断言：搬迁必须发生在 `applog.setup()` **之前**（要搬的东西之一
 就是日志文件本身），且在 `anchor_cwd()` 之后（路径可能受 cwd 影响）。
 """
+
 from __future__ import annotations
 
 import os
@@ -35,8 +36,7 @@ class MigrateBehavior(unittest.TestCase):
         self.old = self.tmp / "logi-tray"
         self.new = self.tmp / "batbar"
 
-    def _seed(self, d: Path, log: str = "old log\n",
-              last: str = '{"QCY": {"pct": 100, "ts": 1.0}}') -> None:
+    def _seed(self, d: Path, log: str = "old log\n", last: str = '{"QCY": {"pct": 100, "ts": 1.0}}') -> None:
         """造一份「像真的」数据目录：日志 + 电量表 + pid。"""
         (d / "logs").mkdir(parents=True, exist_ok=True)
         (d / "logs" / "agent.log").write_text(log, encoding="utf-8")
@@ -76,8 +76,7 @@ class MigrateBehavior(unittest.TestCase):
     def test_pid_file_is_not_migrated(self):
         self._seed(self.old)
         M.migrate(self.old, self.new)
-        self.assertFalse((self.new / "agent.pid").exists(),
-                         "PID 是瞬时状态，搬过来可能误杀被复用的 PID")
+        self.assertFalse((self.new / "agent.pid").exists(), "PID 是瞬时状态，搬过来可能误杀被复用的 PID")
 
     # ---- ③ 幂等 --------------------------------------------------------
     def test_second_run_is_noop(self):
@@ -97,8 +96,11 @@ class MigrateBehavior(unittest.TestCase):
 
         moved, why = M.migrate(self.old, self.new)
         self.assertTrue(moved, why)
-        self.assertEqual((self.new / "last-known.json").read_text(encoding="utf-8"),
-                         "NEW", "目标里的新数据不能被旧数据覆盖")
+        self.assertEqual(
+            (self.new / "last-known.json").read_text(encoding="utf-8"),
+            "NEW",
+            "目标里的新数据不能被旧数据覆盖",
+        )
         # 只有日志是搬过来的（电量表被跳过）
         self.assertIn("logs/agent.log", why)
         self.assertNotIn("last-known.json", why)
@@ -109,8 +111,7 @@ class MigrateBehavior(unittest.TestCase):
         (self.new / "logs").mkdir()
         (self.new / "logs" / "agent.log").write_text("NEW LOG\n", encoding="utf-8")
         M.migrate(self.old, self.new)
-        self.assertEqual((self.new / "logs" / "agent.log").read_text(encoding="utf-8"),
-                         "NEW LOG\n")
+        self.assertEqual((self.new / "logs" / "agent.log").read_text(encoding="utf-8"), "NEW LOG\n")
 
     # ---- ⑥ 最新来源优先 ------------------------------------------------
     def test_newest_legacy_source_wins(self):
@@ -124,8 +125,7 @@ class MigrateBehavior(unittest.TestCase):
         with unittest.mock.patch.dict(os.environ, {"LOCALAPPDATA": str(base)}):
             moved, why = M.migrate(None, target)
         self.assertTrue(moved, why)
-        self.assertEqual((target / "last-known.json").read_text(encoding="utf-8"),
-                         "FROM-BATBAR")
+        self.assertEqual((target / "last-known.json").read_text(encoding="utf-8"), "FROM-BATBAR")
 
     # ---- 边界：目录不存在 ----------------------------------------------
     def test_missing_source_is_noop(self):
@@ -144,16 +144,14 @@ class MigrateBehavior(unittest.TestCase):
     # ---- ⑦ 失败不致命 --------------------------------------------------
     def test_copy_failure_returns_false_not_raise(self):
         self._seed(self.old)
-        with unittest.mock.patch.object(M.shutil, "copy2",
-                                        side_effect=OSError("denied")):
+        with unittest.mock.patch.object(M.shutil, "copy2", side_effect=OSError("denied")):
             moved, why = M.migrate(self.old, self.new)
         self.assertFalse(moved)
         self.assertIn("没有可迁移", why)
         self.assertTrue((self.old / "last-known.json").is_file())
 
     def test_no_localappdata_is_noop(self):
-        with unittest.mock.patch.dict(os.environ,
-                                      {"LOCALAPPDATA": "", "APPDATA": ""}):
+        with unittest.mock.patch.dict(os.environ, {"LOCALAPPDATA": "", "APPDATA": ""}):
             moved, why = M.migrate()
         self.assertFalse(moved)
         self.assertIn("拿不到", why)
@@ -163,8 +161,7 @@ class MigrateBehavior(unittest.TestCase):
         base = self.tmp / "appdata"
         with unittest.mock.patch.dict(os.environ, {"LOCALAPPDATA": str(base)}):
             dirs = M.legacy_dirs()
-        self.assertEqual([d.name for d in dirs], ["logi-tray", "batbar"],
-                         "表本身是「最老 → 上一代」的顺序")
+        self.assertEqual([d.name for d in dirs], ["logi-tray", "batbar"], "表本身是「最老 → 上一代」的顺序")
         self.assertEqual(M.LEGACY_DIRNAMES, ("logi-tray", "batbar"))
 
 
@@ -178,16 +175,15 @@ class MigrateIsWiredBeforeLogSetup(unittest.TestCase):
         self.assertEqual(self.src.count("migrate.migrate()"), 1)
 
     def test_migrate_precedes_log_setup(self):
-        body = self.src[self.src.index("def main("):]
+        body = self.src[self.src.index("def main(") :]
         i_mig = body.index("migrate.migrate()")
         # 用带参数的完整调用做锚点：注释里也出现过 "applog.setup()" 字样，
         # 只匹配 "applog.setup(" 会命中注释行（踩过）。
         i_log = body.index('applog.setup("agent"')
-        self.assertLess(i_mig, i_log,
-                        "搬迁必须在 applog.setup() 之前 —— 它要搬的就是日志文件")
+        self.assertLess(i_mig, i_log, "搬迁必须在 applog.setup() 之前 —— 它要搬的就是日志文件")
 
     def test_migrate_after_cwd_anchor(self):
-        body = self.src[self.src.index("def main("):]
+        body = self.src[self.src.index("def main(") :]
         self.assertLess(body.index("anchor_cwd()"), body.index("migrate.migrate()"))
 
     def test_migrate_after_arg_parse(self):
@@ -198,10 +194,12 @@ class MigrateIsWiredBeforeLogSetup(unittest.TestCase):
         存档复制进发布目录并被打进 zip。把搬迁挪到 `parse_args()` 之后，
         argparse 遇到 `--help` / 参数错误会直接 exit，就轮不到搬迁上场了。
         """
-        body = self.src[self.src.index("def main("):]
-        self.assertLess(body.index("args = ap.parse_args()"),
-                        body.index("migrate.migrate()"),
-                        "搬迁必须晚于 parse_args()，否则 --help 也会产生落盘副作用")
+        body = self.src[self.src.index("def main(") :]
+        self.assertLess(
+            body.index("args = ap.parse_args()"),
+            body.index("migrate.migrate()"),
+            "搬迁必须晚于 parse_args()，否则 --help 也会产生落盘副作用",
+        )
 
 
 if __name__ == "__main__":

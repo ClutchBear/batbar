@@ -6,6 +6,7 @@
 2) 把一台在连设备从 _devices 里"藏起来"（模拟它之前断开被摘了）
 3) 调 sync_now，看它能否靠 WinRT 秒判"上线"并加回来 + 计时
 """
+
 import time
 
 from batbar import bt_battery as B

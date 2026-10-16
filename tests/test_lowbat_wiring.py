@@ -2,6 +2,7 @@
 
 只测接线本身（读数如何流进状态机），不测状态机判定（见 test_lowbattery）。
 """
+
 from __future__ import annotations
 
 import unittest
@@ -25,7 +26,7 @@ class FeedWiring(unittest.TestCase):
         LB.reset()
         self.rec = _RecordingWatcher()
         self._saved_get = LB.get
-        LB.get = lambda *a, **k: self.rec          # 注入假状态机
+        LB.get = lambda *a, **k: self.rec  # 注入假状态机
         # 桩掉真实 USB 枚举：_feed_lowbat 会调 wired_bases()，测试机不能真起 shell
         self._saved_wired = R24.wired_bases
         R24.wired_bases = lambda *a, **k: set()
@@ -36,14 +37,14 @@ class FeedWiring(unittest.TestCase):
         LB.reset()
 
     def _agent(self):
-        ag = A.Agent.__new__(A.Agent)             # 绕过 __init__ 的托盘/主题副作用
+        ag = A.Agent.__new__(A.Agent)  # 绕过 __init__ 的托盘/主题副作用
         ag._lowbat = self.rec
         ag._last_info = None
         ag._tracked = "hidpp"
         return ag
 
     def test_feed_uses_base_name_key(self):
-        """"LEOBOG 键盘 (2.4G)" 喂进去要剥成基名，保证跨连接方式计数连续。"""
+        """ "LEOBOG 键盘 (2.4G)" 喂进去要剥成基名，保证跨连接方式计数连续。"""
         ag = self._agent()
         ag._feed_lowbat("LEOBOG 键盘 (2.4G)", 8)
         self.assertEqual(self.rec.feeds[0][0], "LEOBOG 键盘")
@@ -76,13 +77,12 @@ class FeedSnapshot(unittest.TestCase):
         ag._lowbat = self.rec
         ag._last_info = None
         ag._tracked = "hidpp"
-        ag.devices_snapshot = lambda: {"罗技鼠标": 5, "西圣耳机": 90,
-                                       "LEOBOG 键盘 (2.4G)": 3}
+        ag.devices_snapshot = lambda: {"罗技鼠标": 5, "西圣耳机": 90, "LEOBOG 键盘 (2.4G)": 3}
         ag._feed_snapshot()
         fed = {f[0] for f in self.rec.feeds}
         self.assertIn("罗技鼠标", fed)
         self.assertIn("西圣耳机", fed)
-        self.assertIn("LEOBOG 键盘", fed)         # 基名
+        self.assertIn("LEOBOG 键盘", fed)  # 基名
 
 
 if __name__ == "__main__":

@@ -3,6 +3,7 @@
 每个用例都会动 root logger 的 handler，所以 setUp/tearDown 严格存档还原，
 免得污染其它测试的输出。
 """
+
 from __future__ import annotations
 
 import logging
@@ -35,7 +36,7 @@ class Setup(unittest.TestCase):
             root.removeHandler(h)
             try:
                 h.close()
-            except Exception:      # noqa: BLE001
+            except Exception:  # noqa: BLE001
                 pass
         for h in self._saved:
             root.addHandler(h)
@@ -46,7 +47,7 @@ class Setup(unittest.TestCase):
         for h in logging.getLogger().handlers:
             try:
                 h.flush()
-            except Exception:      # noqa: BLE001
+            except Exception:  # noqa: BLE001
                 pass
 
     def test_file_created_and_written(self):
@@ -106,8 +107,9 @@ class Setup(unittest.TestCase):
         p = applog.setup("ut", log_dir=blocker)
         self.assertIsNone(p)
         # 控制台 handler 仍然装上了（日志不至于全丢）
-        self.assertTrue(any(isinstance(h, logging.StreamHandler) for h in _marked(
-            logging.getLogger().handlers)))
+        self.assertTrue(
+            any(isinstance(h, logging.StreamHandler) for h in _marked(logging.getLogger().handlers))
+        )
 
 
 class Level(unittest.TestCase):
@@ -139,6 +141,7 @@ class Level(unittest.TestCase):
 class Dir(unittest.TestCase):
     def test_env_dir_overrides(self):
         import os
+
         old = os.environ.get(applog.ENV_DIR)
         os.environ[applog.ENV_DIR] = r"D:\tmp\batbar-ut"
         try:
@@ -151,6 +154,7 @@ class Dir(unittest.TestCase):
 
     def test_default_under_localappdata(self):
         import os
+
         old = os.environ.get(applog.ENV_DIR)
         os.environ.pop(applog.ENV_DIR, None)
         try:

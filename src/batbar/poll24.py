@@ -29,6 +29,7 @@
 - 键盘**休眠时设备不回帧**（实测）：扫描判它不在 → 条目隐藏，符合
   「休眠与关机同权」的产品决策。
 """
+
 from __future__ import annotations
 
 import ctypes
@@ -43,12 +44,12 @@ from . import win32ctypes as w32
 
 log = logging.getLogger("batbar.poll24")
 
-SCAN_INTERVAL = 60.0          # 扫描间隔：60s（BATBAR_SCAN_24G 可覆盖）。
-                              # bug 13（2026-10-13）：原 300s 让 2.4G 键盘关机
-                              # 后自动消失要等 5 分钟；用户要求「一分钟左右」，
-                              # 扫描本身是 HID 帧查询（一轮 ~1.5s，各设备共享
-                              # 同一个等待窗口），60s 节奏无 CPU/硬件压力。
-SETTLE = 1.5                  # 发查询后等应答的窗口（秒）
+SCAN_INTERVAL = 60.0  # 扫描间隔：60s（BATBAR_SCAN_24G 可覆盖）。
+# bug 13（2026-10-13）：原 300s 让 2.4G 键盘关机
+# 后自动消失要等 5 分钟；用户要求「一分钟左右」，
+# 扫描本身是 HID 帧查询（一轮 ~1.5s，各设备共享
+# 同一个等待窗口），60s 节奏无 CPU/硬件压力。
+SETTLE = 1.5  # 发查询后等应答的窗口（秒）
 
 # 官方 getBattery 无线查询帧（含 sum8 校验尾，共 20B = 0xFF02 的
 # OutputReportByteLength，首字节 0x13 兼作 report ID 与协议 magic）。
@@ -61,13 +62,13 @@ OPEN_EXISTING = 3
 _lock = threading.Lock()
 _thread: threading.Thread | None = None
 _stop = threading.Event()
-_polled: dict[str, float] = {}          # name -> 上次成功发出的时刻（诊断用）
-_online: dict[str, bool] = {}           # name -> 最近一次扫描结论
-_scanned_at: dict[str, float] = {}      # name -> 最近一次扫描时刻
+_polled: dict[str, float] = {}  # name -> 上次成功发出的时刻（诊断用）
+_online: dict[str, bool] = {}  # name -> 最近一次扫描结论
+_scanned_at: dict[str, float] = {}  # name -> 最近一次扫描时刻
 # 可注入的「此刻该跳过扫描吗」判据（2026-10-13 全屏/游戏感知）。默认 None =
 # 从不跳过。agent 启动时 set_skip_when(gate) 注入 —— 这样 poll24 保持自己的
 # 模块独立性（不 import agent），又能感知全屏。
-_skip_when = None                       # type: ignore[var-annotated]
+_skip_when = None  # type: ignore[var-annotated]
 
 
 def set_skip_when(pred) -> None:
@@ -111,7 +112,7 @@ def poll_once(name: str) -> bool:
     path = dongle.seen_path(name)
     if not path:
         return False
-    k32 = ctypes.windll.kernel32              # type: ignore[attr-defined]
+    k32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
     # ★ 签名一律走共享模块（幂等）—— 2026-10-16 审查：这里原本自己写了 6 行
     #   `xxx.argtypes = [...]`（CreateFileW/WriteFile/CloseHandle），而
     #   `win32ctypes.ensure_argtypes()` 是**一次性**的（`_argtypes_done` 后就
@@ -121,11 +122,9 @@ def poll_once(name: str) -> bool:
     #   今天两者类型恰好等价（HANDLE/LPCWSTR 就是 c_void_p/c_wchar_p）所以没炸，
     #   但只要谁去动 win32ctypes，这里就会每 60s 抹一次。改回收敛写法。
     w32.ensure_argtypes()
-    h = k32.CreateFileW(path, GENERIC_WRITE, FILE_SHARE_RW, None,
-                        OPEN_EXISTING, 0, 0)
+    h = k32.CreateFileW(path, GENERIC_WRITE, FILE_SHARE_RW, None, OPEN_EXISTING, 0, 0)
     if not h or h == ctypes.c_void_p(-1).value:
-        log.debug("poll24 %s 打开只写句柄失败 err=%s", name,
-                  ctypes.get_last_error())
+        log.debug("poll24 %s 打开只写句柄失败 err=%s", name, ctypes.get_last_error())
         return False
     try:
         n = wintypes.DWORD(0)
@@ -251,7 +250,7 @@ def _loop() -> None:
             continue
         try:
             scan()
-        except Exception as exc:              # noqa: BLE001 - 单轮失败下轮再试
+        except Exception as exc:  # noqa: BLE001 - 单轮失败下轮再试
             log.debug("poll24 scan: %s", exc)
         _stop.wait(scan_interval())
 

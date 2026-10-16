@@ -15,6 +15,7 @@
   - 字体优先 Segoe UI Bold（Windows 自带、小字号可读性好）
   - 三位数（100）在 16px 下放不下 → 显示 "99"（电量显示惯例）
 """
+
 from __future__ import annotations
 
 import io
@@ -29,13 +30,13 @@ COLOR_ON_DARKTASKBAR = (244, 244, 244, 255)
 # 低电量警告红：取自用户截图（Windows Terminal 错误红调色板，用户定稿 2026-10-12）
 #   #c50f1f = 截图主红（白底上够沉够艳）；#e74856 = 同族亮阶（暗底上更跳，
 #   深色任务栏用 #c50f1f 对比度仅 2.7:1 偏暗，换亮阶 4.2:1）
-RED_ON_DARKTASKBAR = (231, 72, 86, 255)      # #e74856
-RED_ON_LIGHTTASKBAR = (197, 15, 31, 255)     # #c50f1f
+RED_ON_DARKTASKBAR = (231, 72, 86, 255)  # #e74856
+RED_ON_LIGHTTASKBAR = (197, 15, 31, 255)  # #c50f1f
 
 # 候选字体（Windows 路径 + 通用名兜底）
 _FONT_CANDIDATES = [
-    "C:/Windows/Fonts/segoeuib.ttf",   # Segoe UI Bold
-    "C:/Windows/Fonts/arialbd.ttf",    # Arial Bold
+    "C:/Windows/Fonts/segoeuib.ttf",  # Segoe UI Bold
+    "C:/Windows/Fonts/arialbd.ttf",  # Arial Bold
     "arialbd.ttf",
     "segoeuib.ttf",
 ]
@@ -69,17 +70,22 @@ class IconSpec:
     percent: int | None
     charging: bool
     size: int
-    light_taskbar: bool = False   # True=浅色任务栏（黑字）；False=深色（白字）
-    warning: bool = False         # True=低电量警告（数字变红；percent=低电设备读数）
-    no_devices: bool = False      # True=一台设备都不在（语义标记：tooltip 用
-                                  # 「未发现设备」）。⚠️ 2026-10-13 起**不再影响
-                                  # 像素**——percent=None 一律画 "--"，用户定稿
-                                  # 「任何时候都不显示问号」。
+    light_taskbar: bool = False  # True=浅色任务栏（黑字）；False=深色（白字）
+    warning: bool = False  # True=低电量警告（数字变红；percent=低电设备读数）
+    no_devices: bool = False  # True=一台设备都不在（语义标记：tooltip 用
+    # 「未发现设备」）。⚠️ 2026-10-13 起**不再影响
+    # 像素**——percent=None 一律画 "--"，用户定稿
+    # 「任何时候都不显示问号」。
 
     def key(self) -> tuple:
-        return (None if self.percent is None else (self.percent // 5) * 5,
-                self.charging, self.size, self.light_taskbar, self.warning,
-                self.no_devices)
+        return (
+            None if self.percent is None else (self.percent // 5) * 5,
+            self.charging,
+            self.size,
+            self.light_taskbar,
+            self.warning,
+            self.no_devices,
+        )
 
 
 def _text_for(percent: int | None, charging: bool) -> str:
@@ -88,12 +94,11 @@ def _text_for(percent: int | None, charging: bool) -> str:
         # "?" 在"设备根本没连"时纯属误导）。语义差异改由 tooltip 承担：
         # 「启动中…」/「未发现设备」/「{设备名}：未知」。
         return "--"
-    p = max(0, min(99, percent))          # 100 → 99：三位数在 16px 不可读
+    p = max(0, min(99, percent))  # 100 → 99：三位数在 16px 不可读
     return str(p)
 
 
-def _draw_bolt(d: ImageDraw.ImageDraw, cx: float, cy: float, k: float,
-               fill=COLOR_ON_DARKTASKBAR) -> None:
+def _draw_bolt(d: ImageDraw.ImageDraw, cx: float, cy: float, k: float, fill=COLOR_ON_DARKTASKBAR) -> None:
     """手绘闪电（U+26A1 在 Segoe UI Bold 无字形，Pillow 不做字体回退，
     故用折线多边形，任何字号都清晰）。cx,cy=中心，k=半高。
 
@@ -101,9 +106,14 @@ def _draw_bolt(d: ImageDraw.ImageDraw, cx: float, cy: float, k: float,
     （LEOBOG/K87 都不要）。render_icon 恒按无充电布局画纯数字；函数保留
     备用（菜单文字与 tooltip 的 ⚡ 不受影响，那是文案不是图标）。
     """
-    pts = [(cx + k * 0.30, cy - k), (cx - k * 0.55, cy + k * 0.15),
-           (cx - k * 0.05, cy + k * 0.15), (cx - k * 0.30, cy + k),
-           (cx + k * 0.55, cy - k * 0.15), (cx + k * 0.05, cy - k * 0.15)]
+    pts = [
+        (cx + k * 0.30, cy - k),
+        (cx - k * 0.55, cy + k * 0.15),
+        (cx - k * 0.05, cy + k * 0.15),
+        (cx - k * 0.30, cy + k),
+        (cx + k * 0.55, cy - k * 0.15),
+        (cx + k * 0.05, cy - k * 0.15),
+    ]
     d.polygon(pts, fill=fill)
 
 

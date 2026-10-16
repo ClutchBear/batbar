@@ -10,6 +10,7 @@
 用法：
     python tools/verify_no_listener.py [path/to/batbar.exe]
 """
+
 from __future__ import annotations
 
 import socket
@@ -23,7 +24,9 @@ from pathlib import Path
 def _netstat_lines() -> list[str]:
     out = subprocess.run(
         ["netstat", "-ano", "-p", "TCP"],
-        capture_output=True, text=True, errors="replace",
+        capture_output=True,
+        text=True,
+        errors="replace",
     ).stdout
     return out.splitlines()
 
@@ -34,8 +37,12 @@ def listeners_of(pid: int) -> list[str]:
     for ln in _netstat_lines():
         parts = ln.split()
         # TCP   0.0.0.0:51788   0.0.0.0:0   LISTENING   12345
-        if len(parts) >= 5 and parts[0].upper() == "TCP" \
-                and parts[3].upper() == "LISTENING" and parts[-1] == str(pid):
+        if (
+            len(parts) >= 5
+            and parts[0].upper() == "TCP"
+            and parts[3].upper() == "LISTENING"
+            and parts[-1] == str(pid)
+        ):
             res.append(parts[1])
     return res
 
@@ -52,8 +59,9 @@ def positive_control() -> bool:
         ok = any(str(port) in a for a in found)
         print("    阳性对照：本进程自己在 127.0.0.1:%d 开了监听" % port)
         print("             枚举结果 =", found or "(空)")
-        print("             =>", "抓到了，方法有效 ✓" if ok else
-              "** 没抓到，枚举方法失效，下面的 0 条不可信 **")
+        print(
+            "             =>", "抓到了，方法有效 ✓" if ok else "** 没抓到，枚举方法失效，下面的 0 条不可信 **"
+        )
         return ok
     finally:
         srv.close()
@@ -77,7 +85,7 @@ def main() -> int:
     stage = Path(tempfile.mkdtemp(prefix="batbar-listen-")) / "pkg"
     stage.mkdir(parents=True)
     target = stage / "batbar.exe"
-    target.write_bytes(exe.read_bytes())       # 绿色模式 ⇒ 数据跟着 exe 走
+    target.write_bytes(exe.read_bytes())  # 绿色模式 ⇒ 数据跟着 exe 走
 
     print("\n[1] 启动 exe（干净目录 %s）" % stage)
     proc = subprocess.Popen([str(target), "--standalone"])

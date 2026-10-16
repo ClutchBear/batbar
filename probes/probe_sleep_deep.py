@@ -5,6 +5,7 @@
   ② 寄存器 0x02 在鼠标睡/关机时到底报什么？（若一直报 1 ⇒ 它报的是对码数，不能用）
 只读，不写设备。运行前需停掉托盘 agent（抢接收器输入队列）。
 """
+
 from __future__ import annotations
 
 import sys
@@ -55,8 +56,10 @@ def read(label: str, timeout: float, retries: int):
     t0 = time.monotonic()
     info = s.read_battery()
     dt = time.monotonic() - t0
-    print(f"  {label:<22} → {'%d%%' % info.percent if info and info.percent is not None else '不应答'}"
-          f"   {dt:.2f}s")
+    print(
+        f"  {label:<22} → {'%d%%' % info.percent if info and info.percent is not None else '不应答'}"
+        f"   {dt:.2f}s"
+    )
     return info
 
 

@@ -15,6 +15,7 @@
 
 用法: python tools/verify_green_fallback.py <exe路径> [秒数]
 """
+
 from __future__ import annotations
 
 import json
@@ -32,14 +33,19 @@ LOCAL = Path(os.environ.get("LOCALAPPDATA") or ".")
 LEGACY_LOG = LOCAL / "batbar" / "logs" / "agent.log"
 USER = os.environ.get("USERNAME") or ""
 
-EXE_SRC = Path(sys.argv[1] if len(sys.argv) > 1
-               else r"D:\workbuddy\space\batbar\dist\batbar.exe").resolve()
+EXE_SRC = Path(sys.argv[1] if len(sys.argv) > 1 else r"D:\workbuddy\space\batbar\dist\batbar.exe").resolve()
 SECONDS = float(sys.argv[2]) if len(sys.argv) > 2 else 22.0
 
 
 def icacls(args: list[str]) -> subprocess.CompletedProcess:
-    return subprocess.run(["icacls"] + args, capture_output=True, text=True,
-                          errors="replace", check=False, creationflags=NO_WINDOW)
+    return subprocess.run(
+        ["icacls"] + args,
+        capture_output=True,
+        text=True,
+        errors="replace",
+        check=False,
+        creationflags=NO_WINDOW,
+    )
 
 
 def size(p: Path) -> int:
@@ -81,9 +87,13 @@ def main() -> int:
             print("!! ACL 没生效，本目录仍然可写 —— 这场验证无效")
             return 2
 
-        proc = subprocess.Popen([str(exe)], cwd=r"C:\Windows\System32",
-                               stdin=subprocess.DEVNULL,
-                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        proc = subprocess.Popen(
+            [str(exe)],
+            cwd=r"C:\Windows\System32",
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
         time.sleep(SECONDS)
         print("  进程存活:", proc.poll() is None)
 
@@ -108,15 +118,25 @@ def main() -> int:
             if "数据目录" in ln or "不可写" in ln:
                 print("    >", ln[:170])
 
-        subprocess.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)],
-                       capture_output=True, check=False, creationflags=NO_WINDOW)
+        subprocess.run(
+            ["taskkill", "/T", "/F", "/PID", str(proc.pid)],
+            capture_output=True,
+            check=False,
+            creationflags=NO_WINDOW,
+        )
 
         ok = all(checks.values())
-        with open(Path(__file__).resolve().parents[1] / "_tmp"
-                  / "verify_green_fallback_result.json", "w", encoding="utf-8") as fh:
-            json.dump({"work": str(work), "checks": checks,
-                       "new_log": new_txt.splitlines()[-12:]}, fh,
-                      ensure_ascii=False, indent=2)
+        with open(
+            Path(__file__).resolve().parents[1] / "_tmp" / "verify_green_fallback_result.json",
+            "w",
+            encoding="utf-8",
+        ) as fh:
+            json.dump(
+                {"work": str(work), "checks": checks, "new_log": new_txt.splitlines()[-12:]},
+                fh,
+                ensure_ascii=False,
+                indent=2,
+            )
         print("\n判定:", "回退行为正确" if ok else "未通过")
         return 0 if ok else 1
     finally:

@@ -7,6 +7,7 @@
   ③ _ensure_device()  建会话（含 _discover_devnum 槽位扫描）
   ④ 单个空槽位的探测预算（7 槽全空 = 7 × 这个数）
 """
+
 from __future__ import annotations
 
 import sys
@@ -57,8 +58,10 @@ if sess is not None:
             hit = sess.battery_feature() is not None
         except Exception as exc:  # noqa: BLE001
             hit = f"<{type(exc).__name__}>"
-        print(f"    槽位 {idx} 探测{'命中' if hit is True else '无应答'}          "
-              f"{time.monotonic() - t0:6.2f}s   (0.8s × 2 枪)")
+        print(
+            f"    槽位 {idx} 探测{'命中' if hit is True else '无应答'}          "
+            f"{time.monotonic() - t0:6.2f}s   (0.8s × 2 枪)"
+        )
 
 print("\n=== ⑤ 接收器寄存器 0x02（新增的冷启动加速判据）===")
 if sess is not None:
